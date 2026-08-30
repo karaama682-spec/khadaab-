@@ -30,6 +30,12 @@ const userSchema = new mongoose.Schema({
         enum: ['Super Admin', 'Institute Admin', 'Branch Manager', 'Teacher', 'Accountant'],
         default: 'Teacher'
     },
+    // System-issued teacher identifier, kept separate from student codes. Only
+    // users registered as Teacher carry one, hence the sparse unique index below.
+    teacherCode: {
+        type: String,
+        trim: true
+    },
     roles: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Role'
@@ -55,6 +61,8 @@ const userSchema = new mongoose.Schema({
 }, { strictPopulate: false });
 
 userSchema.index({ email: 1 }, { unique: true });
+// Sparse so the many users without a teacher code do not collide on null.
+userSchema.index({ teacherCode: 1 }, { unique: true, sparse: true });
 
 userSchema.pre('save', async function (next) {
     if (!this.isModified('passwordHash')) {

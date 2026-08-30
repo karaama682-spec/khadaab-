@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X, Edit2, Trash2, Users, Search, CheckCircle2, UserPlus, Loader2, DollarSign } from 'lucide-react';
+import { Plus, X, Edit2, Trash2, Users, Search, CheckCircle2, UserPlus, Loader2, DollarSign, IdCard as IdCardIcon } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import IdCard from '../components/IdCard.jsx';
 
 const StudentsManagement = () => {
   const { showAlert, showConfirm } = useAlert();
@@ -9,6 +10,7 @@ const StudentsManagement = () => {
   const [classes, setClasses] = useState([]);
   const [guardians, setGuardians] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [cardStudent, setCardStudent] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -18,7 +20,6 @@ const StudentsManagement = () => {
 
   const [formData, setFormData] = useState({
     fullName: '',
-    rollNumber: '',
     classId: '',
     gender: 'Male',
     monthlyFee: '',
@@ -95,7 +96,6 @@ const StudentsManagement = () => {
     setFoundGuardian(null);
     setFormData({
       fullName: '',
-      rollNumber: '',
       classId: classes[0]?._id || '',
       gender: 'Male',
       monthlyFee: '',
@@ -116,7 +116,6 @@ const StudentsManagement = () => {
     setFoundGuardian(existingG);
     setFormData({
       fullName: item.fullName || '',
-      rollNumber: item.rollNumber || '',
       classId: item.classId?._id || item.classId || '',
       gender: item.gender || 'Male',
       monthlyFee: item.monthlyFee !== undefined ? item.monthlyFee : (item.fee || ''),
@@ -164,7 +163,6 @@ const StudentsManagement = () => {
 
       const payload = {
         fullName: formData.fullName,
-        rollNumber: formData.rollNumber,
         classId: formData.classId,
         gender: formData.gender,
         monthlyFee: Number(formData.monthlyFee) || 0,
@@ -216,7 +214,7 @@ const StudentsManagement = () => {
     const className = item.classId?.name || '';
     return (
       (item.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.rollNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.studentCode || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.fatherName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.fatherPhone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       gName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -268,7 +266,7 @@ const StudentsManagement = () => {
             <thead>
               <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
                 <th className="px-8 py-5">Full Name</th>
-                <th className="px-8 py-5">Roll No</th>
+                <th className="px-8 py-5">Student ID</th>
                 <th className="px-8 py-5">Class</th>
                 <th className="px-8 py-5">Student Fee ($)</th>
                 <th className="px-8 py-5">Who Pays the Fee</th>
@@ -286,8 +284,9 @@ const StudentsManagement = () => {
                     <td className="px-8 py-6 text-sm font-bold text-slate-900 dark:text-slate-100">
                       {item.fullName}
                     </td>
-                    <td className="px-8 py-6 text-sm font-semibold text-slate-500 dark:text-slate-400">
-                      {item.rollNumber || '-'}
+                    {/* Issued by the system; shown read-only so it can never be typed over. */}
+                    <td className="px-8 py-6 font-mono text-sm font-black text-brand-600 dark:text-brand-400">
+                      {item.studentCode || '-'}
                     </td>
                     <td className="px-8 py-6 text-sm font-semibold text-slate-700 dark:text-slate-300">
                       {cls?.name || '-'}
@@ -307,6 +306,9 @@ const StudentsManagement = () => {
                     </td>
                     <td className="px-8 py-6 text-right">
                       <div className="flex justify-end items-center gap-2">
+                        <button onClick={() => setCardStudent(item)} title="ID Card" className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-emerald-600 transition-all">
+                          <IdCardIcon size={16} />
+                        </button>
                         <button onClick={() => openEditModal(item)} className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-brand-600 transition-all">
                           <Edit2 size={16} />
                         </button>
@@ -361,14 +363,12 @@ const StudentsManagement = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Roll / ID Number</label>
-                  <input
-                    type="text"
-                    placeholder="STU-1001"
-                    value={formData.rollNumber}
-                    onChange={(e) => setFormData({ ...formData, rollNumber: e.target.value })}
-                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
-                  />
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Student ID</label>
+                  {/* Issued by the server on save and never editable, so this is a
+                      display only — there is no input bound to it. */}
+                  <div className="w-full px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 font-mono text-sm font-black text-brand-600 dark:text-brand-400">
+                    {editingItem?.studentCode || 'Assigned automatically'}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-black uppercase text-slate-500 mb-1">Class</label>
@@ -511,6 +511,18 @@ const StudentsManagement = () => {
           </div>
         </div>
       )}
+
+      <IdCard
+        open={Boolean(cardStudent)}
+        onClose={() => setCardStudent(null)}
+        kind="student"
+        name={cardStudent?.fullName}
+        idNumber={cardStudent?.studentCode}
+        rows={[
+          { label: 'Class', value: cardStudent?.classId?.name || '' },
+          { label: 'Guardian', value: cardStudent?.guardianId?.fullName || cardStudent?.fatherName || '' }
+        ]}
+      />
     </div>
   );
 };

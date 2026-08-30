@@ -1,5 +1,6 @@
 const asyncHandler = require('../middleware/asyncHandler');
 const User = require('../models/User');
+const { generateTeacherCode, withRetry } = require('../utils/generateCode');
 const jwt = require('jsonwebtoken');
 
 // Generate JWT
@@ -19,6 +20,7 @@ const formatUserResponse = (user, token = null) => {
         phone: user.phone || '',
         gender: user.gender || 'Male',
         role: user.role || 'Teacher',
+        teacherCode: user.teacherCode || '',
         roles: user.roles || [],
         salary: user.salary || 0,
         status: user.status || 'active',
@@ -48,6 +50,17 @@ const registerUser = asyncHandler(async (req, res) => {
     }
 
     const nameToUse = fullName || username || cleanEmail.split('@')[0];
+    const roleToUse = role || 'Teacher';
+
+    // Teachers receive a system-issued identifier, allocated here rather than
+    // accepted from the client so it cannot be typed in or duplicated. Other
+    // roles get none, which is why the index is sparse.
+    const teacherCode = roleToUse === 'Teacher'
+        ? await withRetry(
+            generateTeacherCode,
+            async (code) => Boolean(await User.exists({ teacherCode: code }))
+        )
+        : undefined;
 
     const user = await User.create({
         fullName: nameToUse,
@@ -55,11 +68,12 @@ const registerUser = asyncHandler(async (req, res) => {
         email: cleanEmail,
         passwordHash: password || '123456',
         gender: gender || 'Male',
-        role: role || 'Teacher',
+        role: roleToUse,
         roles: Array.isArray(roles) ? roles : [],
         salary: salary || 0,
         status: status || 'active',
-        branchId
+        branchId,
+        ...(teacherCode ? { teacherCode } : {})
     });
 
     const populatedUser = await User.findById(user._id).select('-passwordHash').populate('roles');
@@ -142,6 +156,15 @@ const updateUser = asyncHandler(async (req, res) => {
 
         if (req.body.password) {
             user.passwordHash = req.body.password;
+        }
+
+        // An existing user promoted to Teacher is issued an identifier now. A code
+        // already held is never reassigned or cleared — it stays with the person.
+        if (user.role === 'Teacher' && !user.teacherCode) {
+            user.teacherCode = await withRetry(
+                generateTeacherCode,
+                async (code) => Boolean(await User.exists({ teacherCode: code }))
+            );
         }
 
         await user.save();

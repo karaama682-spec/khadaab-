@@ -9,15 +9,18 @@ import {
   Edit2,
   Trash2,
   X,
-  User
+  User,
+  IdCard as IdCardIcon
 } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import IdCard from '../components/IdCard.jsx';
 
 const TeachersManagement = () => {
   const { showAlert, showConfirm } = useAlert();
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [cardTeacher, setCardTeacher] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [genderFilter, setGenderFilter] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -334,6 +337,13 @@ const TeachersManagement = () => {
                     <td className="px-8 py-5 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
+                          onClick={() => setCardTeacher(t)}
+                          className="p-2.5 rounded-xl bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 transition-colors"
+                          title="ID Card"
+                        >
+                          <IdCardIcon size={16} />
+                        </button>
+                        <button
                           onClick={() => handleOpenEdit(t)}
                           className="p-2.5 rounded-xl bg-slate-100 hover:bg-brand-50 text-slate-600 hover:text-brand-600 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 transition-colors"
                           title="Edit Teacher"
@@ -448,6 +458,19 @@ const TeachersManagement = () => {
           </div>
         </div>
       )}
+
+      <IdCard
+        open={Boolean(cardTeacher)}
+        onClose={() => setCardTeacher(null)}
+        kind="teacher"
+        name={cardTeacher?.fullName}
+        idNumber={cardTeacher?.teacherCode}
+        rows={[
+          { label: 'Role', value: cardTeacher?.role || '' },
+          { label: 'Phone', value: cardTeacher?.phone || '' },
+          { label: 'Email', value: cardTeacher?.email || '' }
+        ]}
+      />
     </div>
   );
 };

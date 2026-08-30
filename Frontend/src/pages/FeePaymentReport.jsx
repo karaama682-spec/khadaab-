@@ -127,6 +127,37 @@ const FeePaymentReport = () => {
   const pendingList = useMemo(() => filtered.filter(i => i.status === 'Pending'), [filtered]);
   const pendingAmount = useMemo(() => pendingList.reduce((sum, item) => sum + Number(item.amount || 0), 0), [pendingList]);
 
+  // Subtotal of money actually collected, grouped by the responsible party who
+  // paid it. Derived from `completedList`, so it follows the search, status and
+  // date filters already applied above and needs no input of its own.
+  //
+  // Each payment document is counted exactly once. A fee settled through the
+  // cashbook or the payers tick still produces a single Payment row, so summing
+  // rows here cannot double-count what those flows record elsewhere.
+  const payerSubtotals = useMemo(() => {
+    const byPayer = new Map();
+
+    completedList.forEach(payment => {
+      // The payer is the student's responsible party; payments whose student has
+      // no guardian are grouped separately rather than silently dropped.
+      const payer = payment.guardianId || payment.studentId?.guardianId;
+      const key = String(payer?._id || payer || 'unassigned');
+      const name = payer?.fullName || 'No responsible party';
+
+      const current = byPayer.get(key) || { key, name, amount: 0, count: 0 };
+      current.amount += Number(payment.amount || 0);
+      current.count += 1;
+      byPayer.set(key, current);
+    });
+
+    const rows = [...byPayer.values()].sort((a, b) => b.amount - a.amount);
+    return {
+      rows,
+      total: rows.reduce((sum, row) => sum + row.amount, 0),
+      payerCount: rows.length
+    };
+  }, [completedList]);
+
   // PDF Export
   const handleExportPDF = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -377,6 +408,65 @@ const FeePaymentReport = () => {
             <p className="text-xs font-bold text-slate-400 uppercase">Report Date:</p>
             <p className="text-sm font-black text-slate-800 dark:text-slate-200">{new Date().toLocaleDateString()}</p>
           </div>
+        </div>
+
+        {/* Collected per responsible party. Calculated from the filtered payment
+            records above — never entered by hand. */}
+        <div className="mb-6 rounded-[24px] border border-slate-100 bg-slate-50/60 p-5 dark:border-slate-800 dark:bg-slate-800/20">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-wide text-slate-900 dark:text-white">Payer Payment Subtotal</h3>
+              <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
+                Completed payments grouped by responsible party, matching the filters above.
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Subtotal · {payerSubtotals.payerCount} payer{payerSubtotals.payerCount === 1 ? '' : 's'}
+              </p>
+              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                ${payerSubtotals.total.toLocaleString()}
+              </p>
+            </div>
+          </div>
+
+          {payerSubtotals.rows.length === 0 ? (
+            <p className="py-4 text-center text-xs font-semibold text-slate-400">
+              No completed payments match the current filters.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:border-slate-700">
+                    <th className="px-4 py-2">Responsible Party</th>
+                    <th className="px-4 py-2 text-right">Payments</th>
+                    <th className="px-4 py-2 text-right">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200/70 dark:divide-slate-700/70">
+                  {payerSubtotals.rows.map(row => (
+                    <tr key={row.key}>
+                      <td className="px-4 py-2.5 text-sm font-bold text-slate-800 dark:text-slate-200">{row.name}</td>
+                      <td className="px-4 py-2.5 text-right text-sm font-semibold text-slate-500">{row.count}</td>
+                      <td className="px-4 py-2.5 text-right text-sm font-black text-slate-900 dark:text-white">${row.amount.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-300 dark:border-slate-600">
+                    <td className="px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Total</td>
+                    <td className="px-4 py-2.5 text-right text-sm font-semibold text-slate-500">
+                      {payerSubtotals.rows.reduce((sum, row) => sum + row.count, 0)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-base font-black text-emerald-600 dark:text-emerald-400">
+                      ${payerSubtotals.total.toLocaleString()}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Report Table */}

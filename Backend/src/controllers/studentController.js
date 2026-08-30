@@ -1,5 +1,6 @@
 const asyncHandler = require('../middleware/asyncHandler');
 const Student = require('../models/Student');
+const { generateStudentCode, withRetry } = require('../utils/generateCode');
 
 const getStudents = asyncHandler(async (req, res) => {
     const data = await Student.find().populate('guardianId').populate('classId');
@@ -19,13 +20,17 @@ const getStudentById = asyncHandler(async (req, res) => {
 const createStudent = asyncHandler(async (req, res) => {
     const payload = { ...req.body };
 
-    if (!payload.studentCode && payload.rollNumber) {
-        payload.studentCode = payload.rollNumber;
-    }
-
-    if (!payload.studentCode) {
-        payload.studentCode = `STU-${Date.now()}`;
-    }
+    // The student ID is issued by the system, never accepted from the client and
+    // never derived from the user-typed roll number, so it cannot be set by hand
+    // or duplicated. Existing students keep whatever code they were given.
+    delete payload.studentCode;
+    // Each retry advances the counter, so a run of legacy students already
+    // holding plain numbers is stepped over rather than colliding with.
+    payload.studentCode = await withRetry(
+        generateStudentCode,
+        async (code) => Boolean(await Student.exists({ studentCode: code })),
+        200
+    );
 
     if (!payload.branchId && req.user?.branchId) {
         payload.branchId = req.user.branchId;
@@ -45,6 +50,11 @@ const createStudent = asyncHandler(async (req, res) => {
 
 const updateStudent = asyncHandler(async (req, res) => {
     const payload = { ...req.body };
+
+    // The issued student ID stays with the student for life, so an edit can never
+    // move or clear it.
+    delete payload.studentCode;
+
     if (payload.fee !== undefined && payload.monthlyFee === undefined) {
         payload.monthlyFee = Number(payload.fee) || 0;
     }
