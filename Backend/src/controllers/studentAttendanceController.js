@@ -92,21 +92,33 @@ const createStudentAttendance = asyncHandler(async (req, res) => {
     const results = [];
 
     for (const item of records) {
-        const { studentId, classId, date, status, session, arrivalTime } = item;
+        const { studentId, classId, date, status, session, arrivalTime, description } = item;
         if (!studentId || !classId || !date) continue;
 
         const attendanceSession = session || 'Morning';
         const nextStatus = status || 'Present';
         const existing = await StudentAttendance.findOne({ studentId, date, session: attendanceSession });
+
+        const fields = {
+            classId,
+            status: nextStatus,
+            arrivalTime: nextStatus === 'Late' ? (arrivalTime || '08:30') : '',
+            markedBy: req.user?._id
+        };
+
+        // A reason only applies to late or absent students, so returning someone to
+        // Present clears it. Callers that omit the field entirely — the report screen
+        // only sends a status — keep whatever reason is already stored.
+        if (nextStatus === 'Present') {
+            fields.description = '';
+        } else if (description !== undefined) {
+            fields.description = description || '';
+        }
+
         const created = await StudentAttendance.findOneAndUpdate(
             { studentId, date, session: attendanceSession },
             {
-                $set: {
-                    classId,
-                    status: nextStatus,
-                    arrivalTime: nextStatus === 'Late' ? (arrivalTime || '08:30') : '',
-                    markedBy: req.user?._id
-                },
+                $set: fields,
                 $setOnInsert: { studentId, date, session: attendanceSession }
             },
             { new: true, upsert: true, setDefaultsOnInsert: true }
@@ -152,7 +164,16 @@ const getStudentAttendanceHistory = asyncHandler(async (req, res) => {
 });
 
 const updateStudentAttendance = asyncHandler(async (req, res) => {
-    const data = await StudentAttendance.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const updates = { ...req.body };
+
+    // Same rule as the create path: a reason belongs only to a late or absent
+    // record. The report screen edits a status without sending a description, so
+    // without this a stale reason would survive a correction back to Present.
+    if (updates.status === 'Present') {
+        updates.description = '';
+    }
+
+    const data = await StudentAttendance.findByIdAndUpdate(req.params.id, updates, { new: true });
     if (data) {
         res.json(data);
     } else {

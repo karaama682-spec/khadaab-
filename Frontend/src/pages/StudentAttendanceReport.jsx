@@ -39,7 +39,7 @@ const StudentAttendanceReport = () => {
   const { showAlert } = useAlert();
 
   // Navigation tabs
-  const [activeTab, setActiveTab] = useState('class'); // class (Attendance Ledger)
+  const [activeTab, setActiveTab] = useState('class'); // class (Attendance Ledger) | daily | student | dashboard
 
   // Core Data States
   const [classes, setClasses] = useState([]);
@@ -285,7 +285,8 @@ const StudentAttendanceReport = () => {
         record: latestRecord || null,
         status: latestRecord?.status || 'Unmarked',
         session: latestRecord?.session || '-',
-        arrivalTime: latestRecord?.arrivalTime || '-'
+        arrivalTime: latestRecord?.arrivalTime || '-',
+        description: latestRecord?.description || ''
       };
     }).filter(item => {
       // Search text filter
@@ -447,9 +448,39 @@ const StudentAttendanceReport = () => {
     showAlert({ type: 'success', title: 'Export Complete', message: `CSV exported successfully as ${filename}` });
   };
 
+  // jsPDF draws each cell at a fixed offset and never clips, so a value wider than
+  // its column silently runs into the next one. Every single-line cell is fitted to
+  // its column, falling back to an ellipsis only when the text genuinely cannot fit.
+  const fitPdfText = (doc, text, width) => {
+    const value = String(text ?? '').trim() || '-';
+    if (doc.getTextWidth(value) <= width) return value;
+
+    let truncated = value;
+    while (truncated.length > 1 && doc.getTextWidth(`${truncated}...`) > width) {
+      truncated = truncated.slice(0, -1);
+    }
+    return `${truncated}...`;
+  };
+
+  // These PDFs are drawn as plain text rather than with a table engine, so a
+  // reason is wrapped to its column width and capped at two lines to keep the row
+  // grid readable. The CSV export carries the untruncated text.
+  const pdfDescriptionLines = (doc, text, width) => {
+    const value = String(text || '').trim();
+    if (!value) return ['-'];
+
+    const lines = doc.splitTextToSize(value, width);
+    const capped = lines.slice(0, 2);
+    if (lines.length > 2) {
+      capped[1] = `${capped[1].replace(/\s+\S*$/, '')}...`;
+    }
+    // A single unbreakable word can still exceed the column, so fit every line.
+    return capped.map(line => fitPdfText(doc, line, width));
+  };
+
   // 1. Export Daily CSV
   const exportDailyCSV = () => {
-    const headers = ['Student Name', 'Student Code', 'Class', 'Session', 'Status', 'Arrival Time', 'Guardian Name', 'Phone'];
+    const headers = ['Student Name', 'Student Code', 'Class', 'Session', 'Status', 'Arrival Time', 'Description', 'Guardian Name', 'Phone'];
     const rows = dailyReportData.map(item => [
       item.student.fullName,
       item.student.studentCode || item.student.rollNumber || '-',
@@ -457,6 +488,7 @@ const StudentAttendanceReport = () => {
       item.session,
       item.status,
       item.arrivalTime,
+      item.description || '',
       item.student.guardianId?.fullName || item.student.fatherName || '-',
       item.student.guardianId?.phone || item.student.fatherPhone || '-'
     ]);
@@ -481,13 +513,14 @@ const StudentAttendanceReport = () => {
   // 3. Export Student CSV
   const exportStudentCSV = () => {
     if (!selectedStudent || !studentReportData) return;
-    const headers = ['Date', 'Class', 'Session', 'Status', 'Arrival Time', 'Recorded By'];
+    const headers = ['Date', 'Class', 'Session', 'Status', 'Arrival Time', 'Description', 'Recorded By'];
     const rows = studentReportData.history.map(rec => [
       rec.date,
       rec.classId?.name || '-',
       rec.session || 'Morning',
       rec.status,
       rec.arrivalTime || '-',
+      rec.description || '',
       rec.markedBy?.fullName || 'System Admin'
     ]);
     handleExportCSV(headers, rows, `Student_Attendance_${selectedStudent.fullName.replace(/\s+/g, '_')}.csv`);
@@ -508,27 +541,41 @@ const StudentAttendanceReport = () => {
     
     let y = 45;
     doc.setFont('helvetica', 'bold');
-    doc.text('Student Name', 14, y);
-    doc.text('Code', 70, y);
-    doc.text('Session', 100, y);
-    doc.text('Status', 130, y);
-    doc.text('Arrival Time', 160, y);
-    
+    // Column starts and widths. Session/Status/Arrival hold short fixed values, so
+    // the space they do not need funds the name and description columns.
+    const col = {
+      name: { x: 14, w: 58 },
+      code: { x: 72, w: 30 },
+      session: { x: 102, w: 19 },
+      status: { x: 121, w: 18 },
+      arrival: { x: 139, w: 15 },
+      description: { x: 154, w: 42 }
+    };
+
+    doc.text('Student Name', col.name.x, y);
+    doc.text('Code', col.code.x, y);
+    doc.text('Session', col.session.x, y);
+    doc.text('Status', col.status.x, y);
+    doc.text('Arrival', col.arrival.x, y);
+    doc.text('Description', col.description.x, y);
+
     doc.line(14, y + 3, 196, y + 3);
     doc.setFont('helvetica', 'normal');
-    
+
     y += 10;
     dailyReportData.forEach(item => {
       if (y > 275) {
         doc.addPage();
         y = 20;
       }
-      doc.text(item.student.fullName, 14, y);
-      doc.text(item.student.studentCode || item.student.rollNumber || '-', 70, y);
-      doc.text(item.session, 100, y);
-      doc.text(item.status, 130, y);
-      doc.text(item.arrivalTime || '-', 160, y);
-      y += 8;
+      const descriptionLines = pdfDescriptionLines(doc, item.description, col.description.w);
+      doc.text(fitPdfText(doc, item.student.fullName, col.name.w), col.name.x, y);
+      doc.text(fitPdfText(doc, item.student.studentCode || item.student.rollNumber, col.code.w), col.code.x, y);
+      doc.text(fitPdfText(doc, item.session, col.session.w), col.session.x, y);
+      doc.text(fitPdfText(doc, item.status, col.status.w), col.status.x, y);
+      doc.text(fitPdfText(doc, item.arrivalTime, col.arrival.w), col.arrival.x, y);
+      doc.text(descriptionLines, col.description.x, y);
+      y += Math.max(8, descriptionLines.length * 5);
     });
 
     doc.save(`Daily_Attendance_${dailyDate}.pdf`);
@@ -600,27 +647,41 @@ const StudentAttendanceReport = () => {
     
     let y = 55;
     doc.setFont('helvetica', 'bold');
-    doc.text('Date', 14, y);
-    doc.text('Class Name', 50, y);
-    doc.text('Session', 100, y);
-    doc.text('Status', 130, y);
-    doc.text('Arrival Time', 160, y);
-    
+    // The class-name column keeps its original 50mm; the reclaimed Session/Status/
+    // Arrival space funds the description column.
+    const col = {
+      date: { x: 14, w: 20 },
+      className: { x: 34, w: 50 },
+      session: { x: 84, w: 19 },
+      status: { x: 103, w: 18 },
+      arrival: { x: 121, w: 15 },
+      description: { x: 136, w: 60 }
+    };
+
+    doc.text('Date', col.date.x, y);
+    doc.text('Class Name', col.className.x, y);
+    doc.text('Session', col.session.x, y);
+    doc.text('Status', col.status.x, y);
+    doc.text('Arrival', col.arrival.x, y);
+    doc.text('Description', col.description.x, y);
+
     doc.line(14, y + 3, 196, y + 3);
     doc.setFont('helvetica', 'normal');
-    
+
     y += 10;
     studentReportData.history.forEach(rec => {
       if (y > 275) {
         doc.addPage();
         y = 20;
       }
-      doc.text(rec.date, 14, y);
-      doc.text(rec.classId?.name || '-', 50, y);
-      doc.text(rec.session || 'Morning', 100, y);
-      doc.text(rec.status, 130, y);
-      doc.text(rec.arrivalTime || '-', 160, y);
-      y += 8;
+      const descriptionLines = pdfDescriptionLines(doc, rec.description, col.description.w);
+      doc.text(fitPdfText(doc, rec.date, col.date.w), col.date.x, y);
+      doc.text(fitPdfText(doc, rec.classId?.name, col.className.w), col.className.x, y);
+      doc.text(fitPdfText(doc, rec.session || 'Morning', col.session.w), col.session.x, y);
+      doc.text(fitPdfText(doc, rec.status, col.status.w), col.status.x, y);
+      doc.text(fitPdfText(doc, rec.arrivalTime, col.arrival.w), col.arrival.x, y);
+      doc.text(descriptionLines, col.description.x, y);
+      y += Math.max(8, descriptionLines.length * 5);
     });
 
     doc.save(`Student_Attendance_${selectedStudent.fullName.replace(/\s+/g, '_')}.pdf`);
@@ -646,6 +707,9 @@ const StudentAttendanceReport = () => {
         <div className="flex flex-wrap bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-[20px] border border-slate-200/40 dark:border-slate-700/60 gap-1">
           {[
             { id: 'class', label: 'Attendance Ledger' },
+            { id: 'daily', label: 'Daily View' },
+            { id: 'student', label: 'Student View' },
+            { id: 'dashboard', label: 'Dashboard' },
           ].map(tab => (
             <button
               key={tab.id}
@@ -836,6 +900,7 @@ const StudentAttendanceReport = () => {
                     <th className="px-8 py-5">Session</th>
                     <th className="px-8 py-5">Status</th>
                     <th className="px-8 py-5">Arrival Time</th>
+                    <th className="px-8 py-5">Description</th>
                     <th className="px-8 py-5">Guardian Name</th>
                     <th className="px-8 py-5">Phone Number</th>
                   </tr>
@@ -891,6 +956,11 @@ const StudentAttendanceReport = () => {
                             item.arrivalTime || '-'
                           )}
                         </td>
+                        <td className="px-8 py-6 text-sm font-semibold text-slate-700 dark:text-slate-300 max-w-xs">
+                          {item.description
+                            ? <span className="whitespace-pre-wrap break-words">{item.description}</span>
+                            : <span className="text-slate-400">—</span>}
+                        </td>
                         <td className="px-8 py-6 text-sm font-semibold text-slate-650 dark:text-slate-400">
                           {item.student.guardianId?.fullName || item.student.fatherName || '-'}
                         </td>
@@ -902,7 +972,7 @@ const StudentAttendanceReport = () => {
                   })}
                   {dailyReportData.length === 0 && (
                     <tr>
-                      <td colSpan="8" className="px-8 py-12 text-center text-slate-400 text-sm font-semibold">
+                      <td colSpan="9" className="px-8 py-12 text-center text-slate-400 text-sm font-semibold">
                         No students found matching current selectors.
                       </td>
                     </tr>
@@ -1278,6 +1348,7 @@ const StudentAttendanceReport = () => {
                         <th className="px-8 py-5">Session</th>
                         <th className="px-8 py-5">Status</th>
                         <th className="px-8 py-5">Arrival Time</th>
+                        <th className="px-8 py-5">Description</th>
                         <th className="px-8 py-5">Recorded By</th>
                       </tr>
                     </thead>
@@ -1323,6 +1394,11 @@ const StudentAttendanceReport = () => {
                               <span className="text-slate-400">-</span>
                             )}
                           </td>
+                          <td className="px-8 py-6 text-sm font-semibold text-slate-700 dark:text-slate-300 max-w-xs">
+                            {rec.description
+                              ? <span className="whitespace-pre-wrap break-words">{rec.description}</span>
+                              : <span className="text-slate-400">—</span>}
+                          </td>
                           <td className="px-8 py-6 text-xs font-semibold text-slate-600 dark:text-slate-400">
                             {rec.markedBy?.fullName || 'System Admin'}
                           </td>
@@ -1330,7 +1406,7 @@ const StudentAttendanceReport = () => {
                       ))}
                       {studentReportData.history.length === 0 && (
                         <tr>
-                          <td colSpan="6" className="px-8 py-12 text-center text-slate-400 text-sm font-semibold">
+                          <td colSpan="7" className="px-8 py-12 text-center text-slate-400 text-sm font-semibold">
                             No attendance history found.
                           </td>
                         </tr>

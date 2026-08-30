@@ -29,6 +29,11 @@ const studentAttendanceSchema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    description: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     markedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
