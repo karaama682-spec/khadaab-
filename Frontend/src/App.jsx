@@ -23,6 +23,7 @@ import GuardianPaymentReport from './pages/GuardianPaymentReport.jsx';
 import CashbookCategoryReport from './pages/CashbookCategoryReport.jsx';
 import CashbookPaymentReport from './pages/CashbookPaymentReport.jsx';
 import PayersManagement from './pages/PayersManagement.jsx';
+import MonthlyPayments from './pages/MonthlyPayments.jsx';
 import SalariesManagement from './pages/SalariesManagement.jsx';
 import ExpensesManagement from './pages/ExpensesManagement.jsx';
 import TransactionsManagement from './pages/TransactionsManagement.jsx';
@@ -274,6 +275,7 @@ const App = () => {
                   {/* Finance Management */}
                   <Route path="/finance/cashbook" element={<CashbookManagement />} />
                   <Route path="/finance/payers" element={<PayersManagement />} />
+                  <Route path="/finance/monthly-payments" element={<MonthlyPayments />} />
                   <Route path="/finance/payments" element={<Navigate to="/finance/cashbook" replace />} />
                   <Route path="/finance/salaries" element={<SalariesManagement />} />
                   <Route path="/finance/expenses" element={<ExpensesManagement />} />

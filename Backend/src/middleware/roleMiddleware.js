@@ -30,6 +30,18 @@ const checkIfAdmin = (req, userWithRoles) => {
     });
 };
 
+// Permissions granted directly on the account rather than through a role. The
+// same resolver is reused, so custom grants obey identical module/sub-module and
+// action-alias rules as role permissions — there is no second permission system.
+const userHasCustomPermission = (userWithRoles, moduleName, action, subModuleName) => {
+    const custom = userWithRoles?.customPermissions;
+    if (!custom || typeof custom !== 'object' || Object.keys(custom).length === 0) return false;
+
+    // Passed without a name so it can never match the Super Admin/Owner shortcut
+    // inside the resolver; a custom grant only ever authorises what it lists.
+    return roleHasPermission({ permissions: custom }, moduleName, action, subModuleName);
+};
+
 // Check if user has specific permission
 // Usage: checkPermission('Inventory', 'create')
 const checkPermission = (moduleName, action, subModuleName = null) => {
@@ -44,10 +56,11 @@ const checkPermission = (moduleName, action, subModuleName = null) => {
             return next();
         }
 
-        // Check if any role has the required permission in the object hierarchy
+        // Check if any role has the required permission in the object hierarchy,
+        // or the account carries the grant directly.
         const hasPermission = (userWithRoles.roles || []).some(role =>
             roleHasPermission(role, moduleName, action, subModuleName)
-        );
+        ) || userHasCustomPermission(userWithRoles, moduleName, action, subModuleName);
 
         if (!hasPermission) {
             res.status(403);
@@ -72,7 +85,7 @@ const checkAnyPermission = (moduleName, actions = [], subModuleName = null) => {
 
         const hasPermission = (userWithRoles.roles || []).some(role =>
             actions.some(action => roleHasPermission(role, moduleName, action, subModuleName))
-        );
+        ) || actions.some(action => userHasCustomPermission(userWithRoles, moduleName, action, subModuleName));
 
         if (!hasPermission) {
             res.status(403);
@@ -99,6 +112,8 @@ const checkAnyPermissionSet = (permissionSets = []) => {
             permissionSets.some(({ moduleName, actions = [], subModuleName = null }) =>
                 actions.some(action => roleHasPermission(role, moduleName, action, subModuleName))
             )
+        ) || permissionSets.some(({ moduleName, actions = [], subModuleName = null }) =>
+            actions.some(action => userHasCustomPermission(userWithRoles, moduleName, action, subModuleName))
         );
 
         if (!hasPermission) {

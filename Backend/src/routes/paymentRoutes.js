@@ -8,14 +8,23 @@ const {
     deletePayment
 } = require('../controllers/paymentController');
 const { protect } = require('../middleware/authMiddleware');
+const { checkAnyPermission, checkAnyPermissionSet } = require('../middleware/roleMiddleware');
+
+// Payments feed both the Finance screens and the fee reports; no sub-module is
+// named so any Finance area grant qualifies, matching how the pages read them.
+const canReadPayments = checkAnyPermissionSet([
+    { moduleName: 'Finance', actions: ['Read'] },
+    { moduleName: 'Reports', actions: ['Read'] }
+]);
+const canWritePayments = checkAnyPermission('Finance', ['Add', 'Edit']);
 
 router.route('/')
-    .get(protect, getPayments)
-    .post(protect, createPayment);
+    .get(protect, canReadPayments, getPayments)
+    .post(protect, canWritePayments, createPayment);
 
 router.route('/:id')
-    .get(protect, getPaymentById)
-    .put(protect, updatePayment)
-    .delete(protect, deletePayment);
+    .get(protect, canReadPayments, getPaymentById)
+    .put(protect, canWritePayments, updatePayment)
+    .delete(protect, checkAnyPermission('Finance', ['Delete']), deletePayment);
 
 module.exports = router;

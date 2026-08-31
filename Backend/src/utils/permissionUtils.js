@@ -3,6 +3,10 @@ const VALID_ACTIONS = ['Read', 'Write', 'Execute', 'Export', 'Refresh'];
 const ACTION_ALIASES = {
     view: 'Read',
     read: 'Read',
+    list: 'Read',
+    // The permission UI labels this action "Add"; without the alias the server
+    // could not resolve it at all and every Add check failed closed.
+    add: 'Write',
     create: 'Write',
     edit: 'Write',
     update: 'Write',

@@ -1,9 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Search, Plus, UserCircle, X, Edit2, CheckCircle2, Trash2
+  Search, Plus, UserCircle, X, Edit2, CheckCircle2, Trash2, ShieldCheck
 } from 'lucide-react';
 import api from '../services/api';
+import { NAV_CONFIG } from '../constants';
+import { PERMISSION_ACTIONS } from '../utils/permissionUtils';
 import { useAlert } from '../components/common/alerts/useAlert';
+
+// Same catalogue the Roles & Permissions screen builds from, derived from
+// NAV_CONFIG so there is exactly one source of modules and actions.
+const PERMISSION_HIERARCHY = NAV_CONFIG.reduce((acc, item) => {
+  if (item.subItems && item.subItems.length > 0) {
+    acc[item.label] = item.subItems.reduce((subAcc, sub) => {
+      subAcc[sub.label] = PERMISSION_ACTIONS;
+      return subAcc;
+    }, {});
+  } else {
+    acc[item.label] = { [item.label]: PERMISSION_ACTIONS };
+  }
+  return acc;
+}, {});
+
+// Custom per-account permissions apply to this role only; every other role keeps
+// using the permissions defined on the role itself.
+const CUSTOM_PERMISSION_ROLE = 'User';
+
+const isPermissionChecked = (permissions, module, sub, action) =>
+  permissions?.[module]?.[sub]?.[action] === true;
 
 const UsersList = () => {
   const { showAlert, showConfirm } = useAlert();
@@ -21,7 +44,8 @@ const UsersList = () => {
     password: '',
     warehouse: 'Global HQ',
     roles: [],
-    status: 'active'
+    status: 'active',
+    customPermissions: {}
   });
 
   const fetchUsers = async () => {
@@ -59,7 +83,8 @@ const UsersList = () => {
       password: '',
       warehouse: 'Global HQ',
       roles: user.roles ? user.roles.map(r => r._id || r) : [],
-      status: user.status || 'active'
+      status: user.status || 'active',
+      customPermissions: user.customPermissions || {}
     });
     setIsModalOpen(true);
   };
@@ -71,6 +96,27 @@ const UsersList = () => {
     }));
   };
 
+  // The permission section is offered only for the role whose access is defined
+  // per account. Every other role keeps using the permissions on the role itself.
+  const selectedRoleName = useMemo(() => {
+    const selected = availableRoles.find(r => String(r._id) === String(formData.roles[0]));
+    return selected?.name || '';
+  }, [availableRoles, formData.roles]);
+
+  const showCustomPermissions = selectedRoleName === CUSTOM_PERMISSION_ROLE;
+
+  const togglePermission = (module, sub, action) => {
+    setFormData((prev) => {
+      const next = { ...(prev.customPermissions || {}) };
+      const modulePerms = { ...(next[module] || {}) };
+      const subPerms = { ...(modulePerms[sub] || {}) };
+      subPerms[action] = !subPerms[action];
+      modulePerms[sub] = subPerms;
+      next[module] = modulePerms;
+      return { ...prev, customPermissions: next };
+    });
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     try {
@@ -79,7 +125,10 @@ const UsersList = () => {
         fullName: formData.username,
         email: formData.email,
         roles: formData.roles,
-        status: formData.status
+        status: formData.status,
+        // Sent only for the custom-permission role. Sending {} for other roles
+        // would wipe grants the backend may already hold for that account.
+        ...(showCustomPermissions ? { customPermissions: formData.customPermissions || {} } : {})
       };
 
       if (formData.password) {
@@ -101,7 +150,8 @@ const UsersList = () => {
         password: '',
         warehouse: 'Global HQ',
         roles: [],
-        status: 'active'
+        status: 'active',
+        customPermissions: {}
       });
     } catch (error) {
       console.error("Failed to save user", error);
@@ -377,6 +427,46 @@ const UsersList = () => {
                   <p className="text-sm text-slate-500 dark:text-slate-400">No roles available yet. Create roles first in the Roles & Permissions section.</p>
                 )}
               </div>
+
+              {showCustomPermissions && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 ml-2">
+                    <ShieldCheck size={14} className="text-brand-500" />
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Permissions</label>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 ml-2">
+                    Choose exactly what this account may do. Anything left unchecked is refused by the server.
+                  </p>
+
+                  <div className="max-h-80 overflow-y-auto rounded-[20px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 divide-y divide-slate-100 dark:divide-slate-700">
+                    {Object.entries(PERMISSION_HIERARCHY).map(([module, subs]) => (
+                      <div key={module} className="p-4">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-900 dark:text-white mb-3">{module}</p>
+                        <div className="space-y-3">
+                          {Object.entries(subs).map(([sub, actions]) => (
+                            <div key={sub} className="pl-2">
+                              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">{sub}</p>
+                              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                                {actions.map((action) => (
+                                  <label key={action} className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                      type="checkbox"
+                                      checked={isPermissionChecked(formData.customPermissions, module, sub, action)}
+                                      onChange={() => togglePermission(module, sub, action)}
+                                      className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500"
+                                    />
+                                    <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{action}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center justify-end gap-4 pt-6 border-t border-slate-200/60 dark:border-slate-800/60">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-4 rounded-[20px] font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all">Cancel</button>

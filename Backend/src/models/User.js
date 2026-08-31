@@ -27,7 +27,10 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['Super Admin', 'Institute Admin', 'Branch Manager', 'Teacher', 'Accountant'],
+        // 'User' is additive: accounts on it draw access from customPermissions
+        // below rather than from a role's own permission set. Existing values and
+        // the accounts using them are unchanged.
+        enum: ['Super Admin', 'Institute Admin', 'Branch Manager', 'Teacher', 'Accountant', 'User'],
         default: 'Teacher'
     },
     // System-issued teacher identifier, kept separate from student codes. Only
@@ -36,10 +39,29 @@ const userSchema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    // Responsible person recorded on the teacher registration form.
+    masuulName: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    masuulNumber: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     roles: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Role'
     }],
+    // Per-user permission grants, used by accounts on the "User" role whose access
+    // is chosen individually rather than inherited from a role. Same nested shape
+    // as Role.permissions ({ Module: { SubModule: { Action: bool } } }) so the one
+    // existing resolver evaluates both.
+    customPermissions: {
+        type: Object,
+        default: {}
+    },
     salary: {
         type: Number,
         default: 0

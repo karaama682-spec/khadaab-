@@ -1,6 +1,7 @@
 const asyncHandler = require('../middleware/asyncHandler');
 const User = require('../models/User');
 const { generateTeacherCode, withRetry } = require('../utils/generateCode');
+const { normalizePermissions } = require('../utils/permissionUtils');
 const jwt = require('jsonwebtoken');
 
 // Generate JWT
@@ -21,6 +22,9 @@ const formatUserResponse = (user, token = null) => {
         gender: user.gender || 'Male',
         role: user.role || 'Teacher',
         teacherCode: user.teacherCode || '',
+        customPermissions: user.customPermissions || {},
+        masuulName: user.masuulName || '',
+        masuulNumber: user.masuulNumber || '',
         roles: user.roles || [],
         salary: user.salary || 0,
         status: user.status || 'active',
@@ -35,7 +39,7 @@ const formatUserResponse = (user, token = null) => {
 // @route   POST /api/users
 // @access  Private
 const registerUser = asyncHandler(async (req, res) => {
-    const { fullName, username, phone, email, password, role, roles, salary, status, branchId, gender } = req.body;
+    const { fullName, username, phone, email, password, role, roles, salary, status, branchId, gender, masuulName, masuulNumber, customPermissions } = req.body;
     let cleanEmail = email ? String(email).trim().toLowerCase() : '';
 
     if (!cleanEmail) {
@@ -73,6 +77,9 @@ const registerUser = asyncHandler(async (req, res) => {
         salary: salary || 0,
         status: status || 'active',
         branchId,
+        masuulName: masuulName || '',
+        masuulNumber: masuulNumber || '',
+        customPermissions: normalizePermissions(customPermissions),
         ...(teacherCode ? { teacherCode } : {})
     });
 
@@ -153,6 +160,15 @@ const updateUser = asyncHandler(async (req, res) => {
         user.salary = req.body.salary !== undefined ? req.body.salary : user.salary;
         user.status = req.body.status || user.status;
         user.branchId = req.body.branchId || user.branchId;
+        user.masuulName = req.body.masuulName !== undefined ? req.body.masuulName : user.masuulName;
+        user.masuulNumber = req.body.masuulNumber !== undefined ? req.body.masuulNumber : user.masuulNumber;
+
+        // Editing an account replaces its custom grants outright, so clearing a
+        // checkbox actually revokes access. Omitting the field leaves them as-is.
+        if (req.body.customPermissions !== undefined) {
+            user.customPermissions = normalizePermissions(req.body.customPermissions);
+            user.markModified('customPermissions');
+        }
 
         if (req.body.password) {
             user.passwordHash = req.body.password;

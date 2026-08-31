@@ -557,12 +557,27 @@ const lookupPhone = asyncHandler(async (req, res) => {
 // One row per responsible payer (father / guardian): name, number, how many
 // students they cover, the total monthly fee, and whether it's fully paid this month.
 const getPayers = asyncHandler(async (req, res) => {
-    const students = await Student.find()
-        .select('fullName fatherName fatherPhone guardianId monthlyFee fee classId')
+    // A month may be requested as YYYY-MM. Without it the behaviour is unchanged:
+    // the current month, every student, exactly as the Payers page has always
+    // loaded it.
+    const requestedMonth = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : null;
+    const month = requestedMonth || new Date().toISOString().slice(0, 7); // YYYY-MM
+
+    const studentQuery = {};
+    if (requestedMonth) {
+        // A student belongs to a month once they have been registered by the end of
+        // it, so past months do not list students who had not yet joined.
+        const [year, mon] = requestedMonth.split('-').map(Number);
+        const endOfMonth = new Date(Date.UTC(year, mon, 0, 23, 59, 59, 999));
+        studentQuery.registrationDate = { $lte: endOfMonth };
+        studentQuery.status = { $ne: 'Inactive' };
+    }
+
+    const students = await Student.find(studentQuery)
+        .select('fullName fatherName fatherPhone guardianId monthlyFee fee classId registrationDate status studentCode')
         .populate('classId', 'name className')
         .populate('guardianId', 'fullName phone')
         .lean();
-    const month = new Date().toISOString().slice(0, 7); // YYYY-MM
 
     const groups = new Map();
     for (const s of students) {

@@ -31,7 +31,9 @@ const TeachersManagement = () => {
     fullName: '',
     phone: '',
     gender: 'Male',
-    salary: ''
+    salary: '',
+    masuulName: '',
+    masuulNumber: ''
   });
 
   const fetchTeachers = async () => {
@@ -80,7 +82,9 @@ const TeachersManagement = () => {
       fullName: '',
       phone: '',
       gender: 'Male',
-      salary: ''
+      salary: '',
+      masuulName: '',
+      masuulNumber: ''
     });
     setIsModalOpen(true);
   };
@@ -91,7 +95,9 @@ const TeachersManagement = () => {
       fullName: teacher.fullName || teacher.username || '',
       phone: teacher.phone || '',
       gender: teacher.gender || 'Male',
-      salary: teacher.salary ? String(teacher.salary) : ''
+      salary: teacher.salary ? String(teacher.salary) : '',
+      masuulName: teacher.masuulName || '',
+      masuulNumber: teacher.masuulNumber || ''
     });
     setIsModalOpen(true);
   };
@@ -115,7 +121,9 @@ const TeachersManagement = () => {
         phone: formData.phone.trim(),
         gender: formData.gender,
         role: 'Teacher',
-        salary: Number(formData.salary) || 0
+        salary: Number(formData.salary) || 0,
+        masuulName: formData.masuulName.trim(),
+        masuulNumber: formData.masuulNumber.trim()
       };
 
       if (editingTeacher) {
@@ -275,6 +283,7 @@ const TeachersManagement = () => {
               <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
                 <th className="px-8 py-5">Teacher Name</th>
                 <th className="px-8 py-5">Phone Number</th>
+                <th className="px-8 py-5">Masuul</th>
                 <th className="px-8 py-5">Status</th>
                 <th className="px-8 py-5">Monthly Salary</th>
                 <th className="px-8 py-5 text-right">Actions</th>
@@ -283,7 +292,7 @@ const TeachersManagement = () => {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
               {filteredTeachers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-8 py-16 text-center text-slate-400 font-semibold text-sm">
+                  <td colSpan={6} className="px-8 py-16 text-center text-slate-400 font-semibold text-sm">
                     No teachers found. Click "Register New Teacher" to add one.
                   </td>
                 </tr>
@@ -314,6 +323,19 @@ const TeachersManagement = () => {
                         <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 text-xs font-semibold">
                           <Phone size={13} className="text-slate-400" />
                           {t.phone}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-xs font-medium">N/A</span>
+                      )}
+                    </td>
+
+                    <td className="px-8 py-5">
+                      {t.masuulName || t.masuulNumber ? (
+                        <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          <p>{t.masuulName || '—'}</p>
+                          {t.masuulNumber && (
+                            <p className="mt-0.5 text-slate-400">{t.masuulNumber}</p>
+                          )}
                         </div>
                       ) : (
                         <span className="text-slate-400 text-xs font-medium">N/A</span>
@@ -411,6 +433,26 @@ const TeachersManagement = () => {
                   placeholder="+1 234 567 890"
                   value={formData.phone}
                   onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border-none text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Masuul Name</label>
+                <input
+                  type="text"
+                  value={formData.masuulName}
+                  onChange={e => setFormData({ ...formData, masuulName: e.target.value })}
+                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border-none text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Masuul Number</label>
+                <input
+                  type="tel"
+                  value={formData.masuulNumber}
+                  onChange={e => setFormData({ ...formData, masuulNumber: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border-none text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500"
                 />
               </div>

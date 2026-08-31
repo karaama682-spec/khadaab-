@@ -77,6 +77,7 @@ export const NAV_CONFIG = [
     subItems: [
       { label: 'Cashbook', translationKey: 'cashbook', path: '/finance/cashbook', icon: Receipt },
       { label: 'Payers', translationKey: 'payers', path: '/finance/payers', icon: Users },
+      { label: 'Monthly Payments', translationKey: 'monthlyPayments', path: '/finance/monthly-payments', icon: CalendarCheck },
       { label: 'Wallets', translationKey: 'wallets', path: '/finance/wallets', icon: Wallet },
     ]
   },

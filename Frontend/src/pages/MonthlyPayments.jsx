@@ -1,35 +1,57 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Users, Search, Phone, ChevronDown, ChevronRight, Printer, FileDown, Wallet } from 'lucide-react';
-import { jsPDF } from 'jspdf';
+import { CalendarRange, Search, Phone, ChevronDown, ChevronRight, Wallet } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 
 const fmtMoney = (n) =>
   Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const PayersManagement = () => {
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+const currentMonthKey = () => new Date().toISOString().slice(0, 7); // YYYY-MM
+
+/**
+ * Monthly payment view.
+ *
+ * Reads the same /cashbook/payers endpoint the Payers page uses, with a month
+ * argument. Students appear here purely because they exist in the database — the
+ * endpoint groups every registered student under the person who pays for them, so
+ * registering a student is all that is needed for them to show up.
+ */
+const MonthlyPayments = () => {
   const { showAlert } = useAlert();
   const [payers, setPayers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [expandedKey, setExpandedKey] = useState(null);
 
-  const fetchPayers = async () => {
-    try {
-      setLoading(true);
-      const { data } = await api.get('/cashbook/payers');
-      setPayers(data || []);
-    } catch (error) {
-      console.error('Failed to load payers', error);
-      showAlert({ type: 'danger', title: 'Error', message: 'Failed to load payers.' });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth()); // 0-11
+
+  const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
   useEffect(() => {
+    let cancelled = false;
+    const fetchPayers = async () => {
+      try {
+        setLoading(true);
+        const { data } = await api.get('/cashbook/payers', { params: { month: monthKey } });
+        if (!cancelled) setPayers(data || []);
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Failed to load monthly payments', error);
+        showAlert({ type: 'danger', title: 'Error', message: 'Failed to load monthly payments.' });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
     fetchPayers();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { cancelled = true; };
+  }, [monthKey, showAlert]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -39,99 +61,18 @@ const PayersManagement = () => {
     );
   }, [payers, search]);
 
-  // Grand total across every payer in the system, summed from the same
-  // server-calculated totalFee the table prints. It follows the payer list, so
-  // adding or deleting a payer — or changing a student's fee — is reflected on
-  // the next load without anything being entered by hand.
-  const grandTotal = useMemo(
-    () => payers.reduce((sum, p) => sum + Number(p.totalFee || 0), 0),
-    [payers]
-  );
+  const totals = useMemo(() => ({
+    money: payers.reduce((sum, p) => sum + Number(p.totalFee || 0), 0),
+    students: payers.reduce((sum, p) => sum + Number(p.studentCount || 0), 0)
+  }), [payers]);
 
-  // Shown only while a search is active, so the visible rows still add up.
-  const filteredTotal = useMemo(
-    () => filtered.reduce((sum, p) => sum + Number(p.totalFee || 0), 0),
-    [filtered]
-  );
-
-  const handlePrint = () => window.print();
-
-  const handleExportPDF = () => {
-    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
-
-    // Header banner
-    doc.setFillColor(15, 23, 42);
-    doc.rect(0, 0, pageW, 26, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text('MACHAD INSTITUTE - PAYERS CHECKLIST', 14, 12);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Generated: ${new Date().toLocaleString()}   |   Payers: ${filtered.length}`, 14, 20);
-
-    const cols = { no: 12, name: 22, number: 78, students: 132, total: 155, paid: 190 };
-    let y = 36;
-
-    const drawHeader = () => {
-      doc.setFillColor(30, 41, 59);
-      doc.rect(10, y - 5, pageW - 20, 9, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.5);
-      doc.text('#', cols.no, y);
-      doc.text('PAYER NAME', cols.name, y);
-      doc.text('NUMBER', cols.number, y);
-      doc.text('STUDENTS', cols.students, y);
-      doc.text('TOTAL ($)', cols.total, y);
-      doc.text('PAID', cols.paid, y);
-      y += 9;
-    };
-
-    drawHeader();
-
-    filtered.forEach((p, i) => {
-      if (y > pageH - 20) {
-        doc.addPage();
-        y = 20;
-        drawHeader();
-      }
-      doc.setFillColor(i % 2 === 0 ? 248 : 255, i % 2 === 0 ? 250 : 255, i % 2 === 0 ? 252 : 255);
-      doc.rect(10, y - 5, pageW - 20, 9, 'F');
-
-      doc.setTextColor(100, 116, 139);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.text(String(i + 1), cols.no, y);
-
-      doc.setTextColor(15, 23, 42);
-      doc.setFont('helvetica', 'bold');
-      doc.text(String(p.name || 'Unknown').slice(0, 28), cols.name, y);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(71, 85, 105);
-      doc.text(String(p.phone || '—'), cols.number, y);
-      doc.text(String(p.studentCount), cols.students + 3, y);
-
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(15, 23, 42);
-      doc.text(`$${fmtMoney(p.totalFee)}`, cols.total, y);
-
-      // Empty box to tick by hand.
-      doc.setDrawColor(15, 23, 42);
-      doc.setLineWidth(0.4);
-      doc.rect(cols.paid, y - 4, 5, 5);
-
-      y += 9;
-    });
-
-    doc.save(`Machad_Payers_Checklist_${new Date().toISOString().slice(0, 10)}.pdf`);
-  };
+  const years = useMemo(() => {
+    const thisYear = new Date().getFullYear();
+    return [thisYear - 2, thisYear - 1, thisYear, thisYear + 1];
+  }, []);
 
   if (loading) {
-    return <div className="p-10 text-center text-slate-500 font-bold">Loading Payers...</div>;
+    return <div className="p-10 text-center text-slate-500 font-bold">Loading Monthly Payments...</div>;
   }
 
   return (
@@ -140,30 +81,47 @@ const PayersManagement = () => {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2">
         <div className="flex items-center gap-6">
           <div className="w-16 h-16 bg-slate-900 dark:bg-slate-800 rounded-[24px] flex items-center justify-center text-brand-400 shadow-2xl border border-slate-700 ring-4 ring-brand-400/10 print:hidden">
-            <Users size={32} strokeWidth={2.5} />
+            <CalendarRange size={32} strokeWidth={2.5} />
           </div>
           <div>
             <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">
-              Payers
+              Monthly Payments
             </h1>
             <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">
-              Who pays · how many students · total fee · tick when paid
+              Registered students by month · who pays · total fee
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3 print:hidden">
-          <button
-            onClick={handleExportPDF}
-            className="flex items-center gap-2 px-5 py-3.5 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
+      </div>
+
+      {/* Month selector */}
+      <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm p-6 space-y-4 print:hidden">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Select Month</p>
+          <select
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            className="px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-none text-xs font-black text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500"
           >
-            <FileDown size={16} /> Download PDF
-          </button>
-          <button
-            onClick={handlePrint}
-            className="flex items-center gap-2 px-6 py-3.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-brand-600/30 active:scale-95"
-          >
-            <Printer size={16} /> Print Checklist
-          </button>
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+          {MONTH_NAMES.map((name, index) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => setMonth(index)}
+              className={`px-3 py-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 ${
+                month === index
+                  ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/30'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}
+            >
+              {name}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -179,33 +137,27 @@ const PayersManagement = () => {
         />
       </div>
 
-      {/* Grand Total — summed from every payer's server-calculated total fee */}
-      <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm px-8 py-6 flex flex-wrap items-center justify-between gap-4 print:rounded-none print:border-0 print:shadow-none">
+      {/* Month total */}
+      <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm px-8 py-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 print:hidden">
             <Wallet size={22} strokeWidth={2.5} />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Grand Total</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+              {MONTH_NAMES[month]} {year}
+            </p>
             <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
-              Total money across {payers.length} payer{payers.length === 1 ? '' : 's'}
+              {totals.students} student{totals.students === 1 ? '' : 's'} across {payers.length} payer{payers.length === 1 ? '' : 's'}
             </p>
           </div>
         </div>
-
-        <div className="text-right">
-          <p className="text-4xl font-black text-emerald-600 dark:text-emerald-400 leading-none">
-            ${fmtMoney(grandTotal)}
-          </p>
-          {search.trim() && (
-            <p className="mt-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Matching this search: ${fmtMoney(filteredTotal)} ({filtered.length} of {payers.length})
-            </p>
-          )}
-        </div>
+        <p className="text-4xl font-black text-emerald-600 dark:text-emerald-400 leading-none">
+          ${fmtMoney(totals.money)}
+        </p>
       </div>
 
-      {/* Table */}
+      {/* Table — same structure and styling as the Payers page */}
       <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden print:rounded-none print:border-0 print:shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
@@ -248,7 +200,6 @@ const PayersManagement = () => {
                       <td className="px-8 py-6 text-right text-sm font-black text-slate-900 dark:text-white">
                         ${fmtMoney(p.totalFee)}
                       </td>
-                      {/* Empty box — printed and ticked by hand */}
                       <td className="px-8 py-6">
                         <div className="flex items-center justify-center">
                           <span className="inline-block w-6 h-6 rounded-md border-2 border-slate-900 dark:border-slate-300 print:border-black" />
@@ -269,20 +220,22 @@ const PayersManagement = () => {
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                {p.students.map((s) => (
+                                {(p.students || []).map((s) => (
                                   <tr key={s.studentId}>
-                                    <td className="px-5 py-3 font-bold text-slate-800 dark:text-slate-100">{s.name}</td>
+                                    <td className="px-5 py-3 font-bold text-slate-800 dark:text-slate-200">{s.name}</td>
                                     <td className="px-5 py-3 text-slate-500">{s.className || '—'}</td>
-                                    <td className="px-5 py-3 text-right text-slate-700 dark:text-slate-200">${fmtMoney(s.monthlyFee)}</td>
+                                    <td className="px-5 py-3 text-right font-black text-slate-900 dark:text-white">
+                                      ${fmtMoney(s.monthlyFee)}
+                                    </td>
                                   </tr>
                                 ))}
-                              </tbody>
-                              <tfoot>
-                                <tr className="border-t-2 border-slate-200 dark:border-slate-700 font-black text-slate-900 dark:text-white">
+                                <tr className="bg-slate-50 dark:bg-slate-800/40">
                                   <td className="px-5 py-3 uppercase text-[11px] text-slate-500" colSpan={2}>Total</td>
-                                  <td className="px-5 py-3 text-right">${fmtMoney(p.totalFee)}</td>
+                                  <td className="px-5 py-3 text-right font-black text-slate-900 dark:text-white">
+                                    ${fmtMoney(p.totalFee)}
+                                  </td>
                                 </tr>
-                              </tfoot>
+                              </tbody>
                             </table>
                           </div>
                         </td>
@@ -291,10 +244,11 @@ const PayersManagement = () => {
                   </React.Fragment>
                 );
               })}
+
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-8 py-12 text-center text-slate-400 text-sm font-medium">
-                    No payers found. They appear here once students with a responsible person's number are added.
+                  <td colSpan={6} className="px-8 py-16 text-center text-slate-400 text-sm font-semibold">
+                    No registered students for {MONTH_NAMES[month]} {year}.
                   </td>
                 </tr>
               )}
@@ -306,4 +260,4 @@ const PayersManagement = () => {
   );
 };
 
-export default PayersManagement;
+export default MonthlyPayments;
