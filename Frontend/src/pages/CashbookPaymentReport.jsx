@@ -38,6 +38,34 @@ const partyText = (name, phone) => {
   return name || phone || '—';
 };
 
+// The institute side of a transaction is the wallet the money moved through:
+// it sends on an expense and receives on an income. Only used to fill a side
+// that was left blank, so a typed counterparty — a teacher, an employee or an
+// unregistered number — is always shown as entered.
+const walletParty = (entry) => {
+  const wallet = entry?.walletId;
+  if (!wallet || typeof wallet !== 'object') return { name: '', phone: '' };
+  return { name: wallet.name || '', phone: wallet.accountNumber || '' };
+};
+
+const entryParties = (entry) => {
+  const isIncome = entry?.categoryId?.type === 'Income';
+  const wallet = walletParty(entry);
+
+  const sender = { name: entry?.senderName || '', phone: entry?.senderPhone || '' };
+  const receiver = { name: entry?.receiverName || '', phone: entry?.receiverPhone || '' };
+
+  if (isIncome) {
+    // Money in: the counterparty sent it, the wallet received it.
+    if (!receiver.name && !receiver.phone) return { sender, receiver: wallet };
+  } else if (!sender.name && !sender.phone) {
+    // Money out: the wallet sent it, the counterparty received it.
+    return { sender: wallet, receiver };
+  }
+
+  return { sender, receiver };
+};
+
 const CashbookPaymentReport = () => {
   const { showAlert } = useAlert();
 
@@ -188,8 +216,9 @@ const CashbookPaymentReport = () => {
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(71, 85, 105);
       doc.text(String(cat?.title || '—').slice(0, 16), cols.cat, y);
-      doc.text(partyText(item.senderName, item.senderPhone).slice(0, 26), cols.sender, y);
-      doc.text(partyText(item.receiverName, item.receiverPhone).slice(0, 26), cols.receiver, y);
+      const parties = entryParties(item);
+      doc.text(partyText(parties.sender.name, parties.sender.phone).slice(0, 26), cols.sender, y);
+      doc.text(partyText(parties.receiver.name, parties.receiver.phone).slice(0, 26), cols.receiver, y);
 
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(isCredit ? 22 : 220, isCredit ? 163 : 38, isCredit ? 74 : 38);
@@ -400,6 +429,7 @@ const CashbookPaymentReport = () => {
                 const cat = item.categoryId;
                 const isCredit = cat?.type === 'Income';
                 const name = item.description || cat?.title || '—';
+                const parties = entryParties(item);
                 return (
                   <tr key={item._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/20 transition-colors">
                     <td className="px-4 py-4 text-xs font-bold text-slate-400">{index + 1}</td>
@@ -408,13 +438,15 @@ const CashbookPaymentReport = () => {
                       {cat?.title || '—'}
                     </td>
                     <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300">
-                      <p className="font-semibold">{item.senderName || '—'}</p>
-                      {item.senderPhone && <p className="text-[11px] text-slate-400 font-mono">{item.senderPhone}</p>}
+                      <p className="font-semibold">{parties.sender.name || '—'}</p>
+                      {parties.sender.phone && (
+                        <p className="text-[11px] text-slate-400 font-mono">{parties.sender.phone}</p>
+                      )}
                     </td>
                     <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300">
-                      <p className="font-semibold">{item.receiverName || '—'}</p>
-                      {item.receiverPhone && (
-                        <p className="text-[11px] text-slate-400 font-mono">{item.receiverPhone}</p>
+                      <p className="font-semibold">{parties.receiver.name || '—'}</p>
+                      {parties.receiver.phone && (
+                        <p className="text-[11px] text-slate-400 font-mono">{parties.receiver.phone}</p>
                       )}
                     </td>
                     <td className="px-4 py-4">

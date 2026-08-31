@@ -10,7 +10,13 @@ const Payment = require('../models/Payment');
 const Salary = require('../models/Salary');
 const { phoneVariants, isValidSomaliMobile, digitsOnly } = require('../utils/somaliPhone');
 
-const populateEntry = { path: 'categoryId', select: 'title type description' };
+// The wallet is populated alongside the category so reports can name the
+// institute side of a transaction: it is the sender on an expense and the
+// receiver on an income.
+const populateEntry = [
+    { path: 'categoryId', select: 'title type description' },
+    { path: 'walletId', select: 'name accountNumber type' }
+];
 
 // Resolve the wallet an entry should affect: explicit wallet → branch's active wallet → any active wallet.
 const resolveWallet = async (walletId, branchId) => {
