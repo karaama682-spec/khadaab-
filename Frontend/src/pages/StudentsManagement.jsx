@@ -312,12 +312,18 @@ const StudentsManagement = () => {
 
   const importRow = async (row, existingKeys, cache) => {
     if (!row.fullName) throw new Error('Full Name is required');
-    if (!row.fatherPhone) throw new Error('Father Phone is required');
 
     const cls = classes.find(c => (c.name || '').trim().toLowerCase() === row.className.toLowerCase());
     if (!cls) throw new Error(`class "${row.className || '(blank)'}" does not exist`);
 
-    const key = studentKey(row.fullName, cls._id, row.fatherPhone);
+    // Father name and phone are optional here, exactly as on the registration
+    // form: each falls back to the fee payer's details before being stored.
+    const fatherName = row.fatherName || row.payerName || '';
+    const fatherPhone = row.fatherPhone || row.payerPhone || '';
+
+    // Key on the value that actually gets stored, so an exported file re-imports
+    // as "already registered" even when the sheet's Father Phone cell was blank.
+    const key = studentKey(row.fullName, cls._id, fatherPhone);
     if (existingKeys.has(key)) throw new Error('already registered in this class');
 
     const guardianId = await resolveGuardian(row, cache);
@@ -329,10 +335,8 @@ const StudentsManagement = () => {
       gender: row.gender || 'Male',
       monthlyFee: Number(row.monthlyFee) || 0,
       fee: Number(row.monthlyFee) || 0,
-      // Same fallback the registration form applies: a blank father name falls
-      // back to the fee payer's name rather than blocking the row.
-      fatherName: row.fatherName || row.payerName || '',
-      fatherPhone: row.fatherPhone || row.payerPhone || '',
+      fatherName,
+      fatherPhone,
       guardianId: guardianId || undefined,
       status: row.status || 'Active'
     });
