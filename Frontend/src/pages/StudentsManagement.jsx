@@ -312,7 +312,6 @@ const StudentsManagement = () => {
 
   const importRow = async (row, existingKeys, cache) => {
     if (!row.fullName) throw new Error('Full Name is required');
-    if (!row.fatherName) throw new Error('Father Name is required');
     if (!row.fatherPhone) throw new Error('Father Phone is required');
 
     const cls = classes.find(c => (c.name || '').trim().toLowerCase() === row.className.toLowerCase());
@@ -330,8 +329,10 @@ const StudentsManagement = () => {
       gender: row.gender || 'Male',
       monthlyFee: Number(row.monthlyFee) || 0,
       fee: Number(row.monthlyFee) || 0,
-      fatherName: row.fatherName,
-      fatherPhone: row.fatherPhone,
+      // Same fallback the registration form applies: a blank father name falls
+      // back to the fee payer's name rather than blocking the row.
+      fatherName: row.fatherName || row.payerName || '',
+      fatherPhone: row.fatherPhone || row.payerPhone || '',
       guardianId: guardianId || undefined,
       status: row.status || 'Active'
     });
