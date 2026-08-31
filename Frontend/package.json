@@ -12,6 +12,7 @@
   "dependencies": {
     "@google/genai": "^1.34.0",
     "axios": "^1.13.2",
+    "exceljs": "^4.4.0",
     "html5-qrcode": "^2.3.8",
     "jsbarcode": "^3.12.3",
     "jspdf": "^4.2.1",

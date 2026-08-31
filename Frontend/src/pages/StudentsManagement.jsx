@@ -1,8 +1,86 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, X, Edit2, Trash2, Users, Search, CheckCircle2, UserPlus, Loader2, DollarSign, IdCard as IdCardIcon } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, X, Edit2, Trash2, Users, Search, CheckCircle2, UserPlus, Loader2, DollarSign, IdCard as IdCardIcon, Download, Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import IdCard from '../components/IdCard.jsx';
+
+// The workbook columns mirror the registration form exactly. Student ID is
+// exported for reference but never imported — the server issues it (1001, 1002…)
+// and ignores any value sent by a client.
+const SHEET_COLUMNS = [
+  { header: 'Student ID', key: 'studentId', width: 12 },
+  { header: 'Full Name', key: 'fullName', width: 26 },
+  { header: 'Class', key: 'className', width: 18 },
+  { header: 'Gender', key: 'gender', width: 10 },
+  { header: 'Monthly Fee', key: 'monthlyFee', width: 13 },
+  { header: 'Father Name', key: 'fatherName', width: 22 },
+  { header: 'Father Phone', key: 'fatherPhone', width: 16 },
+  { header: 'Fee Payer Name', key: 'payerName', width: 22 },
+  { header: 'Fee Payer Phone', key: 'payerPhone', width: 18 },
+  { header: 'Fee Payer Alt Phone', key: 'payerAltPhone', width: 18 },
+  { header: 'Relationship', key: 'relationship', width: 14 },
+  { header: 'Status', key: 'status', width: 12 }
+];
+
+const SHEET_NAME = 'Students';
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+// ExcelJS is large and only needed when someone actually imports or exports, so
+// it is fetched on demand rather than shipped in the main bundle.
+const loadExcelJS = async () => (await import('exceljs')).default;
+
+// A cell can come back as a string, a number, or a rich object (formula result,
+// hyperlink). Flatten all of those to a plain trimmed string.
+const cellText = (value) => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') {
+    if (value.text) return String(value.text).trim();
+    if (value.result !== undefined) return String(value.result).trim();
+    if (value.richText) return value.richText.map(r => r.text).join('').trim();
+    return '';
+  }
+  return String(value).trim();
+};
+
+const downloadWorkbook = async (workbook, filename) => {
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: XLSX_MIME });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+const styleHeaderRow = (sheet) => {
+  const header = sheet.getRow(1);
+  header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+  header.alignment = { vertical: 'middle' };
+  header.height = 22;
+  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+};
+
+// Same normalisation the backend uses when matching a payer by phone, so an
+// import cannot create a second payer for a number already stored in another
+// local format (0615550001 vs 615550001).
+const digitsOnly = (value) => String(value ?? '').replace(/\D/g, '');
+
+const phoneVariants = (value) => {
+  const d = digitsOnly(value);
+  if (!d) return [];
+  const set = new Set([d]);
+  // Match with and without a leading zero whatever the length. Stored numbers
+  // are not always 9 or 10 digits, so keying off length alone would miss an
+  // existing payer and create a duplicate for the same person.
+  if (d.startsWith('0')) set.add(d.replace(/^0+/, ''));
+  else set.add(`0${d}`);
+  return [...set].filter(Boolean);
+};
 
 const StudentsManagement = () => {
   const { showAlert, showConfirm } = useAlert();
@@ -11,6 +89,9 @@ const StudentsManagement = () => {
   const [guardians, setGuardians] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cardStudent, setCardStudent] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importResults, setImportResults] = useState(null);
+  const fileInputRef = useRef(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -90,6 +171,255 @@ const StudentsManagement = () => {
 
     return () => clearTimeout(timer);
   }, [formData.guardianPhone]);
+
+  // ── Excel template ────────────────────────────────────────────────────────
+  // Same columns as the export, so a filled-in template and an exported file are
+  // interchangeable as import sources.
+  const handleDownloadTemplate = async () => {
+    const ExcelJS = await loadExcelJS();
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet(SHEET_NAME);
+    sheet.columns = SHEET_COLUMNS;
+    styleHeaderRow(sheet);
+
+    sheet.addRow({
+      studentId: '(leave blank)',
+      fullName: 'Ahmed Ali',
+      className: classes[0]?.name || 'Grade 1',
+      gender: 'Male',
+      monthlyFee: 20,
+      fatherName: 'Ali Hassan',
+      fatherPhone: '0615551234',
+      payerName: 'Ali Hassan',
+      payerPhone: '0615551234',
+      payerAltPhone: '',
+      relationship: 'Father',
+      status: 'Active'
+    });
+    sheet.getRow(2).font = { italic: true, color: { argb: 'FF94A3B8' } };
+
+    const notes = workbook.addWorksheet('Instructions');
+    notes.columns = [{ width: 96 }];
+    [
+      'HOW TO USE THIS TEMPLATE',
+      '',
+      'One row = one student. Delete the grey example row before uploading.',
+      '',
+      'Student ID  — leave blank. The system issues it automatically (1001, 1002, …).',
+      '              Any value typed here is ignored.',
+      'Full Name   — required.',
+      'Class       — required. Must exactly match an existing class name.',
+      `              Existing classes: ${classes.map(c => c.name).filter(Boolean).join(', ') || '(none yet)'}`,
+      'Gender      — Male, Female or Other. Defaults to Male.',
+      'Monthly Fee — number. Defaults to 0.',
+      'Father Name / Father Phone — both required.',
+      '',
+      'Fee Payer Phone — this is how a payer is identified.',
+      '  · If the number already exists, the student is linked to that payer.',
+      '  · If not, a new payer is created once and reused for later rows.',
+      '  · Leaving it blank creates a student with no payer.',
+      '',
+      'Fee Payer Name / Alt Phone / Relationship — used only when creating a new payer.',
+      'An existing payer is never renamed, because that name is shared by all their students.',
+      '',
+      'Status — Active, Inactive or Graduated. Defaults to Active.'
+    ].forEach(line => notes.addRow([line]));
+    notes.getRow(1).font = { bold: true, size: 13 };
+
+    await downloadWorkbook(workbook, 'Student_Import_Template.xlsx');
+    showAlert({ type: 'success', title: 'Template downloaded', message: 'Fill in one row per student, then use Import Excel.' });
+  };
+
+  // ── Export ────────────────────────────────────────────────────────────────
+  // One row per student using the registration fields plus the payer resolved
+  // through guardianId. The file can be re-imported as-is.
+  const handleExport = async () => {
+    const ExcelJS = await loadExcelJS();
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet(SHEET_NAME);
+    sheet.columns = SHEET_COLUMNS;
+    styleHeaderRow(sheet);
+
+    data.forEach((item) => {
+      const cls = classes.find(c => String(c._id) === String(item.classId?._id || item.classId));
+      const guardian = item.guardianId && typeof item.guardianId === 'object' ? item.guardianId : null;
+      sheet.addRow({
+        studentId: item.studentCode || '',
+        fullName: item.fullName || '',
+        className: cls?.name || '',
+        gender: item.gender || '',
+        monthlyFee: Number(item.monthlyFee ?? item.fee ?? 0),
+        fatherName: item.fatherName || '',
+        // Phones are written as text so a leading zero is never dropped.
+        fatherPhone: item.fatherPhone || '',
+        payerName: guardian?.fullName || '',
+        payerPhone: guardian?.phone || '',
+        payerAltPhone: guardian?.alternatePhone || '',
+        relationship: guardian?.relationship || '',
+        status: item.status || 'Active'
+      });
+    });
+
+    ['fatherPhone', 'payerPhone', 'payerAltPhone'].forEach(key => {
+      sheet.getColumn(key).numFmt = '@';
+    });
+
+    await downloadWorkbook(workbook, `Students_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    showAlert({
+      type: 'success',
+      title: 'Export complete',
+      message: `${data.length} student${data.length === 1 ? '' : 's'} exported to Excel.`
+    });
+  };
+
+  // ── Import ────────────────────────────────────────────────────────────────
+  // Resolve the payer by phone exactly as registration does: find an existing
+  // record first, reuse it when found, create one only when needed. An existing
+  // payer is never updated — that would rewrite the name for every student
+  // already attached to them.
+  const resolveGuardian = async (row, cache) => {
+    const phone = row.payerPhone;
+    if (!phone) return null;
+
+    const variants = phoneVariants(phone);
+    const cacheKey = variants.join('|');
+    if (cache.has(cacheKey)) return cache.get(cacheKey);
+
+    for (const variant of variants) {
+      const { data: found } = await api.get(`/guardians?phone=${encodeURIComponent(variant)}`);
+      if (Array.isArray(found) && found.length > 0) {
+        cache.set(cacheKey, found[0]._id);
+        return found[0]._id;
+      }
+    }
+
+    const { data: created } = await api.post('/guardians', {
+      fullName: row.payerName || row.fatherName || 'Fee Payer',
+      phone,
+      alternatePhone: row.payerAltPhone || '',
+      relationship: row.relationship || 'Father'
+    });
+    const id = created?._id || created?.id || null;
+    if (id) cache.set(cacheKey, id);
+    return id;
+  };
+
+  // A student is treated as already present when the same name sits in the same
+  // class under the same father's phone. There is no unique key on students in
+  // the schema, so this is the closest match to a real-world duplicate.
+  const studentKey = (name, classId, fatherPhone) =>
+    `${String(name).trim().toLowerCase()}|${String(classId)}|${digitsOnly(fatherPhone)}`;
+
+  const importRow = async (row, existingKeys, cache) => {
+    if (!row.fullName) throw new Error('Full Name is required');
+    if (!row.fatherName) throw new Error('Father Name is required');
+    if (!row.fatherPhone) throw new Error('Father Phone is required');
+
+    const cls = classes.find(c => (c.name || '').trim().toLowerCase() === row.className.toLowerCase());
+    if (!cls) throw new Error(`class "${row.className || '(blank)'}" does not exist`);
+
+    const key = studentKey(row.fullName, cls._id, row.fatherPhone);
+    if (existingKeys.has(key)) throw new Error('already registered in this class');
+
+    const guardianId = await resolveGuardian(row, cache);
+
+    // Student ID is deliberately omitted: the server issues it.
+    await api.post('/students', {
+      fullName: row.fullName,
+      classId: cls._id,
+      gender: row.gender || 'Male',
+      monthlyFee: Number(row.monthlyFee) || 0,
+      fee: Number(row.monthlyFee) || 0,
+      fatherName: row.fatherName,
+      fatherPhone: row.fatherPhone,
+      guardianId: guardianId || undefined,
+      status: row.status || 'Active'
+    });
+
+    existingKeys.add(key);
+  };
+
+  const handleImportFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = '';
+
+    setImporting(true);
+    setImportResults(null);
+
+    try {
+      const ExcelJS = await loadExcelJS();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(await file.arrayBuffer());
+      const sheet = workbook.getWorksheet(SHEET_NAME) || workbook.worksheets[0];
+      if (!sheet) throw new Error('The workbook contains no sheets.');
+
+      // Map by header text so column order does not matter.
+      const headerRow = sheet.getRow(1);
+      const indexByHeader = {};
+      headerRow.eachCell((cell, col) => {
+        const match = SHEET_COLUMNS.find(c => c.header.toLowerCase() === cellText(cell.value).toLowerCase());
+        if (match) indexByHeader[match.key] = col;
+      });
+
+      if (indexByHeader.fullName === undefined) {
+        throw new Error('No "Full Name" column found. Use the downloaded template.');
+      }
+
+      const rows = [];
+      sheet.eachRow((excelRow, rowNumber) => {
+        if (rowNumber === 1) return;
+        const row = {};
+        SHEET_COLUMNS.forEach(({ key }) => {
+          const col = indexByHeader[key];
+          row[key] = col ? cellText(excelRow.getCell(col).value) : '';
+        });
+        // Skip the template's grey example row and any blank line.
+        if (!row.fullName || row.studentId === '(leave blank)') return;
+        rows.push({ ...row, rowNumber });
+      });
+
+      if (!rows.length) {
+        setImporting(false);
+        showAlert({ type: 'warning', title: 'Nothing to import', message: 'No student rows were found in the file.' });
+        return;
+      }
+
+      const existingKeys = new Set(
+        data.map(s => studentKey(s.fullName, s.classId?._id || s.classId, s.fatherPhone))
+      );
+      const cache = new Map();
+      const results = [];
+
+      // Sequential on purpose: rows sharing a payer must reuse the same record
+      // rather than racing to create duplicates.
+      for (const row of rows) {
+        try {
+          await importRow(row, existingKeys, cache);
+          results.push({ row: row.rowNumber, name: row.fullName, ok: true, message: 'Imported' });
+        } catch (error) {
+          results.push({
+            row: row.rowNumber,
+            name: row.fullName || `Row ${row.rowNumber}`,
+            ok: false,
+            message: error.response?.data?.message || error.message
+          });
+        }
+      }
+
+      await fetchData();
+      setImportResults(results);
+    } catch (error) {
+      showAlert({
+        type: 'danger',
+        title: 'Could not read the file',
+        message: error.message || 'Please upload an .xlsx file created from the template.'
+      });
+    } finally {
+      setImporting(false);
+    }
+  };
+
 
   const openAddModal = () => {
     setEditingItem(null);
@@ -239,13 +569,85 @@ const StudentsManagement = () => {
             <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">Student Directory & Fee Management</p>
           </div>
         </div>
-        <button
-          onClick={openAddModal}
-          className="flex items-center gap-3 px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95"
-        >
-          <Plus size={18} strokeWidth={3} /> Add New Student
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onChange={handleImportFile}
+            className="hidden"
+          />
+          <button
+            onClick={handleDownloadTemplate}
+            className="flex items-center gap-2 px-6 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all active:scale-95"
+          >
+            <FileSpreadsheet size={16} strokeWidth={3} /> Excel Template
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className="flex items-center gap-2 px-6 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {importing
+              ? <><Loader2 size={16} className="animate-spin" /> Importing…</>
+              : <><Upload size={16} strokeWidth={3} /> Import Excel</>}
+          </button>
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-2 px-6 py-4 bg-slate-900 dark:bg-slate-800 text-white rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-md hover:bg-slate-800 transition-all active:scale-95"
+          >
+            <Download size={16} strokeWidth={3} /> Export Excel
+          </button>
+          <button
+            onClick={openAddModal}
+            className="flex items-center gap-3 px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95"
+          >
+            <Plus size={18} strokeWidth={3} /> Add New Student
+          </button>
+        </div>
       </div>
+
+      {/* Per-row import result */}
+      {importResults && (
+        <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-5 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center gap-3">
+              <FileSpreadsheet className="text-brand-500" size={20} />
+              <div>
+                <h3 className="font-black text-slate-900 dark:text-white uppercase text-sm tracking-tight">Import Result</h3>
+                <p className="mt-0.5 text-xs font-semibold text-slate-500">
+                  {importResults.filter(r => r.ok).length} imported ·{' '}
+                  {importResults.filter(r => !r.ok).length} skipped · {importResults.length} rows read
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setImportResults(null)}
+              className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              aria-label="Dismiss import result"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+            {importResults.map((r) => (
+              <div key={r.row} className="flex items-start gap-3 px-6 py-3">
+                {r.ok
+                  ? <CheckCircle2 size={16} className="text-emerald-500 mt-0.5 shrink-0" />
+                  : <AlertCircle size={16} className="text-rose-500 mt-0.5 shrink-0" />}
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    Row {r.row} — {r.name}
+                  </p>
+                  <p className={`text-xs font-semibold ${r.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                    {r.message}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Search Bar */}
       <div className="flex items-center bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm max-w-md">
