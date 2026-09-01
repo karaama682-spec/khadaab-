@@ -2,12 +2,13 @@ const asyncHandler = require('../middleware/asyncHandler');
 const Transaction = require('../models/Transaction');
 
 const getTransactions = asyncHandler(async (req, res) => {
-    const data = await Transaction.find();
+    // Populate the wallet so reports can name the account a transaction moved through.
+    const data = await Transaction.find().populate('walletId', 'name type balance currency');
     res.json(data);
 });
 
 const getTransactionById = asyncHandler(async (req, res) => {
-    const data = await Transaction.findById(req.params.id);
+    const data = await Transaction.findById(req.params.id).populate('walletId', 'name type balance currency');
     if (data) {
         res.json(data);
     } else {

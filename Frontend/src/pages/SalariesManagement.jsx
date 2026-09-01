@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, X, Edit2, Trash2, CreditCard, Search } from 'lucide-react';
 import api from '../services/api';
+import { walletNameOf } from '../utils/wallet';
 import { useAlert } from '../components/common/alerts/useAlert';
 
 const SalariesManagement = () => {
@@ -140,7 +141,7 @@ const SalariesManagement = () => {
   if (loading) return <div className="p-10 text-center text-slate-500">Loading Salaries...</div>;
 
   return (
-    <div className="p-6 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-700 pb-24">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2">
         <div className="flex items-center gap-6">
           <div className="w-16 h-16 bg-slate-900 dark:bg-slate-800 rounded-[24px] flex items-center justify-center text-brand-400 shadow-2xl border border-slate-700 ring-4 ring-brand-400/10">
@@ -185,7 +186,7 @@ const SalariesManagement = () => {
                   <td className="px-8 py-6 text-sm font-black text-violet-600 dark:text-violet-400">${item.amount}</td>
                   <td className="px-8 py-6 text-sm font-semibold text-slate-700 dark:text-slate-300">
                     <span className="px-3 py-1 text-[10px] font-black uppercase rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                      {item.walletId?.name || (wallets.find(w => w._id === item.walletId)?.name) || 'Main Cash'}
+                      {walletNameOf(item, wallets)}
                     </span>
                   </td>
                   <td className="px-8 py-6 text-sm font-semibold text-slate-500 dark:text-slate-400">{item.paymentMethod || '-'}</td>

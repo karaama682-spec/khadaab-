@@ -14,7 +14,21 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import api from '../services/api';
+import { walletNameOf, walletIdOf } from '../utils/wallet';
 import { useAlert } from '../components/common/alerts/useAlert';
+
+// jsPDF draws at fixed offsets and never clips, so each cell is fitted to its
+// column width and given an ellipsis only when it genuinely cannot fit.
+const fitPdfText = (doc, text, width) => {
+  const value = String(text ?? '').trim() || '—';
+  if (doc.getTextWidth(value) <= width) return value;
+
+  let truncated = value;
+  while (truncated.length > 1 && doc.getTextWidth(`${truncated}...`) > width) {
+    truncated = truncated.slice(0, -1);
+  }
+  return `${truncated}...`;
+};
 
 const FeePaymentReport = () => {
   const { showAlert } = useAlert();
@@ -28,6 +42,7 @@ const FeePaymentReport = () => {
   const [statusFilter, setStatusFilter] = useState('All');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [walletFilter, setWalletFilter] = useState('All');
 
   const fetchData = async () => {
     try {
@@ -116,9 +131,14 @@ const FeePaymentReport = () => {
       const matchesFrom = !dateFrom || (entryDate && entryDate >= dateFrom);
       const matchesTo = !dateTo || (entryDate && entryDate <= dateTo);
 
-      return matchesSearch && matchesStatus && matchesFrom && matchesTo;
+      // Wallet filter narrows which payments are shown. Every total below is
+      // derived from this same list, so they recalculate for the chosen wallet
+      // without any amount or accounting rule changing.
+      const matchesWallet = walletFilter === 'All' || walletIdOf(item) === walletFilter;
+
+      return matchesSearch && matchesStatus && matchesFrom && matchesTo && matchesWallet;
     });
-  }, [payments, students, searchQuery, statusFilter, dateFrom, dateTo, paidByStudentMonth]);
+  }, [payments, students, searchQuery, statusFilter, dateFrom, dateTo, walletFilter, paidByStudentMonth]);
 
   // Total Calculations for bottom row and KPI cards
   const totalAmount = useMemo(() => filtered.reduce((sum, item) => sum + Number(item.amount || 0), 0), [filtered]);
@@ -176,7 +196,18 @@ const FeePaymentReport = () => {
     doc.text(`Generated: ${new Date().toLocaleString()}   |   Total Entries: ${filtered.length}`, 14, 20);
 
     let y = 35;
-    const cols = { no: 12, name: 22, number: 75, month: 115, amount: 145, status: 175 };
+    // Portrait A4 is 210mm wide; the table lives between 12 and 200. Widths were
+    // measured against the real header labels and values so the new Wallet
+    // column fits without crowding anything out.
+    const cols = {
+      no: { x: 12, w: 8 },
+      name: { x: 20, w: 40 },
+      number: { x: 60, w: 26 },
+      month: { x: 86, w: 24 },
+      wallet: { x: 110, w: 30 },
+      amount: { x: 140, w: 24 },
+      status: { x: 164, w: 24 }
+    };
 
     // Table Header
     doc.setFillColor(30, 41, 59);
@@ -184,12 +215,13 @@ const FeePaymentReport = () => {
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
-    doc.text('#', cols.no, y);
-    doc.text('PAYER NAME', cols.name, y);
-    doc.text('PAYER PHONE', cols.number, y);
-    doc.text('MONTH', cols.month, y);
-    doc.text('PAID ($)', cols.amount, y);
-    doc.text('UNPAID ($)', cols.status, y);
+    doc.text('#', cols.no.x, y);
+    doc.text('PAYER NAME', cols.name.x, y);
+    doc.text('PAYER PHONE', cols.number.x, y);
+    doc.text('MONTH', cols.month.x, y);
+    doc.text('WALLET', cols.wallet.x, y);
+    doc.text('PAID ($)', cols.amount.x, y);
+    doc.text('UNPAID ($)', cols.status.x, y);
 
     y += 8;
 
@@ -211,23 +243,25 @@ const FeePaymentReport = () => {
       doc.setTextColor(100, 116, 139);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
-      doc.text(String(i + 1), cols.no, y);
+      doc.text(String(i + 1), cols.no.x, y);
 
       doc.setTextColor(15, 23, 42);
       doc.setFont('helvetica', 'bold');
-      doc.text(payer.name, cols.name, y);
+      doc.text(fitPdfText(doc, payer.name, cols.name.w), cols.name.x, y);
 
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(71, 85, 105);
-      doc.text(String(payer.phone), cols.number, y);
-      doc.text(item.month || 'Current', cols.month, y);
+      doc.text(fitPdfText(doc, payer.phone, cols.number.w), cols.number.x, y);
+      doc.text(fitPdfText(doc, item.month || 'Current', cols.month.w), cols.month.x, y);
+      // Same wallet the screen shows, from the payment's own relationship.
+      doc.text(fitPdfText(doc, walletNameOf(item, wallets), cols.wallet.w), cols.wallet.x, y);
 
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(22, 163, 74);
-      doc.text(`$${paidAmount.toLocaleString()}`, cols.amount, y);
+      doc.text(fitPdfText(doc, `$${paidAmount.toLocaleString()}`, cols.amount.w), cols.amount.x, y);
 
       doc.setTextColor(unpaid > 0 ? 180 : 22, unpaid > 0 ? 83 : 163, unpaid > 0 ? 9 : 74);
-      doc.text(`$${unpaid.toLocaleString()}`, cols.status, y);
+      doc.text(fitPdfText(doc, `$${unpaid.toLocaleString()}`, cols.status.w), cols.status.x, y);
 
       y += 8;
     });
@@ -266,7 +300,7 @@ const FeePaymentReport = () => {
   }
 
   return (
-    <div className="p-6 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-500 pb-24">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24">
       {/* Report Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 px-1 print:hidden">
         <div className="flex items-center gap-5">
@@ -388,6 +422,22 @@ const FeePaymentReport = () => {
                 {status}
               </button>
             ))}
+          </div>
+
+          {/* Wallet filter — options come from the wallets already loaded from
+              the database, so no wallet record is created or duplicated here. */}
+          <div className="flex items-center gap-3">
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Wallet</label>
+            <select
+              value={walletFilter}
+              onChange={(e) => setWalletFilter(e.target.value)}
+              className="px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              <option value="All">All Wallets</option>
+              {wallets.map((w) => (
+                <option key={w._id} value={w._id}>{w.name}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -511,7 +561,7 @@ const FeePaymentReport = () => {
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-slate-700 dark:text-slate-300">
                       <span className="px-3 py-1 text-[10px] font-black uppercase rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                        {item.walletId?.name || (wallets.find(w => w._id === item.walletId)?.name) || 'Main Cash'}
+                        {walletNameOf(item, wallets)}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm font-black text-emerald-600 dark:text-emerald-400">
