@@ -108,6 +108,18 @@ const StudentsManagement = () => {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   };
 
+  // Registration date for display. Read straight from the stored value's own
+  // date part rather than through a locale conversion, so the day shown is
+  // always the day that was saved and can never shift by a timezone offset.
+  const fmtRegDate = (value) => {
+    if (!value) return 'N/A';
+    const iso = typeof value === 'string' ? value : new Date(value).toISOString();
+    const parts = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+    if (!parts) return 'N/A';
+    const [, y, m, d] = parts;
+    return `${d}/${m}/${y}`;
+  };
+
   const [formData, setFormData] = useState({
     fullName: '',
     classId: '',
@@ -694,6 +706,7 @@ const StudentsManagement = () => {
                 <th className="px-8 py-5">Class</th>
                 <th className="px-8 py-5">Student Fee ($)</th>
                 <th className="px-8 py-5">Who Pays the Fee</th>
+                <th className="px-8 py-5">Registration Date</th>
                 <th className="px-8 py-5 text-right">Actions</th>
               </tr>
             </thead>
@@ -728,6 +741,10 @@ const StudentsManagement = () => {
                         <span className="text-slate-400 opacity-60">Not Linked</span>
                       )}
                     </td>
+                    {/* The date already stored on the record; nothing is generated here. */}
+                    <td className="px-8 py-6 text-sm font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                      {item.registrationDate ? fmtRegDate(item.registrationDate) : <span className="text-slate-400 opacity-60">N/A</span>}
+                    </td>
                     <td className="px-8 py-6 text-right">
                       <div className="flex justify-end items-center gap-2">
                         <button onClick={() => setCardStudent(item)} title="ID Card" className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-emerald-600 transition-all">
@@ -746,7 +763,7 @@ const StudentsManagement = () => {
               })}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="px-8 py-10 text-center text-slate-400 text-sm font-medium">No students found. Click "Add New Student" to register a student.</td>
+                  <td colSpan="7" className="px-8 py-10 text-center text-slate-400 text-sm font-medium">No students found. Click "Add New Student" to register a student.</td>
                 </tr>
               )}
             </tbody>
