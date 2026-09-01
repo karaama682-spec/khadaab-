@@ -273,7 +273,7 @@ const WarehouseStaffReports = () => {
 
 
     return (
-        <div className="p-8 max-w-[1600px] mx-auto animate-in fade-in duration-500 pb-12">
+        <div className="p-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-12">
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 px-4 mb-8">
                 <div className="flex items-center gap-6">
                     <div className="w-16 h-16 bg-rose-600 rounded-[24px] flex items-center justify-center text-white shadow-xl shadow-rose-500/20 transition-transform hover:rotate-3 shrink-0">

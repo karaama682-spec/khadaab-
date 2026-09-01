@@ -207,7 +207,7 @@ const HRReports = () => {
    );
 
    return (
-      <div className="p-6 space-y-10 max-w-[1600px] mx-auto animate-in fade-in duration-500 pb-24">
+      <div className="p-6 lg:p-8 space-y-10 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24">
 
          {/* 1. Header Section */}
          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-8 px-2">

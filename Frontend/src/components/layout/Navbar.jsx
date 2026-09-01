@@ -58,7 +58,7 @@ const Navbar = ({
 
   return (
     <header className="sticky top-0 z-30 flex h-20 w-full items-center justify-between border-b border-white/70 dark:border-slate-800/80 bg-white/85 dark:bg-slate-950/80 px-4 md:px-8 shadow-sm shadow-slate-900/5 backdrop-blur-2xl transition-colors">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 min-w-0 flex-1">
         <button
           onClick={onMenuClick}
           className="lg:hidden p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-600 dark:text-slate-400"
@@ -67,7 +67,7 @@ const Navbar = ({
           <Menu size={24} />
         </button>
 
-        <div className="hidden sm:flex items-center bg-slate-50/90 dark:bg-slate-900 rounded-2xl px-4 py-2.5 gap-3 border border-slate-200/80 dark:border-slate-800 w-56 md:w-96 focus-within:ring-4 focus-within:ring-brand-500/10 focus-within:border-brand-400 transition-all shadow-sm">
+        <div className="hidden sm:flex items-center bg-slate-50/90 dark:bg-slate-900 rounded-2xl px-4 py-2.5 gap-3 border border-slate-200/80 dark:border-slate-800 w-full min-w-0 max-w-[14rem] md:max-w-[24rem] focus-within:ring-4 focus-within:ring-brand-500/10 focus-within:border-brand-400 transition-all shadow-sm">
           <Search size={18} className="text-slate-400" />
           <input
             type="text"
@@ -78,7 +78,7 @@ const Navbar = ({
         </div>
       </div>
 
-      <div className="flex items-center gap-3 md:gap-4">
+      <div className="flex items-center gap-3 md:gap-4 shrink-0 min-w-0">
         <button
           onClick={() => goTo('/settings/preferences')}
           className="hidden sm:flex p-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-colors border border-slate-200/70 dark:border-slate-800"

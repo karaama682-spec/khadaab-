@@ -49,7 +49,7 @@ const BusinessManagement = () => {
   ];
 
   return (
-    <div className="p-6 space-y-6 max-w-[1400px] mx-auto animate-in fade-in duration-500">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-500">
       {/* Dynamic Hub Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white dark:bg-slate-900 p-8 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm">
         <div className="flex items-center gap-6">

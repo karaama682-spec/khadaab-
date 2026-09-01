@@ -103,7 +103,7 @@ const BusinessProfile = () => {
   if (loading) return <div className="p-10 text-center">Loading Profile Data...</div>;
 
   return (
-    <div className="p-6 space-y-6 max-w-[1200px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1440px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
         <div className="flex items-center gap-4">

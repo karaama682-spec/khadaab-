@@ -225,7 +225,7 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
 
   return (
     <>
-      <aside className="hidden lg:block w-72 h-screen sticky top-0 bg-[#071124] overflow-hidden border-r border-white/10">
+      <aside className="hidden lg:block w-64 h-screen sticky top-0 bg-[#071124] overflow-hidden border-r border-white/10">
         <SidebarContent />
       </aside>
 

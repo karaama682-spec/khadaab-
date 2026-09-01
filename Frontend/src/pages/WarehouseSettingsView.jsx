@@ -110,7 +110,7 @@ const WarehouseSettingsView = () => {
   ];
 
   return (
-    <div className="p-6 space-y-8 max-w-[1400px] mx-auto animate-in fade-in duration-500">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-500">
       {/* Premium Dynamic Header */}
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 bg-slate-900 rounded-[40px] p-10 border border-slate-800 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none group-hover:rotate-12 transition-transform duration-700">

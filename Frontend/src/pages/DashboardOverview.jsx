@@ -60,7 +60,7 @@ const DashboardOverview = () => {
         : [];
 
     return (
-        <div className="mx-auto max-w-[1700px] space-y-7 p-4 pb-12 md:p-8">
+        <div className="mx-auto max-w-[1800px] space-y-7 p-4 pb-12 md:p-8">
             <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand-600 via-purple-600 to-blue-700 p-6 text-white shadow-2xl shadow-brand-900/20 md:p-8">
                 <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(30deg, rgba(255,255,255,.18) 12%, transparent 12.5%, transparent 87%, rgba(255,255,255,.18) 87.5%, rgba(255,255,255,.18)), linear-gradient(150deg, rgba(255,255,255,.18) 12%, transparent 12.5%, transparent 87%, rgba(255,255,255,.18) 87.5%, rgba(255,255,255,.18))', backgroundSize: '56px 96px' }} />
                 <div className="relative grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">

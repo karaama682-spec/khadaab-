@@ -637,7 +637,7 @@ const InventoryPurchase = () => {
   return (
     <>
       {view === 'CREATE' ? (
-        <div className="p-6 space-y-8 max-w-[1400px] mx-auto animate-in slide-in-from-right-4 duration-500 pb-24">
+        <div className="p-6 lg:p-8 space-y-8 max-w-[1600px] mx-auto animate-in slide-in-from-right-4 duration-500 pb-24">
           {/* Header Action Bar */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2">
             <div className="flex items-center gap-6">
@@ -665,7 +665,7 @@ const InventoryPurchase = () => {
             </div>
           </div>
 
-          <div className="space-y-8 max-w-[1200px] mx-auto">
+          <div className="space-y-8 max-w-[1440px] mx-auto">
             {/* Main Form Area */}
             <div className="space-y-8">
               {/* 🏷️ Purchase Form: Header Section */}
@@ -1117,7 +1117,7 @@ const InventoryPurchase = () => {
           </div>
         </div>
       ) : (
-        <div className="p-6 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-700 pb-24 font-sans">
+        <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24 font-sans">
           {/* List Header */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2">
             <div className="flex items-center gap-6">

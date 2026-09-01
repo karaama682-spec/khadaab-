@@ -101,7 +101,7 @@ const NotificationSettings = () => {
   ];
 
   return (
-    <div className="p-6 space-y-8 max-w-[1200px] mx-auto animate-in fade-in duration-700 pb-24">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1440px] mx-auto animate-in fade-in duration-700 pb-24">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="flex items-center gap-6">
           <div className="w-16 h-16 bg-slate-900 rounded-[24px] flex items-center justify-center text-brand-400 shadow-2xl border border-slate-700 ring-4 ring-brand-400/10">

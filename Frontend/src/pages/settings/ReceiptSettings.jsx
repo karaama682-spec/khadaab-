@@ -76,7 +76,7 @@ const ReceiptSettings = () => {
   };
 
   return (
-    <div className="p-6 space-y-8 max-w-[1400px] mx-auto animate-in fade-in duration-500">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Receipt Customization</h1>

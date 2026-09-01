@@ -351,7 +351,7 @@ const GuardianPaymentReport = () => {
   }
 
   return (
-    <div className="p-6 space-y-8 max-w-[1400px] mx-auto animate-in fade-in duration-500">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-500">
 
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-1">
