@@ -6,13 +6,13 @@ import {
   TrendingUp,
   TrendingDown,
   Scale,
-  Building2,
   Filter,
   RotateCcw,
   CalendarRange
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import api from '../services/api';
+import { walletNameOf, walletIdOf } from '../utils/wallet';
 import { useAlert } from '../components/common/alerts/useAlert';
 
 const fmtMoney = (n) =>
@@ -36,6 +36,19 @@ const currentPeriod = () => {
 const partyText = (name, phone) => {
   if (name && phone) return `${name} (${phone})`;
   return name || phone || '—';
+};
+
+// jsPDF draws at fixed offsets and never clips, so each cell is fitted to its
+// column width and given an ellipsis only when it genuinely cannot fit.
+const fitPdfText = (doc, text, width) => {
+  const value = String(text ?? '').trim() || '—';
+  if (doc.getTextWidth(value) <= width) return value;
+
+  let truncated = value;
+  while (truncated.length > 1 && doc.getTextWidth(`${truncated}...`) > width) {
+    truncated = truncated.slice(0, -1);
+  }
+  return `${truncated}...`;
 };
 
 // The institute side of a transaction is the wallet the money moved through:
@@ -78,17 +91,21 @@ const CashbookPaymentReport = () => {
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [walletFilter, setWalletFilter] = useState('All');
+  const [wallets, setWallets] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [catRes, entryRes] = await Promise.all([
+        const [catRes, entryRes, walletRes] = await Promise.all([
           api.get('/cashbook/categories'),
-          api.get('/cashbook/entries')
+          api.get('/cashbook/entries'),
+          api.get('/wallets')
         ]);
         setCategories(catRes.data || []);
         setEntries(entryRes.data || []);
+        setWallets(walletRes.data || []);
       } catch (error) {
         console.error('Failed to load payment report data', error);
         showAlert({ type: 'danger', title: 'Error', message: 'Failed to load payment report data.' });
@@ -111,13 +128,17 @@ const CashbookPaymentReport = () => {
           if (type !== wanted) return false;
         }
         if (categoryFilter !== 'All' && String(catId) !== String(categoryFilter)) return false;
+        // Wallet filter narrows the rows only. The income/expense/net totals
+        // below are derived from this same list, so they recalculate for the
+        // chosen wallet without any amount or accounting rule changing.
+        if (walletFilter !== 'All' && walletIdOf(e) !== walletFilter) return false;
         const d = e.date || '';
         if (dateFrom && d < dateFrom) return false;
         if (dateTo && d > dateTo) return false;
         return true;
       })
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  }, [entries, typeFilter, categoryFilter, dateFrom, dateTo]);
+  }, [entries, typeFilter, categoryFilter, walletFilter, dateFrom, dateTo]);
 
   const { totalIncome, totalExpense } = useMemo(() => {
     let income = 0;
@@ -144,6 +165,7 @@ const CashbookPaymentReport = () => {
   const resetFilters = () => {
     setTypeFilter('All');
     setCategoryFilter('All');
+    setWalletFilter('All');
     setDateFrom('');
     setDateTo('');
   };
@@ -170,7 +192,20 @@ const CashbookPaymentReport = () => {
     );
 
     let y = 32;
-    const cols = { no: 12, name: 22, cat: 70, sender: 100, receiver: 150, type: 200, amount: 225, date: 260 };
+    // Landscape A4 is 297mm wide; the table lives between 10 and 287. Each x is
+    // the previous x plus its width, so no column can run into its neighbour.
+    // The width freed by dropping Name / Title is given to the wider text
+    // columns (category, sender, receiver, wallet) rather than left as a gap.
+    const cols = {
+      no: { x: 10, w: 8 },
+      cat: { x: 18, w: 34 },
+      sender: { x: 52, w: 62 },
+      receiver: { x: 114, w: 62 },
+      wallet: { x: 176, w: 36 },
+      type: { x: 212, w: 18 },
+      amount: { x: 230, w: 30 },
+      date: { x: 260, w: 27 }
+    };
 
     const drawHeader = () => {
       doc.setFillColor(30, 41, 59);
@@ -178,14 +213,14 @@ const CashbookPaymentReport = () => {
       doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7);
-      doc.text('#', cols.no, y);
-      doc.text('NAME / TITLE', cols.name, y);
-      doc.text('CATEGORY', cols.cat, y);
-      doc.text('SENDER', cols.sender, y);
-      doc.text('RECEIVER', cols.receiver, y);
-      doc.text('TYPE', cols.type, y);
-      doc.text('AMOUNT ($)', cols.amount, y);
-      doc.text('DATE', cols.date, y);
+      doc.text('#', cols.no.x, y);
+      doc.text('CATEGORY', cols.cat.x, y);
+      doc.text('SENDER', cols.sender.x, y);
+      doc.text('RECEIVER', cols.receiver.x, y);
+      doc.text('WALLET', cols.wallet.x, y);
+      doc.text('TYPE', cols.type.x, y);
+      doc.text('AMOUNT ($)', cols.amount.x, y);
+      doc.text('DATE', cols.date.x, y);
       y += 8;
     };
 
@@ -199,7 +234,6 @@ const CashbookPaymentReport = () => {
       }
       const cat = item.categoryId;
       const isCredit = cat?.type === 'Income';
-      const name = item.description || cat?.title || '—';
 
       doc.setFillColor(i % 2 === 0 ? 248 : 255, i % 2 === 0 ? 250 : 255, i % 2 === 0 ? 252 : 255);
       doc.rect(8, y - 5, pageW - 16, 8, 'F');
@@ -207,29 +241,26 @@ const CashbookPaymentReport = () => {
       doc.setTextColor(100, 116, 139);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
-      doc.text(String(i + 1), cols.no, y);
+      doc.text(String(i + 1), cols.no.x, y);
 
-      doc.setTextColor(15, 23, 42);
-      doc.setFont('helvetica', 'bold');
-      doc.text(String(name).slice(0, 26), cols.name, y);
-
-      doc.setFont('helvetica', 'normal');
       doc.setTextColor(71, 85, 105);
-      doc.text(String(cat?.title || '—').slice(0, 16), cols.cat, y);
+      doc.text(fitPdfText(doc, cat?.title, cols.cat.w), cols.cat.x, y);
       const parties = entryParties(item);
-      doc.text(partyText(parties.sender.name, parties.sender.phone).slice(0, 26), cols.sender, y);
-      doc.text(partyText(parties.receiver.name, parties.receiver.phone).slice(0, 26), cols.receiver, y);
+      doc.text(fitPdfText(doc, partyText(parties.sender.name, parties.sender.phone), cols.sender.w), cols.sender.x, y);
+      doc.text(fitPdfText(doc, partyText(parties.receiver.name, parties.receiver.phone), cols.receiver.w), cols.receiver.x, y);
+      // Same wallet the screen shows, from the entry's own relationship.
+      doc.text(fitPdfText(doc, walletNameOf(item, wallets), cols.wallet.w), cols.wallet.x, y);
 
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(isCredit ? 22 : 220, isCredit ? 163 : 38, isCredit ? 74 : 38);
-      doc.text(typeToLabel(cat?.type), cols.type, y);
+      doc.text(fitPdfText(doc, typeToLabel(cat?.type), cols.type.w), cols.type.x, y);
 
       doc.setTextColor(15, 23, 42);
-      doc.text(`$${fmtMoney(item.amount)}`, cols.amount, y);
+      doc.text(fitPdfText(doc, `$${fmtMoney(item.amount)}`, cols.amount.w), cols.amount.x, y);
 
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(71, 85, 105);
-      doc.text(item.date || '—', cols.date, y);
+      doc.text(fitPdfText(doc, item.date, cols.date.w), cols.date.x, y);
 
       y += 8;
     });
@@ -262,7 +293,7 @@ const CashbookPaymentReport = () => {
   }
 
   return (
-    <div className="p-6 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-500 pb-24">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 px-1 print:hidden">
         <div className="flex items-center gap-5">
@@ -295,34 +326,37 @@ const CashbookPaymentReport = () => {
         </div>
       </div>
 
-      {/* Filter bar */}
-      <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 shadow-sm p-6 print:hidden">
-        <div className="flex items-center gap-2 mb-4">
-          <Filter size={16} className="text-slate-400" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filter payments</p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Type</label>
+      {/* Filter bar — row 2 of the top section. Every control that used to sit
+          on three stacked rows (label, five fields, preset buttons) now shares
+          one flex line; it wraps only below desktop. Behaviour is unchanged. */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm px-3.5 py-3 print:hidden">
+        <div className="flex flex-wrap items-end gap-x-2.5 gap-y-2">
+          <div className="flex items-center gap-1.5 shrink-0 pb-2">
+            <Filter size={14} className="text-slate-400" />
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filter payments</p>
+          </div>
+
+          <div className="flex-1 min-w-[92px]">
+            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">Type</label>
             <select
               value={typeFilter}
               onChange={(e) => {
                 setTypeFilter(e.target.value);
                 setCategoryFilter('All');
               }}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-[13px]"
             >
               <option value="All">All</option>
               <option value="Credit">Credit (Income)</option>
               <option value="Debit">Debit (Expense)</option>
             </select>
           </div>
-          <div>
-            <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Category</label>
+          <div className="flex-1 min-w-[112px]">
+            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">Category</label>
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-[13px]"
             >
               <option value="All">All categories</option>
               {categoryOptions.map((c) => (
@@ -332,95 +366,90 @@ const CashbookPaymentReport = () => {
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">From date</label>
+          {/* Wallet filter — options come from the wallets already stored in the
+              database, so no wallet record is created or duplicated here. */}
+          <div className="flex-1 min-w-[104px]">
+            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">Wallet</label>
+            <select
+              value={walletFilter}
+              onChange={(e) => setWalletFilter(e.target.value)}
+              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-[13px]"
+            >
+              <option value="All">All Wallets</option>
+              {wallets.map((w) => (
+                <option key={w._id} value={w._id}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex-1 min-w-[112px]">
+            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">From date</label>
             <input
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-[13px]"
             />
           </div>
-          <div>
-            <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">To date</label>
+          <div className="flex-1 min-w-[112px]">
+            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">To date</label>
             <input
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
+              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-[13px]"
             />
           </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 mt-4">
-          <button
-            type="button"
-            onClick={() => {
-              const p = currentPeriod();
-              setDateFrom(p.from);
-              setDateTo(p.to);
-            }}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-black uppercase tracking-wider"
-          >
-            <CalendarRange size={14} /> Current Period (25 → 24)
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setDateFrom('');
-              setDateTo('');
-            }}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800"
-          >
-            All Time
-          </button>
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800"
-          >
-            <RotateCcw size={13} /> Reset
-          </button>
-          <span className="ml-auto text-[11px] font-bold text-slate-400">
-            {filtered.length} result{filtered.length === 1 ? '' : 's'}
-          </span>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                const p = currentPeriod();
+                setDateFrom(p.from);
+                setDateTo(p.to);
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-black uppercase tracking-wider whitespace-nowrap"
+            >
+              <CalendarRange size={13} /> Current Period (25 → 24)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDateFrom('');
+                setDateTo('');
+              }}
+              className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800 whitespace-nowrap"
+            >
+              All Time
+            </button>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              <RotateCcw size={12} /> Reset
+            </button>
+            <span className="text-[11px] font-bold text-slate-400 whitespace-nowrap pl-0.5">
+              {filtered.length} result{filtered.length === 1 ? '' : 's'}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Printable document */}
       <div className="bg-white dark:bg-slate-900 rounded-[36px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden p-8 print:p-0 print:border-none print:shadow-none">
-        {/* Printable header */}
-        <div className="flex justify-between items-start pb-6 border-b-2 border-slate-900 dark:border-slate-700 mb-6">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Building2 size={24} className="text-brand-600 dark:text-brand-400" />
-              <h2 className="text-2xl font-black uppercase tracking-wide text-slate-900 dark:text-white">
-                MACHAD EDUCATIONAL INSTITUTE
-              </h2>
-            </div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-              Payment Report — Credit &amp; Debit Ledger
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs font-bold text-slate-400 uppercase">Period</p>
-            <p className="text-sm font-black text-slate-800 dark:text-slate-200">{rangeLabel}</p>
-            <p className="text-[11px] text-slate-400 mt-1">Generated {new Date().toLocaleDateString()}</p>
-          </div>
-        </div>
-
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest">
                 <th className="px-4 py-4">#</th>
-                <th className="px-4 py-4">Name / Title</th>
                 <th className="px-4 py-4">Category</th>
                 <th className="px-4 py-4">Sender</th>
                 <th className="px-4 py-4">Receiver</th>
+                <th className="px-4 py-4">Wallet</th>
                 <th className="px-4 py-4">Type</th>
                 <th className="px-4 py-4 text-right">Amount ($)</th>
-                <th className="px-4 py-4 text-right">Remaining ($)</th>
                 <th className="px-4 py-4">Date</th>
               </tr>
             </thead>
@@ -428,12 +457,10 @@ const CashbookPaymentReport = () => {
               {filtered.map((item, index) => {
                 const cat = item.categoryId;
                 const isCredit = cat?.type === 'Income';
-                const name = item.description || cat?.title || '—';
                 const parties = entryParties(item);
                 return (
                   <tr key={item._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/20 transition-colors">
                     <td className="px-4 py-4 text-xs font-bold text-slate-400">{index + 1}</td>
-                    <td className="px-4 py-4 text-sm font-bold text-slate-900 dark:text-white">{name}</td>
                     <td className="px-4 py-4 text-sm font-semibold text-slate-600 dark:text-slate-300">
                       {cat?.title || '—'}
                     </td>
@@ -448,6 +475,12 @@ const CashbookPaymentReport = () => {
                       {parties.receiver.phone && (
                         <p className="text-[11px] text-slate-400 font-mono">{parties.receiver.phone}</p>
                       )}
+                    </td>
+                    {/* The wallet the money actually moved through. */}
+                    <td className="px-4 py-4">
+                      <span className="px-3 py-1 text-[10px] font-black uppercase rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        {walletNameOf(item)}
+                      </span>
                     </td>
                     <td className="px-4 py-4">
                       <span
@@ -467,15 +500,6 @@ const CashbookPaymentReport = () => {
                     >
                       {isCredit ? '+' : '−'}${fmtMoney(item.amount)}
                     </td>
-                    <td className="px-4 py-4 text-sm font-black text-right whitespace-nowrap">
-                      {item.feeRemaining != null && item.feeRemaining > 0 ? (
-                        <span className="text-amber-600 dark:text-amber-400">${fmtMoney(item.feeRemaining)}</span>
-                      ) : item.feeRemaining === 0 ? (
-                        <span className="text-emerald-600 dark:text-emerald-400">Paid</span>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
                     <td className="px-4 py-4 text-sm font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                       {item.date || '—'}
                     </td>
@@ -484,7 +508,7 @@ const CashbookPaymentReport = () => {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-8 py-12 text-center text-slate-400 text-sm font-medium">
+                  <td colSpan={8} className="px-8 py-12 text-center text-slate-400 text-sm font-medium">
                     No payment records found for the selected filters.
                   </td>
                 </tr>
