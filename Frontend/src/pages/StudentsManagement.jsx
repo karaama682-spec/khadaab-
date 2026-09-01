@@ -99,6 +99,15 @@ const StudentsManagement = () => {
   const [foundGuardian, setFoundGuardian] = useState(null);
   const [isSearchingGuardian, setIsSearchingGuardian] = useState(false);
 
+  // A Date (or ISO string) rendered as the YYYY-MM-DD a date input expects,
+  // using local time so the day never shifts across the UTC boundary.
+  const toDateInput = (value) => {
+    const d = value ? new Date(value) : new Date();
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+
   const [formData, setFormData] = useState({
     fullName: '',
     classId: '',
@@ -110,7 +119,8 @@ const StudentsManagement = () => {
     guardianName: '',
     guardianPhone: '',
     guardianAlternatePhone: '',
-    guardianRelationship: 'Father'
+    guardianRelationship: 'Father',
+    registrationDate: toDateInput()
   });
 
   const fetchData = async () => {
@@ -440,7 +450,8 @@ const StudentsManagement = () => {
       guardianName: '',
       guardianPhone: '',
       guardianAlternatePhone: '',
-      guardianRelationship: 'Father'
+      guardianRelationship: 'Father',
+      registrationDate: toDateInput()
     });
     setIsModalOpen(true);
   };
@@ -460,7 +471,10 @@ const StudentsManagement = () => {
       guardianName: existingG?.fullName || '',
       guardianPhone: existingG?.phone || '',
       guardianAlternatePhone: existingG?.alternatePhone || '',
-      guardianRelationship: existingG?.relationship || 'Father'
+      guardianRelationship: existingG?.relationship || 'Father',
+      // Show the date already stored on the record. Only a student that somehow
+      // has none falls back to today, so editing never rewrites a saved date.
+      registrationDate: item.registrationDate ? toDateInput(item.registrationDate) : toDateInput()
     });
     setIsModalOpen(true);
   };
@@ -504,7 +518,10 @@ const StudentsManagement = () => {
         fee: Number(formData.monthlyFee) || 0,
         fatherName: formData.fatherName || formData.guardianName || '',
         fatherPhone: formData.fatherPhone || formData.guardianPhone || '',
-        guardianId: guardianId || undefined
+        guardianId: guardianId || undefined,
+        // Sent only when the field holds a date, so clearing the input can never
+        // blank a registration date already stored against the student.
+        ...(formData.registrationDate ? { registrationDate: formData.registrationDate } : {})
       };
 
       if (editingItem) {
@@ -562,7 +579,7 @@ const StudentsManagement = () => {
   if (loading) return <div className="p-10 text-center text-slate-500">Loading Students...</div>;
 
   return (
-    <div className="p-6 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-700 pb-24">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2">
         <div className="flex items-center gap-6">
@@ -803,6 +820,15 @@ const StudentsManagement = () => {
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Registration Date</label>
+                  <input
+                    type="date"
+                    value={formData.registrationDate}
+                    onChange={(e) => setFormData({ ...formData, registrationDate: e.target.value })}
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-black uppercase text-slate-500 mb-1">Student Fee ($) *</label>
