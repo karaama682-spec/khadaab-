@@ -71,12 +71,28 @@ const MonthlyPayments = () => {
     return [thisYear - 2, thisYear - 1, thisYear, thisYear + 1];
   }, []);
 
+  // Every year/month pair the two old controls could reach, flattened into one
+  // list for the single combo box. Newest first so the current month is near the
+  // top. The value is the same YYYY-MM key the request already uses.
+  const monthOptions = useMemo(() => {
+    const opts = [];
+    for (const y of [...years].sort((a, b) => b - a)) {
+      for (let m = 11; m >= 0; m -= 1) {
+        opts.push({
+          value: `${y}-${String(m + 1).padStart(2, '0')}`,
+          label: `${MONTH_NAMES[m]} ${y}`
+        });
+      }
+    }
+    return opts;
+  }, [years]);
+
   if (loading) {
     return <div className="p-10 text-center text-slate-500 font-bold">Loading Monthly Payments...</div>;
   }
 
   return (
-    <div className="p-6 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-500 pb-24">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2">
         <div className="flex items-center gap-6">
@@ -94,35 +110,25 @@ const MonthlyPayments = () => {
         </div>
       </div>
 
-      {/* Month selector */}
-      <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm p-6 space-y-4 print:hidden">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Select Month</p>
-          <select
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            className="px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-none text-xs font-black text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500"
-          >
-            {years.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
-
-        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-          {MONTH_NAMES.map((name, index) => (
-            <button
-              key={name}
-              type="button"
-              onClick={() => setMonth(index)}
-              className={`px-3 py-3 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 ${
-                month === index
-                  ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/30'
-                  : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-              }`}
-            >
-              {name}
-            </button>
+      {/* Period selector — a single combo box carrying both month and year. */}
+      <div className="flex items-center gap-3 bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm w-full max-w-xs print:hidden">
+        <label htmlFor="month-select" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 shrink-0 leading-tight">
+          Month &amp; Year
+        </label>
+        <select
+          id="month-select"
+          value={monthKey}
+          onChange={(e) => {
+            const [y, m] = e.target.value.split('-');
+            setYear(Number(y));
+            setMonth(Number(m) - 1);
+          }}
+          className="w-full min-w-0 bg-transparent outline-none text-sm font-bold text-slate-900 dark:text-white cursor-pointer"
+        >
+          {monthOptions.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
           ))}
-        </div>
+        </select>
       </div>
 
       {/* Search */}
@@ -135,26 +141,6 @@ const MonthlyPayments = () => {
           onChange={(e) => setSearch(e.target.value)}
           className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400"
         />
-      </div>
-
-      {/* Month total */}
-      <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm px-8 py-6 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 print:hidden">
-            <Wallet size={22} strokeWidth={2.5} />
-          </div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-              {MONTH_NAMES[month]} {year}
-            </p>
-            <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
-              {totals.students} student{totals.students === 1 ? '' : 's'} across {payers.length} payer{payers.length === 1 ? '' : 's'}
-            </p>
-          </div>
-        </div>
-        <p className="text-4xl font-black text-emerald-600 dark:text-emerald-400 leading-none">
-          ${fmtMoney(totals.money)}
-        </p>
       </div>
 
       {/* Table — same structure and styling as the Payers page */}
@@ -255,6 +241,26 @@ const MonthlyPayments = () => {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Month total — closes the monthly list it sums. Values unchanged. */}
+      <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm px-8 py-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 print:hidden">
+            <Wallet size={22} strokeWidth={2.5} />
+          </div>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+              {MONTH_NAMES[month]} {year}
+            </p>
+            <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
+              {totals.students} student{totals.students === 1 ? '' : 's'} across {payers.length} payer{payers.length === 1 ? '' : 's'}
+            </p>
+          </div>
+        </div>
+        <p className="text-4xl font-black text-emerald-600 dark:text-emerald-400 leading-none">
+          ${fmtMoney(totals.money)}
+        </p>
       </div>
     </div>
   );
