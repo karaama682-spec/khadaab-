@@ -7,10 +7,7 @@ import {
   Tags,
   ArrowLeftRight,
   Save,
-  RotateCcw,
-  TrendingUp,
-  TrendingDown,
-  Scale
+  RotateCcw
 } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
@@ -453,16 +450,6 @@ const CashbookManagement = () => {
   const receiverPhoneErr = phoneError(transactionForm.method, transactionForm.receiverPhone);
   const phoneHint = PHONE_RULES[transactionForm.method]?.label || '';
 
-  const totals = entries.reduce(
-    (acc, item) => {
-      const amt = Number(item.amount) || 0;
-      if (item.categoryId?.type === 'Income') acc.income += amt;
-      else if (item.categoryId?.type === 'Expense') acc.expense += amt;
-      return acc;
-    },
-    { income: 0, expense: 0 }
-  );
-  const netBalance = totals.income - totals.expense;
   const fmtMoney = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   if (loading) {
@@ -470,7 +457,7 @@ const CashbookManagement = () => {
   }
 
   return (
-    <div className="p-6 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-700 pb-24">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2">
         <div className="flex items-center gap-6">
           <div className="w-16 h-16 bg-slate-900 dark:bg-slate-800 rounded-[24px] flex items-center justify-center text-brand-400 shadow-2xl border border-slate-700 ring-4 ring-brand-400/10">
@@ -650,36 +637,6 @@ const CashbookManagement = () => {
               Create at least one category first (use the Category tab).
             </p>
           )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 shadow-sm p-6 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-                <TrendingUp size={24} strokeWidth={2.5} />
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Income</p>
-                <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{fmtMoney(totals.income)}</p>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 shadow-sm p-6 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-950/50 flex items-center justify-center text-rose-600 dark:text-rose-400">
-                <TrendingDown size={24} strokeWidth={2.5} />
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Expense</p>
-                <p className="text-2xl font-black text-rose-600 dark:text-rose-400">{fmtMoney(totals.expense)}</p>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 shadow-sm p-6 flex items-center gap-4">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${netBalance >= 0 ? 'bg-brand-100 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400' : 'bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400'}`}>
-                <Scale size={24} strokeWidth={2.5} />
-              </div>
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Net Balance</p>
-                <p className={`text-2xl font-black ${netBalance >= 0 ? 'text-brand-600 dark:text-brand-400' : 'text-amber-600 dark:text-amber-400'}`}>{fmtMoney(netBalance)}</p>
-              </div>
-            </div>
-          </div>
 
           <form
             onSubmit={handleTransactionSubmit}
