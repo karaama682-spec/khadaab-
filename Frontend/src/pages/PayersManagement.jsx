@@ -135,7 +135,7 @@ const PayersManagement = () => {
   }
 
   return (
-    <div className="p-6 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-500 pb-24">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2">
         <div className="flex items-center gap-6">
@@ -177,32 +177,6 @@ const PayersManagement = () => {
           onChange={(e) => setSearch(e.target.value)}
           className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400"
         />
-      </div>
-
-      {/* Grand Total — summed from every payer's server-calculated total fee */}
-      <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm px-8 py-6 flex flex-wrap items-center justify-between gap-4 print:rounded-none print:border-0 print:shadow-none">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 print:hidden">
-            <Wallet size={22} strokeWidth={2.5} />
-          </div>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Grand Total</p>
-            <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
-              Total money across {payers.length} payer{payers.length === 1 ? '' : 's'}
-            </p>
-          </div>
-        </div>
-
-        <div className="text-right">
-          <p className="text-4xl font-black text-emerald-600 dark:text-emerald-400 leading-none">
-            ${fmtMoney(grandTotal)}
-          </p>
-          {search.trim() && (
-            <p className="mt-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Matching this search: ${fmtMoney(filteredTotal)} ({filtered.length} of {payers.length})
-            </p>
-          )}
-        </div>
       </div>
 
       {/* Table */}
@@ -300,6 +274,34 @@ const PayersManagement = () => {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Grand Total — summed from every payer's server-calculated total fee.
+          Positioned below the payer table so the figure closes the list.
+          Values and calculations are unchanged. */}
+      <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm px-8 py-6 flex flex-wrap items-center justify-between gap-4 print:rounded-none print:border-0 print:shadow-none">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 print:hidden">
+            <Wallet size={22} strokeWidth={2.5} />
+          </div>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Grand Total</p>
+            <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
+              Total money across {payers.length} payer{payers.length === 1 ? '' : 's'}
+            </p>
+          </div>
+        </div>
+
+        <div className="text-right">
+          <p className="text-4xl font-black text-emerald-600 dark:text-emerald-400 leading-none">
+            ${fmtMoney(grandTotal)}
+          </p>
+          {search.trim() && (
+            <p className="mt-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Matching this search: ${fmtMoney(filteredTotal)} ({filtered.length} of {payers.length})
+            </p>
+          )}
         </div>
       </div>
     </div>
