@@ -1,4 +1,5 @@
-require('dotenv').config(); // Restarting backend
+require('dotenv').config({ path: '.env.local' });
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('./db');
