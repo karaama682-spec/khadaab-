@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { classLabel } from '../utils/classLabel';
 
 const ClassPromotion = () => {
   const { showAlert, showConfirm } = useAlert();
@@ -244,7 +245,7 @@ const ClassPromotion = () => {
               >
                 <option value="">Select current class...</option>
                 {classes.map(c => (
-                  <option key={c._id} value={c._id}>{c.name}</option>
+                  <option key={c._id} value={c._id}>{classLabel(c)}</option>
                 ))}
               </select>
             </div>
@@ -261,7 +262,7 @@ const ClassPromotion = () => {
               >
                 <option value="">Select target class...</option>
                 {classes.map(c => (
-                  <option key={c._id} value={c._id}>{c.name}</option>
+                  <option key={c._id} value={c._id}>{classLabel(c)}</option>
                 ))}
               </select>
             </div>

@@ -55,7 +55,7 @@ const getStudentAttendances = asyncHandler(async (req, res) => {
     // Load matching records, sorting by date/timestamp to allow finding the latest recorded status
     const data = await StudentAttendance.find(query)
         .populate('studentId')
-        .populate('classId')
+        .populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } })
         .populate('markedBy', 'fullName email')
         .sort({ date: -1, createdAt: -1 });
 
@@ -77,7 +77,7 @@ const getStudentAttendances = asyncHandler(async (req, res) => {
 const getStudentAttendanceById = asyncHandler(async (req, res) => {
     const data = await StudentAttendance.findById(req.params.id)
         .populate('studentId')
-        .populate('classId')
+        .populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } })
         .populate('markedBy', 'fullName email');
     if (data) {
         res.json(data);
@@ -156,7 +156,7 @@ const getStudentAttendanceHistory = asyncHandler(async (req, res) => {
     }
 
     const data = await StudentAttendance.find(query)
-        .populate('classId')
+        .populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } })
         .populate('markedBy', 'fullName')
         .sort({ date: -1, createdAt: -1 });
 

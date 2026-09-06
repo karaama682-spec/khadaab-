@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BookOpen, Calendar, CalendarCheck, CheckCircle2, Clock, Save, Users } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { classLabel } from '../utils/classLabel';
 
 const today = () => new Date().toISOString().split('T')[0];
 
@@ -52,7 +53,7 @@ const StudentAttendanceManagement = () => {
     [students, selectedClassId]
   );
 
-  const selectedClassName = classes.find(item => String(item._id) === String(selectedClassId))?.name || '';
+  const selectedClassName = classLabel(classes.find(item => String(item._id) === String(selectedClassId)), '');
 
   const summary = useMemo(() => {
     const counts = { Present: 0, Late: 0, Absent: 0 };
@@ -185,7 +186,7 @@ const StudentAttendanceManagement = () => {
       </div>
 
       <section className="grid grid-cols-1 gap-5 rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:grid-cols-3">
-        <div><label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500"><BookOpen size={14} className="text-brand-500" /> Class</label><select value={selectedClassId} onChange={event => setSelectedClassId(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-bold text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"><option value="">Select class...</option>{classes.map(item => <option key={item._id} value={item._id}>{item.name}</option>)}</select></div>
+        <div><label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500"><BookOpen size={14} className="text-brand-500" /> Class</label><select value={selectedClassId} onChange={event => setSelectedClassId(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-bold text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"><option value="">Select class...</option>{classes.map(item => <option key={item._id} value={item._id}>{classLabel(item)}</option>)}</select></div>
         <div><label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500"><Calendar size={14} className="text-emerald-500" /> Date</label><input type="date" value={selectedDate} onChange={event => setSelectedDate(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-bold text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white" /></div>
         <div><label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500"><Clock size={14} className="text-amber-500" /> Session</label><select value={selectedSession} onChange={event => setSelectedSession(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-bold text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"><option value="Morning">Morning</option><option value="Breakfast">Breakfast</option><option value="Evening">Evening</option></select></div>
       </section>

@@ -3,12 +3,12 @@ const Student = require('../models/Student');
 const { generateStudentCode, withRetry } = require('../utils/generateCode');
 
 const getStudents = asyncHandler(async (req, res) => {
-    const data = await Student.find().populate('guardianId').populate('classId');
+    const data = await Student.find().populate('guardianId').populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } });
     res.json(data);
 });
 
 const getStudentById = asyncHandler(async (req, res) => {
-    const data = await Student.findById(req.params.id).populate('guardianId').populate('classId');
+    const data = await Student.findById(req.params.id).populate('guardianId').populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } });
     if (data) {
         res.json(data);
     } else {
@@ -44,7 +44,7 @@ const createStudent = asyncHandler(async (req, res) => {
     }
 
     const data = await Student.create(payload);
-    const populated = await Student.findById(data._id).populate('guardianId').populate('classId');
+    const populated = await Student.findById(data._id).populate('guardianId').populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } });
     res.status(201).json(populated || data);
 });
 
@@ -62,7 +62,7 @@ const updateStudent = asyncHandler(async (req, res) => {
         payload.fee = Number(payload.monthlyFee) || 0;
     }
 
-    const data = await Student.findByIdAndUpdate(req.params.id, payload, { new: true }).populate('guardianId').populate('classId');
+    const data = await Student.findByIdAndUpdate(req.params.id, payload, { new: true }).populate('guardianId').populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } });
     if (data) {
         res.json(data);
     } else {

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { classLabel } from '../utils/classLabel';
 
 const EXAM_TYPES = ['Weekly', 'Monthly', 'Mid-Term', 'Final', 'Quiz'];
 
@@ -152,7 +153,7 @@ const ExamsManagement = () => {
   const filtered = exams.filter(e => {
     const q = search.toLowerCase().trim();
     if (!q) return true;
-    const cls = e.classId?.name || e.classId?.className || '';
+    const cls = classLabel(e.classId, '');
     return e.title.toLowerCase().includes(q) || e.examType.toLowerCase().includes(q) || cls.toLowerCase().includes(q);
   });
 
@@ -204,7 +205,7 @@ const ExamsManagement = () => {
                     <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{exam.title}</p>
                     <span className="text-[10px] font-black uppercase tracking-wider text-brand-600 dark:text-brand-400">{exam.examType} · {exam.term} · {exam.academicYear}</span>
                   </td>
-                  <td className="px-6 py-4 text-sm font-semibold text-slate-600 dark:text-slate-300">{exam.classId?.name || exam.classId?.className || '—'}</td>
+                  <td className="px-6 py-4 text-sm font-semibold text-slate-600 dark:text-slate-300">{classLabel(exam.classId, '—')}</td>
                   <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">{new Date(exam.examDate).toLocaleDateString()}</td>
                   <td className="px-6 py-4 text-xs text-slate-500 dark:text-slate-400 max-w-[220px]">
                     <span className="font-bold text-slate-700 dark:text-slate-200">{exam.subjects?.length || 0}</span> · {exam.subjects?.map(s => s.name).join(', ')}
@@ -260,7 +261,7 @@ const ExamsManagement = () => {
                     <label className="block text-xs font-black uppercase text-slate-500 mb-1">Class *</label>
                     <select value={form.classId} onChange={e => setForm({ ...form, classId: e.target.value })} className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white">
                       <option value="">-- Select Class --</option>
-                      {classes.map(c => <option key={c._id} value={c._id}>{c.name || c.className}</option>)}
+                      {classes.map(c => <option key={c._id} value={c._id}>{classLabel(c)}</option>)}
                     </select>
                   </div>
                   <div>

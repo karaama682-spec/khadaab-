@@ -226,6 +226,15 @@ const validateMobileFields = (method, senderPhone, receiverPhone) => {
     }
 };
 
+// Two campuses can each run a class of the same name, so the branch is shown
+// alongside it: "Tamhiid 3 (FR1)". The stored class name itself is unchanged.
+const classDisplayName = (cls) => {
+    const name = cls?.name || cls?.className || '';
+    const branch = cls?.branchId?.name || '';
+    if (!name) return '';
+    return branch ? `${name} (${branch})` : name;
+};
+
 const phoneOrQuery = (field, variants) => ({
     [field]: { $in: variants }
 });
@@ -490,7 +499,7 @@ const summarizeStudents = async (students) => {
         list.push({
             studentId: s._id,
             name: s.fullName,
-            className: s.classId?.name || s.classId?.className || '',
+            className: classDisplayName(s.classId),
             monthlyFee,
             totalPaid: paidThisMonth,
             balance
@@ -520,7 +529,7 @@ const buildPayerInfo = async (match, variants) => {
     if (match.entityType === 'guardian') orConds.push({ guardianId: match.entityId });
     const students = await Student.find({ $or: orConds })
         .select('fullName classId monthlyFee fee fatherPhone guardianId')
-        .populate('classId', 'name className');
+        .populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } });
 
     if (!students.length) return { kind: 'responsible', students: [], totalMonthlyFee: 0, totalPaid: 0, count: 0 };
     return { kind: 'responsible', ...(await summarizeStudents(students)) };
@@ -581,7 +590,7 @@ const getPayers = asyncHandler(async (req, res) => {
 
     const students = await Student.find(studentQuery)
         .select('fullName fatherName fatherPhone guardianId monthlyFee fee classId registrationDate status studentCode')
-        .populate('classId', 'name className')
+        .populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } })
         .populate('guardianId', 'fullName phone')
         .lean();
 
@@ -623,7 +632,7 @@ const getPayers = asyncHandler(async (req, res) => {
             studentDetails.push({
                 studentId: s._id,
                 name: s.fullName,
-                className: s.classId?.name || s.classId?.className || '',
+                className: classDisplayName(s.classId),
                 monthlyFee: fee,
                 paid,
                 remaining: Math.max(0, fee - paid),

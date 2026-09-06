@@ -3,6 +3,7 @@ import { Plus, X, Edit2, Trash2, Users, Search, CheckCircle2, UserPlus, Loader2,
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import IdCard from '../components/IdCard.jsx';
+import { classLabel, classSearchText } from '../utils/classLabel';
 
 // The workbook columns mirror the registration form exactly. Student ID is
 // exported for reference but never imported — the server issues it (1001, 1002…)
@@ -69,6 +70,56 @@ const styleHeaderRow = (sheet) => {
 // import cannot create a second payer for a number already stored in another
 // local format (0615550001 vs 615550001).
 const digitsOnly = (value) => String(value ?? '').replace(/\D/g, '');
+
+// A class is written in the sheet as "Tamhiid 3 (FR1)" — the branch in
+// parentheses is what separates two classes that share a name. Splits the cell
+// into its two halves; a cell with no parentheses yields an empty branch.
+const parseClassCell = (value) => {
+  const text = String(value ?? '').trim();
+  const match = /^(.*?)\s*\(([^()]*)\)\s*$/.exec(text);
+
+  if (!match) return { name: text, branch: '' };
+  return { name: match[1].trim(), branch: match[2].trim() };
+};
+
+const eq = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+
+// Resolves a sheet cell to exactly one class, always on name AND branch
+// together. A class name carries no identity on its own — names are free text,
+// they repeat across branches and they can be renamed later — so a bare name is
+// refused even when only one class happens to bear it today. That keeps an
+// import from silently changing meaning the day a second branch opens the same
+// class.
+const resolveClassFromCell = (cell, classes) => {
+  const { name, branch } = parseClassCell(cell);
+  const label = (c) => `${c.name || c.className}${c.branchId?.name ? ` (${c.branchId.name})` : ''}`;
+  const known = () => classes.map(label).join(', ') || '(no classes exist yet)';
+
+  if (!name) {
+    return { error: 'class is blank — write it as "Class Name (Branch)", e.g. Tamhiid 3 (FR1)' };
+  }
+
+  if (!branch) {
+    return {
+      error: `class "${name}" is missing its branch — write it as "Class Name (Branch)". Available: ${known()}`
+    };
+  }
+
+  const byName = classes.filter((c) => eq(c.name || c.className, name));
+  if (byName.length === 0) {
+    return { error: `class "${name}" does not exist. Available: ${known()}` };
+  }
+
+  const exact = byName.filter((c) => eq(c.branchId?.name, branch));
+  if (exact.length === 1) return { cls: exact[0] };
+
+  if (exact.length === 0) {
+    const options = byName.map(label).join(', ');
+    return { error: `no class "${name}" in branch "${branch}". Did you mean: ${options}?` };
+  }
+
+  return { error: `"${cell}" matches ${exact.length} classes — branch names must be unique` };
+};
 
 const phoneVariants = (value) => {
   const d = digitsOnly(value);
@@ -207,7 +258,7 @@ const StudentsManagement = () => {
     sheet.addRow({
       studentId: '(leave blank)',
       fullName: 'Ahmed Ali',
-      className: classes[0]?.name || 'Grade 1',
+      className: classes[0] ? classLabel(classes[0]) : 'Tamhiid 3 (FR1)',
       gender: 'Male',
       monthlyFee: 20,
       fatherName: 'Ali Hassan',
@@ -230,8 +281,13 @@ const StudentsManagement = () => {
       'Student ID  — leave blank. The system issues it automatically (1001, 1002, …).',
       '              Any value typed here is ignored.',
       'Full Name   — required.',
-      'Class       — required. Must exactly match an existing class name.',
-      `              Existing classes: ${classes.map(c => c.name).filter(Boolean).join(', ') || '(none yet)'}`,
+      'Class       — required. Write it as "Class Name (Branch)", e.g. Tamhiid 3 (FR1).',
+      '              The branch in brackets is part of the value, not a comment.',
+      '              A class name on its own is always rejected, even when only one',
+      '              class currently carries that name — names repeat across',
+      '              branches and can be renamed, so the branch is what identifies',
+      '              the class. Rows without it are skipped.',
+      `              Existing classes: ${classes.map(c => classLabel(c)).filter(Boolean).join(', ') || '(none yet)'}`,
       'Gender      — Male, Female or Other. Defaults to Male.',
       'Monthly Fee — number. Defaults to 0.',
       'Father Name / Father Phone — both required.',
@@ -268,7 +324,7 @@ const StudentsManagement = () => {
       sheet.addRow({
         studentId: item.studentCode || '',
         fullName: item.fullName || '',
-        className: cls?.name || '',
+        className: cls ? classLabel(cls, '') : '',
         gender: item.gender || '',
         monthlyFee: Number(item.monthlyFee ?? item.fee ?? 0),
         fatherName: item.fatherName || '',
@@ -335,8 +391,11 @@ const StudentsManagement = () => {
   const importRow = async (row, existingKeys, cache) => {
     if (!row.fullName) throw new Error('Full Name is required');
 
-    const cls = classes.find(c => (c.name || '').trim().toLowerCase() === row.className.toLowerCase());
-    if (!cls) throw new Error(`class "${row.className || '(blank)'}" does not exist`);
+    // Matched on class name AND branch together, so "Tamhiid 3 (FR1)" and
+    // "Tamhiid 3 (FR2)" land on their own class rather than whichever was
+    // created first.
+    const { cls, error: classError } = resolveClassFromCell(row.className, classes);
+    if (classError) throw new Error(classError);
 
     // Father name and phone are optional here, exactly as on the registration
     // form: each falls back to the fee payer's details before being stored.
@@ -575,7 +634,7 @@ const StudentsManagement = () => {
   const filteredData = data.filter(item => {
     const gName = item.guardianId?.fullName || '';
     const gPhone = item.guardianId?.phone || '';
-    const className = item.classId?.name || '';
+    const className = classSearchText(item.classId);
     return (
       (item.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.studentCode || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -820,7 +879,7 @@ const StudentsManagement = () => {
                   >
                     <option value="">-- Select Class --</option>
                     {classes.map(c => (
-                      <option key={c._id} value={c._id}>{c.name}</option>
+                      <option key={c._id} value={c._id}>{classLabel(c)}</option>
                     ))}
                   </select>
                 </div>
@@ -969,7 +1028,7 @@ const StudentsManagement = () => {
         name={cardStudent?.fullName}
         idNumber={cardStudent?.studentCode}
         rows={[
-          { label: 'Class', value: cardStudent?.classId?.name || '' },
+          { label: 'Class', value: classLabel(cardStudent?.classId, '') },
           { label: 'Guardian', value: cardStudent?.guardianId?.fullName || cardStudent?.fatherName || '' }
         ]}
       />

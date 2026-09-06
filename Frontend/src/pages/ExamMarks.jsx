@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { PenSquare, Save, Loader2, ClipboardList, Users } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { classLabel } from '../utils/classLabel';
 
 const ExamMarks = () => {
   const { showAlert } = useAlert();
@@ -139,7 +140,7 @@ const ExamMarks = () => {
         <span className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-2"><ClipboardList size={16} /> Select Exam</span>
         <select value={selectedId} onChange={e => setSelectedId(e.target.value)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white font-bold">
           <option value="">-- Select an exam --</option>
-          {exams.map(e => <option key={e._id} value={e._id}>{e.title} · {e.classId?.name || e.classId?.className || ''} · {e.examType}</option>)}
+          {exams.map(e => <option key={e._id} value={e._id}>{e.title} · {classLabel(e.classId, '')} · {e.examType}</option>)}
         </select>
         {exam && (
           <span className="text-xs font-bold text-slate-500 flex items-center gap-2"><Users size={16} /> {rows.length} students · Total {totalFull} marks</span>

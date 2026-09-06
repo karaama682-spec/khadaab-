@@ -34,6 +34,7 @@ import {
   Legend 
 } from 'recharts';
 import { jsPDF } from 'jspdf';
+import { classLabel } from '../utils/classLabel';
 
 const StudentAttendanceReport = () => {
   const { showAlert } = useAlert();
@@ -516,7 +517,7 @@ const StudentAttendanceReport = () => {
     const headers = ['Date', 'Class', 'Session', 'Status', 'Arrival Time', 'Description', 'Recorded By'];
     const rows = studentReportData.history.map(rec => [
       rec.date,
-      rec.classId?.name || '-',
+      classLabel(rec.classId),
       rec.session || 'Morning',
       rec.status,
       rec.arrivalTime || '-',
@@ -676,7 +677,7 @@ const StudentAttendanceReport = () => {
       }
       const descriptionLines = pdfDescriptionLines(doc, rec.description, col.description.w);
       doc.text(fitPdfText(doc, rec.date, col.date.w), col.date.x, y);
-      doc.text(fitPdfText(doc, rec.classId?.name, col.className.w), col.className.x, y);
+      doc.text(fitPdfText(doc, classLabel(rec.classId, ''), col.className.w), col.className.x, y);
       doc.text(fitPdfText(doc, rec.session || 'Morning', col.session.w), col.session.x, y);
       doc.text(fitPdfText(doc, rec.status, col.status.w), col.status.x, y);
       doc.text(fitPdfText(doc, rec.arrivalTime, col.arrival.w), col.arrival.x, y);
@@ -1007,7 +1008,7 @@ const StudentAttendanceReport = () => {
               >
                 <option value="">Select class to audit...</option>
                 {classes.map(c => (
-                  <option key={c._id} value={c._id}>{c.name}</option>
+                  <option key={c._id} value={c._id}>{classLabel(c)}</option>
                 ))}
               </select>
               </div>
@@ -1359,7 +1360,7 @@ const StudentAttendanceReport = () => {
                             {rec.date}
                           </td>
                           <td className="px-8 py-6 text-sm font-semibold text-slate-705 dark:text-slate-300">
-                            {rec.classId?.name || 'Deleted Class'}
+                            {classLabel(rec.classId, 'Deleted Class')}
                           </td>
                           <td className="px-8 py-6 text-xs font-bold text-slate-500">
                             {rec.session || 'Morning'}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, X, Edit2, Trash2, BookOpen, Search } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { classLabel, classSearchText } from '../utils/classLabel';
 
 const ClassesManagement = () => {
   const { showAlert, showConfirm } = useAlert();
@@ -11,17 +12,26 @@ const ClassesManagement = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Only active branches are offered: a class cannot be opened at a campus that
+  // has been closed. Existing classes keep whatever branch they already have.
+  const [branches, setBranches] = useState([]);
+
   const [formData, setFormData] = useState({
     name: '',
     gradeLevel: '',
-    room: ''
+    room: '',
+    branchId: ''
   });
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const { data: classesData } = await api.get('/classes');
+      const [{ data: classesData }, { data: branchData }] = await Promise.all([
+        api.get('/classes'),
+        api.get('/branches', { params: { status: 'Active' } })
+      ]);
       setData(classesData || []);
+      setBranches(branchData || []);
     } catch (error) {
       console.error("Failed to fetch classes", error);
     } finally {
@@ -35,7 +45,7 @@ const ClassesManagement = () => {
 
   const openAddModal = () => {
     setEditingItem(null);
-    setFormData({ name: '', gradeLevel: '', room: '' });
+    setFormData({ name: '', gradeLevel: '', room: '', branchId: '' });
     setIsModalOpen(true);
   };
 
@@ -44,7 +54,9 @@ const ClassesManagement = () => {
     setFormData({
       name: item.name || '',
       gradeLevel: item.gradeLevel || '',
-      room: item.room || ''
+      room: item.room || '',
+      // branchId arrives populated from the API; fall back to a bare id.
+      branchId: item.branchId?._id || item.branchId || ''
     });
     setIsModalOpen(true);
   };
@@ -53,6 +65,10 @@ const ClassesManagement = () => {
     e.preventDefault();
     if (!formData.name) {
       showAlert({ type: 'warning', title: 'Validation Error', message: 'Class name is required.' });
+      return;
+    }
+    if (!formData.branchId) {
+      showAlert({ type: 'warning', title: 'Validation Error', message: 'Please select a branch for this class.' });
       return;
     }
 
@@ -95,8 +111,10 @@ const ClassesManagement = () => {
     }
   };
 
+  // Searching matches the branch as well as the name, so typing "FR2" narrows to
+  // that campus when several branches run a class of the same name.
   const filteredData = data.filter(item =>
-    (item.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+    classSearchText(item).toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (loading) return <div className="p-10 text-center text-slate-500">Loading Classes...</div>;
@@ -127,7 +145,7 @@ const ClassesManagement = () => {
         <Search size={18} className="text-slate-400 mr-3" />
         <input
           type="text"
-          placeholder="Search classes by name or code..."
+          placeholder="Search by class name or branch..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400"
@@ -141,6 +159,8 @@ const ClassesManagement = () => {
             <thead>
               <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
                 <th className="px-8 py-5">Class Name</th>
+                <th className="px-8 py-5">Branch</th>
+                <th className="px-8 py-5">Full Class Name</th>
                 <th className="px-8 py-5">Grade Level</th>
                 <th className="px-8 py-5">Room</th>
                 <th className="px-8 py-5 text-right">Actions</th>
@@ -151,6 +171,16 @@ const ClassesManagement = () => {
                 <tr key={item._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
                   <td className="px-8 py-6 text-sm font-bold text-slate-900 dark:text-slate-100">
                     {item.name}
+                  </td>
+                  <td className="px-8 py-6 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    {item.branchId?.name || '-'}
+                  </td>
+                  {/* Display only — the exact value the Excel Class column expects,
+                      built from the stored name and its branch. Nothing here is saved. */}
+                  <td className="px-8 py-6">
+                    <span className="select-all font-mono text-sm font-semibold text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1">
+                      {classLabel(item)}
+                    </span>
                   </td>
                   <td className="px-8 py-6 text-sm font-semibold text-slate-500 dark:text-slate-400">
                     {item.gradeLevel || '-'}
@@ -172,7 +202,7 @@ const ClassesManagement = () => {
               ))}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="px-8 py-10 text-center text-slate-400 text-sm font-medium">No classes found. Click "Add New Class" to create one.</td>
+                  <td colSpan="6" className="px-8 py-10 text-center text-slate-400 text-sm font-medium">No classes found. Click "Add New Class" to create one.</td>
                 </tr>
               )}
             </tbody>
@@ -195,11 +225,31 @@ const ClassesManagement = () => {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Branch *</label>
+                <select
+                  required
+                  value={formData.branchId}
+                  onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
+                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
+                >
+                  <option value="">-- Select Branch --</option>
+                  {branches.map((b) => (
+                    <option key={b._id} value={b._id}>{b.name}</option>
+                  ))}
+                </select>
+                {branches.length === 0 && (
+                  <p className="mt-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                    No active branches yet. Add one under Institute Structure &rarr; Branches first.
+                  </p>
+                )}
+              </div>
+
+              <div>
                 <label className="block text-xs font-black uppercase text-slate-500 mb-1">Class Name *</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Mathematics 101"
+                  placeholder="e.g. Tamhiid 3"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"

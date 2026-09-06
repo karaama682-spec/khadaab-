@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { classLabel } from '../utils/classLabel';
 
 const gradeColor = (grade) => {
   if (grade === 'A+' || grade === 'A') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
@@ -73,7 +74,7 @@ const ExamResults = () => {
     doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
     doc.text(`RESULT SHEET · ${exam.title}`, 12, 11);
     doc.setFontSize(8); doc.setFont('helvetica', 'normal');
-    doc.text(`${exam.classId?.name || ''} · ${exam.examType} · ${exam.term || ''} ${exam.academicYear || ''}`, 12, 18);
+    doc.text(`${classLabel(exam.classId, '')} · ${exam.examType} · ${exam.term || ''} ${exam.academicYear || ''}`, 12, 18);
 
     let y = 32;
     const x0 = 10;
@@ -133,7 +134,7 @@ const ExamResults = () => {
         <span className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-2"><ClipboardList size={16} /> Select Exam</span>
         <select value={selectedId} onChange={e => setSelectedId(e.target.value)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white font-bold">
           <option value="">-- Select an exam --</option>
-          {exams.map(e => <option key={e._id} value={e._id}>{e.title} · {e.classId?.name || e.classId?.className || ''} · {e.examType}</option>)}
+          {exams.map(e => <option key={e._id} value={e._id}>{e.title} · {classLabel(e.classId, '')} · {e.examType}</option>)}
         </select>
       </div>
 
@@ -171,7 +172,7 @@ const ExamResults = () => {
           <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden p-6 print:p-0 print:border-0 print:shadow-none">
             <div className="pb-4 border-b-2 border-slate-900 dark:border-slate-700 mb-4">
               <h2 className="text-xl font-black uppercase text-slate-900 dark:text-white">{exam.title}</h2>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{exam.classId?.name || exam.classId?.className} · {exam.examType} · {exam.term} {exam.academicYear} · {new Date(exam.examDate).toLocaleDateString()}</p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{classLabel(exam.classId, '')} · {exam.examType} · {exam.term} {exam.academicYear} · {new Date(exam.examDate).toLocaleDateString()}</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -228,7 +229,7 @@ const ExamResults = () => {
               <button onClick={() => setCard(null)} className="absolute top-4 right-4 p-1.5 rounded-full bg-white/20 hover:bg-white/30"><X size={18} /></button>
               <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Report Card</p>
               <h2 className="text-2xl font-black">{card.studentName}</h2>
-              <p className="text-xs font-semibold opacity-90">{exam.title} · {exam.classId?.name || exam.classId?.className} · {exam.term} {exam.academicYear}</p>
+              <p className="text-xs font-semibold opacity-90">{exam.title} · {classLabel(exam.classId, '')} · {exam.term} {exam.academicYear}</p>
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-3 gap-3 text-center">

@@ -18,11 +18,11 @@ const branchSchema = new mongoose.Schema({
         type: String,
         enum: ['Active', 'Inactive'],
         default: 'Active'
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
     }
-});
+}, { timestamps: true });
+
+// One branch per name. The controller rejects a duplicate case-insensitively
+// with a clear message; this index is the backstop for concurrent writes.
+branchSchema.index({ name: 1 }, { unique: true });
 
 module.exports = mongoose.model('Branch', branchSchema);

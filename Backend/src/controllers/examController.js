@@ -126,7 +126,7 @@ const getExams = asyncHandler(async (req, res) => {
     if (req.query.status) filter.status = req.query.status;
 
     const exams = await Exam.find(filter)
-        .populate('classId', 'name className')
+        .populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } })
         .sort({ examDate: -1, createdAt: -1 })
         .lean();
 
@@ -141,7 +141,7 @@ const getExams = asyncHandler(async (req, res) => {
 });
 
 const getExamById = asyncHandler(async (req, res) => {
-    const exam = await Exam.findById(req.params.id).populate('classId', 'name className');
+    const exam = await Exam.findById(req.params.id).populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } });
     if (!exam) {
         res.status(404);
         throw new Error('Exam not found');
@@ -161,13 +161,13 @@ const createExam = asyncHandler(async (req, res) => {
         throw new Error('Add at least one subject to the exam');
     }
     const exam = await Exam.create(payload);
-    const populated = await Exam.findById(exam._id).populate('classId', 'name className');
+    const populated = await Exam.findById(exam._id).populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } });
     res.status(201).json(populated);
 });
 
 const updateExam = asyncHandler(async (req, res) => {
     const exam = await Exam.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
-        .populate('classId', 'name className');
+        .populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } });
     if (!exam) {
         res.status(404);
         throw new Error('Exam not found');
@@ -190,7 +190,7 @@ const deleteExam = asyncHandler(async (req, res) => {
 
 // Full ranked result sheet for an exam (all class students + their marks).
 const getExamResults = asyncHandler(async (req, res) => {
-    const exam = await Exam.findById(req.params.id).populate('classId', 'name className');
+    const exam = await Exam.findById(req.params.id).populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } });
     if (!exam) {
         res.status(404);
         throw new Error('Exam not found');
@@ -253,7 +253,7 @@ const saveExamResults = asyncHandler(async (req, res) => {
 
 // One student's report card, including their rank in the class.
 const getStudentResult = asyncHandler(async (req, res) => {
-    const exam = await Exam.findById(req.params.id).populate('classId', 'name className');
+    const exam = await Exam.findById(req.params.id).populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } });
     if (!exam) {
         res.status(404);
         throw new Error('Exam not found');
@@ -279,7 +279,7 @@ const publishExam = asyncHandler(async (req, res) => {
     }
     exam.status = req.body?.status === 'Completed' ? 'Completed' : 'Published';
     await exam.save();
-    const populated = await Exam.findById(exam._id).populate('classId', 'name className');
+    const populated = await Exam.findById(exam._id).populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } });
     res.json(populated);
 });
 

@@ -78,7 +78,7 @@ const getPromotionHistory = asyncHandler(async (req, res) => {
 const getStudentClassHistory = asyncHandler(async (req, res) => {
     const { studentId } = req.params;
 
-    const student = await Student.findById(studentId).populate('classId');
+    const student = await Student.findById(studentId).populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } });
     if (!student) {
         res.status(404);
         throw new Error('Student not found');
