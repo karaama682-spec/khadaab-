@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
     registerUser,
+    publicRegister,
     authUser,
     getUserProfile,
     getUsers,
@@ -12,6 +13,7 @@ const { protect } = require('../middleware/authMiddleware');
 const { checkPermission } = require('../middleware/roleMiddleware');
 
 router.post('/login', authUser);
+router.post('/register', publicRegister);
 router.get('/profile', protect, getUserProfile);
 
 router.post('/', protect, checkPermission('Users & Access', 'Add', 'Users'), registerUser); // Create User

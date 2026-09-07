@@ -93,6 +93,63 @@ const registerUser = asyncHandler(async (req, res) => {
     }
 });
 
+// @desc    Public Register / Create admin user from login page
+// @route   POST /api/users/register
+// @access  Public
+const publicRegister = asyncHandler(async (req, res) => {
+    const { fullName, email, password } = req.body;
+
+    const trimmedName = (fullName || '').trim();
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const trimmedPassword = (password || '').trim();
+
+    if (!trimmedName) {
+        res.status(400);
+        throw new Error('Fadlan geli magacaaga oo buuxa (Full Name is required)');
+    }
+
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+        res.status(400);
+        throw new Error('Fadlan geli cinwaan iimayl oo sax ah (Valid email is required)');
+    }
+
+    if (!trimmedPassword || trimmedPassword.length < 6) {
+        res.status(400);
+        throw new Error('Furaha sirta ah waa inuu ka kooban yahay ugu yaraan 6 xaraf ama lambar');
+    }
+
+    const userExists = await User.findOne({ email: cleanEmail });
+    if (userExists) {
+        res.status(400);
+        throw new Error('Iimaylkan horey ayaa loo diiwaangeliyay. Fadlan isticmaal mid kale ama soo gal.');
+    }
+
+    // Ensure Owner role exists
+    const Role = require('../models/Role');
+    let ownerRole = await Role.findOne({ name: 'Owner' });
+    if (!ownerRole) {
+        ownerRole = await Role.create({
+            name: 'Owner',
+            description: 'Full system access - Business Owner',
+            isSystemRole: true
+        });
+    }
+
+    const user = await User.create({
+        fullName: trimmedName,
+        email: cleanEmail,
+        passwordHash: trimmedPassword,
+        role: 'Super Admin',
+        roles: [ownerRole._id],
+        status: 'active'
+    });
+
+    const populatedUser = await User.findById(user._id).select('-passwordHash').populate('roles');
+
+    res.status(201).json(formatUserResponse(populatedUser, generateToken(user._id)));
+});
+
+
 // @desc    Get all users
 // @route   GET /api/users
 // @access  Private
@@ -215,6 +272,7 @@ const deleteUser = asyncHandler(async (req, res) => {
 
 module.exports = {
     registerUser,
+    publicRegister,
     authUser,
     getUserProfile,
     getUsers,
