@@ -27,7 +27,9 @@ export const classLabel = (cls, fallback = '-') => {
   if (!name) return fallback;
 
   const branch = classBranchName(cls);
-  return branch ? `${name} (${branch})` : name;
+  if (!branch) return name;
+  if (name.toLowerCase().endsWith(`(${branch.toLowerCase()})`)) return name;
+  return `${name} (${branch})`;
 };
 
 /**

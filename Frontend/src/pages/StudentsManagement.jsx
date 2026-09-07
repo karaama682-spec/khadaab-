@@ -71,54 +71,136 @@ const styleHeaderRow = (sheet) => {
 // local format (0615550001 vs 615550001).
 const digitsOnly = (value) => String(value ?? '').replace(/\D/g, '');
 
-// A class is written in the sheet as "Tamhiid 3 (FR1)" — the branch in
-// parentheses is what separates two classes that share a name. Splits the cell
-// into its two halves; a cell with no parentheses yields an empty branch.
-const parseClassCell = (value) => {
-  const text = String(value ?? '').trim();
-  const match = /^(.*?)\s*\(([^()]*)\)\s*$/.exec(text);
+// Clean text: strip non-breaking spaces, collapse whitespace, lowercase, trim
+const cleanStr = (val) =>
+  String(val ?? '')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 
-  if (!match) return { name: text, branch: '' };
-  return { name: match[1].trim(), branch: match[2].trim() };
+// Get the base name and branch if written as "Class (Branch)"
+const extractBaseAndBranch = (val) => {
+  const text = String(val ?? '').replace(/\u00A0/g, ' ').trim();
+  const match = /^(.*?)\s*\(([^()]*)\)\s*$/.exec(text);
+  if (!match) return { base: text, branch: '' };
+  return { base: match[1].trim(), branch: match[2].trim() };
 };
 
-const eq = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+const getClassInfo = (c) => {
+  const rawName = String(c?.name || c?.className || '').trim();
+  const parsed = extractBaseAndBranch(rawName);
+  const branchName = c?.branchId?.name ? String(c.branchId.name).trim() : parsed.branch;
+  const fullLabel = classLabel(c, rawName);
+  return {
+    rawName,
+    base: parsed.base,
+    branch: branchName,
+    fullLabel
+  };
+};
 
-// Resolves a sheet cell to exactly one class, always on name AND branch
-// together. A class name carries no identity on its own — names are free text,
-// they repeat across branches and they can be renamed later — so a bare name is
-// refused even when only one class happens to bear it today. That keeps an
-// import from silently changing meaning the day a second branch opens the same
-// class.
-const resolveClassFromCell = (cell, classes) => {
-  const { name, branch } = parseClassCell(cell);
-  const label = (c) => `${c.name || c.className}${c.branchId?.name ? ` (${c.branchId.name})` : ''}`;
-  const known = () => classes.map(label).join(', ') || '(no classes exist yet)';
+// Resolves a sheet cell to exactly one class.
+// Flexible and forgiving:
+// 1. Matches exact label "mustawo 2 part (fr2)" or exact name "mustawo 2 part"
+// 2. Supports "Class Name" alone when unique in the institute
+// 3. Handles classes stored with "(fr2)" in their name field
+// 4. Normalizes all whitespace, Unicode spaces, and case differences
+const resolveClassFromCell = (cell, classes = []) => {
+  const rawCell = String(cell ?? '').replace(/\u00A0/g, ' ').trim();
+  const known = () => classes.map(c => classLabel(c)).filter(Boolean).join(', ') || '(no classes exist yet)';
 
-  if (!name) {
-    return { error: 'class is blank — write it as "Class Name (Branch)", e.g. Tamhiid 3 (FR1)' };
+  if (!rawCell) {
+    return { error: 'Class is blank in this row' };
   }
 
-  if (!branch) {
+  const cleanCell = cleanStr(rawCell);
+
+  // 1. Direct match: Exact match on fullLabel, name, className, or rawName
+  const directMatch = classes.find(c => {
+    const info = getClassInfo(c);
+    return (
+      cleanStr(info.fullLabel) === cleanCell ||
+      cleanStr(c.name) === cleanCell ||
+      cleanStr(c.className) === cleanCell ||
+      cleanStr(info.rawName) === cleanCell
+    );
+  });
+  if (directMatch) {
+    return { cls: directMatch };
+  }
+
+  // 2. Parse the cell value into base name and branch
+  const { base: inputBase, branch: inputBranch } = extractBaseAndBranch(rawCell);
+  const cleanInputBase = cleanStr(inputBase);
+  const cleanInputBranch = cleanStr(inputBranch);
+
+  // 3. Find candidate classes whose base name or raw name matches inputBase
+  const candidates = classes.filter(c => {
+    const info = getClassInfo(c);
+    return (
+      cleanStr(info.base) === cleanInputBase ||
+      cleanStr(info.rawName) === cleanInputBase ||
+      cleanStr(c.name) === cleanInputBase ||
+      cleanStr(c.className) === cleanInputBase ||
+      cleanStr(info.fullLabel) === cleanInputBase
+    );
+  });
+
+  if (candidates.length > 0) {
+    // If the input sheet cell specified a branch:
+    if (cleanInputBranch) {
+      const branchMatch = candidates.filter(c => {
+        const info = getClassInfo(c);
+        return (
+          cleanStr(info.branch) === cleanInputBranch ||
+          cleanStr(info.fullLabel).includes(`(${cleanInputBranch})`) ||
+          cleanStr(info.rawName).includes(`(${cleanInputBranch})`)
+        );
+      });
+      if (branchMatch.length === 1) return { cls: branchMatch[0] };
+      if (branchMatch.length > 1) {
+        return { error: `"${rawCell}" matches multiple classes in branch "${inputBranch}".` };
+      }
+      // If branch didn't strictly match, but only 1 candidate class with that name exists, accept it
+      if (candidates.length === 1) {
+        return { cls: candidates[0] };
+      }
+      const options = candidates.map(c => classLabel(c)).join(', ');
+      return { error: `No class "${inputBase}" in branch "${inputBranch}". Did you mean: ${options}?` };
+    }
+
+    // If no branch was specified in the Excel cell:
+    // If only 1 class in the entire system carries this name, safely accept it!
+    if (candidates.length === 1) {
+      return { cls: candidates[0] };
+    }
+
+    // If multiple branches have a class with the same name, ask user to disambiguate:
+    const options = candidates.map(c => classLabel(c)).join(', ');
     return {
-      error: `class "${name}" is missing its branch — write it as "Class Name (Branch)". Available: ${known()}`
+      error: `Class "${inputBase}" exists in multiple branches: ${options}. Please write it as "Class Name (Branch)", e.g. "${classLabel(candidates[0])}"`
     };
   }
 
-  const byName = classes.filter((c) => eq(c.name || c.className, name));
-  if (byName.length === 0) {
-    return { error: `class "${name}" does not exist. Available: ${known()}` };
+  // 4. Loose match: if the cell contains the class name or class contains the cell
+  const looseCandidates = classes.filter(c => {
+    const info = getClassInfo(c);
+    const cLabel = cleanStr(info.fullLabel);
+    const cBase = cleanStr(info.base);
+    return (
+      (cleanInputBase.length >= 3 && cLabel.includes(cleanInputBase)) ||
+      (cBase.length >= 3 && cleanInputBase.includes(cBase))
+    );
+  });
+
+  if (looseCandidates.length === 1) {
+    return { cls: looseCandidates[0] };
   }
 
-  const exact = byName.filter((c) => eq(c.branchId?.name, branch));
-  if (exact.length === 1) return { cls: exact[0] };
-
-  if (exact.length === 0) {
-    const options = byName.map(label).join(', ');
-    return { error: `no class "${name}" in branch "${branch}". Did you mean: ${options}?` };
-  }
-
-  return { error: `"${cell}" matches ${exact.length} classes — branch names must be unique` };
+  return {
+    error: `Class "${rawCell}" does not exist. Available: ${known()}`
+  };
 };
 
 const phoneVariants = (value) => {
@@ -281,12 +363,8 @@ const StudentsManagement = () => {
       'Student ID  — leave blank. The system issues it automatically (1001, 1002, …).',
       '              Any value typed here is ignored.',
       'Full Name   — required.',
-      'Class       — required. Write it as "Class Name (Branch)", e.g. Tamhiid 3 (FR1).',
-      '              The branch in brackets is part of the value, not a comment.',
-      '              A class name on its own is always rejected, even when only one',
-      '              class currently carries that name — names repeat across',
-      '              branches and can be renamed, so the branch is what identifies',
-      '              the class. Rows without it are skipped.',
+      'Class       — required. Write either "Class Name" or "Class Name (Branch)", e.g. Tamhiid 3 or Tamhiid 3 (FR1).',
+      '              If multiple branches have a class with the same name, specify the branch.',
       `              Existing classes: ${classes.map(c => classLabel(c)).filter(Boolean).join(', ') || '(none yet)'}`,
       'Gender      — Male, Female or Other. Defaults to Male.',
       'Monthly Fee — number. Defaults to 0.',
