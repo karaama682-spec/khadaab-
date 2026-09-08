@@ -97,7 +97,8 @@ const Login = ({ onLogin }) => {
         setCanRegister(false);
         setIsRegister(false);
       }
-      localStorage.setItem('userInfo', JSON.stringify(data));
+      sessionStorage.setItem('userInfo', JSON.stringify(data));
+      localStorage.removeItem('userInfo');
       if (onLogin) onLogin(data);
       navigate('/', { replace: true });
     } catch (err) {

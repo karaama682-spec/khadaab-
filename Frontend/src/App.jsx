@@ -120,7 +120,10 @@ const App = () => {
       }
     }
 
-    const userInfo = localStorage.getItem('userInfo');
+    // Clear any legacy persistent login so password is required upon fresh opening
+    localStorage.removeItem('userInfo');
+
+    const userInfo = sessionStorage.getItem('userInfo');
     if (userInfo) {
       try {
         const parsedUser = JSON.parse(userInfo);
@@ -132,7 +135,7 @@ const App = () => {
           if (data?.localization?.language) setLanguage(data.localization.language);
         }).catch(() => {});
       } catch (e) {
-        localStorage.removeItem('userInfo');
+        sessionStorage.removeItem('userInfo');
         setUser(null);
         setLoading(false);
       }
@@ -182,7 +185,8 @@ const App = () => {
   };
 
   const handleLogin = (userData) => {
-    localStorage.setItem('userInfo', JSON.stringify(userData));
+    sessionStorage.setItem('userInfo', JSON.stringify(userData));
+    localStorage.removeItem('userInfo');
     setUser(userData);
     setCurrentRole(userData.role || userData.roles?.[0]?.name?.toUpperCase().replace(/ /g, '_'));
     fetchBranches();
@@ -190,6 +194,7 @@ const App = () => {
   };
 
   const handleLogout = () => {
+    sessionStorage.removeItem('userInfo');
     localStorage.removeItem('userInfo');
     localStorage.removeItem('tenantBranding');
     setUser(null);

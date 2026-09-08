@@ -13,7 +13,7 @@ const api = axios.create({
 // Request interceptor to add auth token
 api.interceptors.request.use(
     (config) => {
-        const userInfo = localStorage.getItem('userInfo');
+        const userInfo = sessionStorage.getItem('userInfo');
         if (userInfo) {
             try {
                 const { token } = JSON.parse(userInfo);
@@ -21,6 +21,7 @@ api.interceptors.request.use(
                     config.headers.Authorization = `Bearer ${token}`;
                 }
             } catch (e) {
+                sessionStorage.removeItem('userInfo');
                 localStorage.removeItem('userInfo');
             }
         }
@@ -45,6 +46,7 @@ api.interceptors.response.use(
                 msg.includes('no token') ||
                 msg.includes('Not authorized')
             ) {
+                sessionStorage.removeItem('userInfo');
                 localStorage.removeItem('userInfo');
                 window.dispatchEvent(new Event('auth:unauthorized'));
             }

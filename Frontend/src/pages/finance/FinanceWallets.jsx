@@ -5,7 +5,7 @@ import { useAlert } from '../../components/common/alerts/useAlert';
 
 const FinanceWallets = () => {
   const { showAlert, showConfirm } = useAlert();
-  const user = JSON.parse(localStorage.getItem('userInfo') || '{}');
+  const user = JSON.parse(sessionStorage.getItem('userInfo') || localStorage.getItem('userInfo') || '{}');
   const isAdminUser = user?.roles?.some(role => {
     const roleName = String(role?.name || '').toLowerCase();
     return roleName.includes('admin') || roleName.includes('owner') || roleName.includes('system') || roleName.includes('super');
