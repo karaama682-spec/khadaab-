@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowRight, Eye, EyeOff, GraduationCap, Lock, Mail, ShieldCheck, User, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
 const Login = ({ onLogin }) => {
   const navigate = useNavigate();
+  const [canRegister, setCanRegister] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -16,6 +17,34 @@ const Login = ({ onLogin }) => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkSetupStatus = async () => {
+      try {
+        const { data } = await api.get('/users/setup-status');
+        if (isMounted) {
+          const allowed = Boolean(data?.canRegister);
+          setCanRegister(allowed);
+          if (allowed) {
+            setIsRegister(true);
+          } else {
+            setIsRegister(false);
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          setCanRegister(false);
+          setIsRegister(false);
+        }
+      }
+    };
+
+    checkSetupStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -64,6 +93,10 @@ const Login = ({ onLogin }) => {
           };
 
       const { data } = await api.post(endpoint, payload);
+      if (isRegister) {
+        setCanRegister(false);
+        setIsRegister(false);
+      }
       localStorage.setItem('userInfo', JSON.stringify(data));
       if (onLogin) onLogin(data);
       navigate('/', { replace: true });
@@ -93,32 +126,39 @@ const Login = ({ onLogin }) => {
           <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Ku soo dhowow nidaamka maamulka machadka</p>
         </div>
 
-        {/* Tab Switcher: Login vs Register */}
-        <div className="mb-6 flex rounded-2xl bg-slate-100 p-1 dark:bg-slate-800">
-          <button
-            type="button"
-            onClick={() => handleModeSwitch(false)}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all ${
-              !isRegister
-                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
-                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-            }`}
-          >
-            Soo Gal (Sign In)
-          </button>
-          <button
-            type="button"
-            onClick={() => handleModeSwitch(true)}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all ${
-              isRegister
-                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
-                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-            }`}
-          >
-            <UserPlus size={14} />
-            Sameyso Akoon
-          </button>
-        </div>
+        {/* Tab Switcher: Only shown during one-time initial setup when no admin exists */}
+        {canRegister && (
+          <div className="mb-6 space-y-3">
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-center text-xs font-semibold text-amber-600 dark:text-amber-400">
+              ⚡ Bilowga Nidaamka: Sameyso akoonka maamulaha guud (Super Admin).
+            </div>
+            <div className="flex rounded-2xl bg-slate-100 p-1 dark:bg-slate-800">
+              <button
+                type="button"
+                onClick={() => handleModeSwitch(false)}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all ${
+                  !isRegister
+                    ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                Soo Gal (Sign In)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleModeSwitch(true)}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all ${
+                  isRegister
+                    ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                <UserPlus size={14} />
+                Sameyso Akoon
+              </button>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="mb-6 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-center text-xs font-bold text-rose-600 dark:text-rose-300">
@@ -249,32 +289,34 @@ const Login = ({ onLogin }) => {
           </button>
         </form>
 
-        {/* Footer switcher prompt */}
-        <div className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
-          {!isRegister ? (
-            <p>
-              Ma doonaysaa akoon cusub?{' '}
-              <button
-                type="button"
-                onClick={() => handleModeSwitch(true)}
-                className="font-bold text-brand-600 hover:underline dark:text-brand-400"
-              >
-                Sameyso halkan
-              </button>
-            </p>
-          ) : (
-            <p>
-              Horey ma u lahayd akoon?{' '}
-              <button
-                type="button"
-                onClick={() => handleModeSwitch(false)}
-                className="font-bold text-brand-600 hover:underline dark:text-brand-400"
-              >
-                Halkan ka soo gal
-              </button>
-            </p>
-          )}
-        </div>
+        {/* Footer switcher prompt: only visible during initial setup */}
+        {canRegister && (
+          <div className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
+            {!isRegister ? (
+              <p>
+                Ma doonaysaa akoon cusub?{' '}
+                <button
+                  type="button"
+                  onClick={() => handleModeSwitch(true)}
+                  className="font-bold text-brand-600 hover:underline dark:text-brand-400"
+                >
+                  Sameyso halkan
+                </button>
+              </p>
+            ) : (
+              <p>
+                Horey ma u lahayd akoon?{' '}
+                <button
+                  type="button"
+                  onClick={() => handleModeSwitch(false)}
+                  className="font-bold text-brand-600 hover:underline dark:text-brand-400"
+                >
+                  Halkan ka soo gal
+                </button>
+              </p>
+            )}
+          </div>
+        )}
       </section>
     </main>
   );

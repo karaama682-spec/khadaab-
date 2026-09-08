@@ -93,10 +93,38 @@ const registerUser = asyncHandler(async (req, res) => {
     }
 });
 
-// @desc    Public Register / Create admin user from login page
+// @desc    Check if initial setup is completed (at least one active Super Admin exists)
+// @route   GET /api/users/setup-status
+// @access  Public
+const getSetupStatus = asyncHandler(async (req, res) => {
+    const adminCount = await User.countDocuments({
+        role: { $in: ['Super Admin', 'Institute Admin'] },
+        status: 'active'
+    });
+
+    const isSetupCompleted = adminCount > 0;
+
+    res.json({
+        isSetupCompleted,
+        canRegister: !isSetupCompleted,
+        adminCount
+    });
+});
+
+// @desc    Public Register / Create initial admin user from login page
 // @route   POST /api/users/register
 // @access  Public
 const publicRegister = asyncHandler(async (req, res) => {
+    const adminCount = await User.countDocuments({
+        role: { $in: ['Super Admin', 'Institute Admin'] },
+        status: 'active'
+    });
+
+    if (adminCount > 0) {
+        res.status(403);
+        throw new Error('Diiwaangelinta tooska ah waa la xiray maadaama uu horey u jiro maamule nidaamka ah. Fadlan la xiriir maamulaha.');
+    }
+
     const { fullName, email, password } = req.body;
 
     const trimmedName = (fullName || '').trim();
@@ -273,6 +301,7 @@ const deleteUser = asyncHandler(async (req, res) => {
 module.exports = {
     registerUser,
     publicRegister,
+    getSetupStatus,
     authUser,
     getUserProfile,
     getUsers,

@@ -3,6 +3,7 @@ const router = express.Router();
 const {
     registerUser,
     publicRegister,
+    getSetupStatus,
     authUser,
     getUserProfile,
     getUsers,
@@ -12,6 +13,7 @@ const {
 const { protect } = require('../middleware/authMiddleware');
 const { checkPermission } = require('../middleware/roleMiddleware');
 
+router.get('/setup-status', getSetupStatus);
 router.post('/login', authUser);
 router.post('/register', publicRegister);
 router.get('/profile', protect, getUserProfile);
