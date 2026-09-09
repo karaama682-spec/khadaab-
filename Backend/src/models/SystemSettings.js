@@ -6,7 +6,7 @@ const systemSettingsSchema = new mongoose.Schema({
         name: { type: String, default: 'Cumar Binu Khadhaab' },
         systemSubtitle: { type: String, default: 'Institute Management' },
         legalName: { type: String, default: '' },
-        industry: { type: String, default: 'Warehousing & Distribution' },
+        industry: { type: String, default: 'Waxbarasho & Tababar (Education & Training)' },
         description: { type: String, default: '' },
         logo: { type: String, default: null },
         currency: { type: String, default: 'USD' },

@@ -29,7 +29,7 @@ const BusinessProfile = () => {
     name: '',
     systemSubtitle: 'Institute Management',
     legalName: '',
-    industry: 'Green warehouse',
+    industry: 'Waxbarasho & Tababar (Education & Training)',
     description: '',
     currency: 'USD',
     timezone: 'Africa/Nairobi',
@@ -196,10 +196,22 @@ const BusinessProfile = () => {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Industry</label>
-                  <select value={tenant.industry} onChange={e => setTenant({ ...tenant, industry: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium outline-none dark:text-white">
-                    <option>Cumar Binu Qadaab</option>
-                  </select>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Industry / Qeybta Shaqada</label>
+                  <input 
+                    type="text" 
+                    list="industry-options" 
+                    value={tenant.industry || ''} 
+                    onChange={e => setTenant({ ...tenant, industry: e.target.value })} 
+                    placeholder="tusaale: Waxbarasho & Machad (Education)" 
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none transition-all dark:text-white" 
+                  />
+                  <datalist id="industry-options">
+                    <option value="Waxbarasho & Machad (Education & Training)" />
+                    <option value="Machad Diini & Quraan (Islamic Institute)" />
+                    <option value="Dugsi Sare & Dhexe (Secondary & Primary School)" />
+                    <option value="Kulliyad / Jaamacad (College / University)" />
+                  </datalist>
+                  <p className="text-[10px] text-slate-500">Qeybta ama takhasuska machadka (waad qori kartaa ama beddeli kartaa).</p>
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Base Currency</label>
