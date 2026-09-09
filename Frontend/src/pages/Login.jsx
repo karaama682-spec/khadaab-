@@ -30,7 +30,7 @@ const Login = ({ onLogin }) => {
     let isMounted = true;
 
     // Fetch live tenant branding so Settings updates reflect on Login immediately
-    api.get('/tenants/me')
+    api.get('/tenants/me', { skipCache: true })
       .then(({ data }) => {
         if (isMounted && data) {
           const branding = {

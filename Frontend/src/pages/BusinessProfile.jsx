@@ -74,12 +74,21 @@ const BusinessProfile = () => {
     setIsSaving(true);
     try {
       await api.put('/tenants/me', tenant);
+      const branding = {
+        name: tenant.name,
+        systemSubtitle: tenant.systemSubtitle,
+        logo: tenant.logo,
+        brandColor: tenant.settings?.brandColor,
+        accentColor: tenant.settings?.accentColor
+      };
+      localStorage.setItem('tenantBranding', JSON.stringify(branding));
+      if (tenant.name) document.title = tenant.name;
       window.dispatchEvent(new Event('tenant:updated'));
       showAlert({
         type: 'success',
-        title: 'Woohoo!',
-        message: 'Business profile updated successfully.',
-        buttonText: 'Continue'
+        title: 'Guul!',
+        message: 'Xogta machadka si sax ah ayaa loo keydiyay.',
+        buttonText: 'Sii wad'
       });
     } catch (error) {
       showAlert({
@@ -175,14 +184,14 @@ const BusinessProfile = () => {
                   <p className="text-[10px] text-slate-500">Select English or Soomaali to change the interface language.</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Display Business Name</label>
-                  <input type="text" value={tenant.name} onChange={e => setTenant({ ...tenant, name: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none transition-all dark:text-white" />
-                  <p className="text-[10px] text-slate-500">Shown in the sidebar, browser tab, receipts, and portal.</p>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Magaca Machadka / Display Business Name</label>
+                  <input type="text" value={tenant.name} onChange={e => setTenant({ ...tenant, name: e.target.value })} placeholder="Tusaale: Machadka Waxbarashada" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none transition-all dark:text-white" />
+                  <p className="text-[10px] text-brand-600 dark:text-brand-400 font-semibold">Kani waa magaca rasmiga ah ee ka muuqanaya bogga Login-ka, browser-ka, iyo nidaamka oo dhan.</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">System Subtitle</label>
-                  <input type="text" value={tenant.systemSubtitle || ''} onChange={e => setTenant({ ...tenant, systemSubtitle: e.target.value })} placeholder="Institute Management" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none transition-all dark:text-white" />
-                  <p className="text-[10px] text-slate-500">The smaller text shown below the system name in the sidebar.</p>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Qoraalka Hoose / System Subtitle</label>
+                  <input type="text" value={tenant.systemSubtitle || ''} onChange={e => setTenant({ ...tenant, systemSubtitle: e.target.value })} placeholder="Ku soo dhowow nidaamka maamulka machadka" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none transition-all dark:text-white" />
+                  <p className="text-[10px] text-slate-500">Qoraalka yar ee ka hooseeya magaca machadka ee bogga Login-ka iyo Sidebar-ka.</p>
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Legal Entity Name</label>
