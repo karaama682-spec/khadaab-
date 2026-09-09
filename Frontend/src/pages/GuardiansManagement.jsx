@@ -14,6 +14,7 @@ const GuardiansManagement = () => {
   const [formData, setFormData] = useState({
     fullName: '',
     phone: '',
+    alternatePhone: '',
     email: '',
     relationship: 'Father',
     address: ''
@@ -37,7 +38,7 @@ const GuardiansManagement = () => {
 
   const openAddModal = () => {
     setEditingItem(null);
-    setFormData({ fullName: '', phone: '', email: '', relationship: 'Father', address: '' });
+    setFormData({ fullName: '', phone: '', alternatePhone: '', email: '', relationship: 'Father', address: '' });
     setIsModalOpen(true);
   };
 
@@ -46,6 +47,7 @@ const GuardiansManagement = () => {
     setFormData({
       fullName: item.fullName || '',
       phone: item.phone || '',
+      alternatePhone: item.alternatePhone || '',
       email: item.email || '',
       relationship: item.relationship || 'Father',
       address: item.address || ''
@@ -102,6 +104,7 @@ const GuardiansManagement = () => {
   const filteredData = data.filter(item =>
     (item.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (item.phone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (item.alternatePhone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     (item.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -133,7 +136,7 @@ const GuardiansManagement = () => {
         <Search size={18} className="text-slate-400 mr-3" />
         <input
           type="text"
-          placeholder="Search guardians by name, phone, or email..."
+          placeholder="Search guardians by name, phone 1, phone 2, or email..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400"
@@ -148,7 +151,7 @@ const GuardiansManagement = () => {
               <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
                 <th className="px-8 py-5">Full Name</th>
                 <th className="px-8 py-5">Relationship</th>
-                <th className="px-8 py-5">Phone</th>
+                <th className="px-8 py-5">Phone Numbers (1 & 2)</th>
                 <th className="px-8 py-5">Email</th>
                 <th className="px-8 py-5">Address</th>
                 <th className="px-8 py-5 text-right">Actions</th>
@@ -164,7 +167,28 @@ const GuardiansManagement = () => {
                     {item.relationship || '-'}
                   </td>
                   <td className="px-8 py-6 text-sm font-semibold text-slate-500 dark:text-slate-400">
-                    {item.phone || '-'}
+                    <div className="flex flex-col gap-1.5">
+                      {item.phone ? (
+                        <a
+                          href={`tel:${item.phone}`}
+                          className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-500/20 w-fit"
+                          title="Phone 1 (Primary)"
+                        >
+                          Phone 1: {item.phone}
+                        </a>
+                      ) : (
+                        <span className="text-slate-400 font-mono text-xs">—</span>
+                      )}
+                      {item.alternatePhone && item.alternatePhone !== item.phone && (
+                        <a
+                          href={`tel:${item.alternatePhone}`}
+                          className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 rounded-lg border border-blue-500/20 w-fit"
+                          title="Phone 2 (Second Number)"
+                        >
+                          Phone 2: {item.alternatePhone}
+                        </a>
+                      )}
+                    </div>
                   </td>
                   <td className="px-8 py-6 text-sm font-semibold text-slate-500 dark:text-slate-400">
                     {item.email || '-'}
@@ -235,26 +259,39 @@ const GuardiansManagement = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Phone Number</label>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="guardian@example.com"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Primary Phone (Phone 1) *</label>
                   <input
                     type="text"
+                    required
                     placeholder="+252 61 XXX XXXX"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Email Address</label>
-                <input
-                  type="email"
-                  placeholder="guardian@example.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
-                />
+                <div>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Second Phone (Phone 2)</label>
+                  <input
+                    type="text"
+                    placeholder="Optional second phone..."
+                    value={formData.alternatePhone}
+                    onChange={(e) => setFormData({ ...formData, alternatePhone: e.target.value })}
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
+                  />
+                </div>
               </div>
 
               <div>

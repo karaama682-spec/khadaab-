@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Users, Search, Phone, ChevronDown, ChevronRight, Printer, FileDown, Wallet } from 'lucide-react';
+import { Users, Search, Phone, ChevronDown, ChevronRight, Printer, FileDown, Wallet, X } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
@@ -11,17 +11,21 @@ const PayersManagement = () => {
   const { showAlert } = useAlert();
   const [payers, setPayers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [expandedKey, setExpandedKey] = useState(null);
 
   const fetchPayers = async () => {
     try {
       setLoading(true);
+      setError(null);
       const { data } = await api.get('/cashbook/payers');
       setPayers(data || []);
-    } catch (error) {
-      console.error('Failed to load payers', error);
-      showAlert({ type: 'danger', title: 'Error', message: 'Failed to load payers.' });
+    } catch (err) {
+      console.error('Failed to load payers', err);
+      const msg = err.response?.data?.message || err.message || 'Failed to load payers.';
+      setError(msg);
+      showAlert({ type: 'danger', title: 'Error', message: msg });
     } finally {
       setLoading(false);
     }
@@ -31,12 +35,22 @@ const PayersManagement = () => {
     fetchPayers();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Filter payers by name, primary phone, secondary phone (number 2), or linked student names
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return payers;
-    return payers.filter(
-      (p) => (p.name || '').toLowerCase().includes(q) || (p.phone || '').includes(q)
-    );
+    const qDigits = q.replace(/\D/g, '');
+    return payers.filter((p) => {
+      const nameMatch = (p.name || '').toLowerCase().includes(q);
+      const phoneMatch =
+        (p.phone || '').toLowerCase().includes(q) ||
+        (qDigits && (p.phone || '').replace(/\D/g, '').includes(qDigits));
+      const altPhoneMatch =
+        (p.alternatePhone || '').toLowerCase().includes(q) ||
+        (qDigits && (p.alternatePhone || '').replace(/\D/g, '').includes(qDigits));
+      const studentMatch = (p.students || []).some((s) => (s.name || '').toLowerCase().includes(q));
+      return nameMatch || phoneMatch || altPhoneMatch || studentMatch;
+    });
   }, [payers, search]);
 
   // Grand total across every payer in the system, summed from the same
@@ -112,7 +126,10 @@ const PayersManagement = () => {
 
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(71, 85, 105);
-      doc.text(String(p.phone || '—'), cols.number, y);
+      const numText = p.alternatePhone && p.alternatePhone !== p.phone
+        ? `${p.phone || '—'} / ${p.alternatePhone}`
+        : String(p.phone || '—');
+      doc.text(numText.slice(0, 24), cols.number, y);
       doc.text(String(p.studentCount), cols.students + 3, y);
 
       doc.setFont('helvetica', 'bold');
@@ -135,28 +152,27 @@ const PayersManagement = () => {
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24 print:p-0 print:space-y-4">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2 print:hidden">
         <div className="flex items-center gap-6">
-          <div className="w-16 h-16 bg-slate-900 dark:bg-slate-800 rounded-[24px] flex items-center justify-center text-brand-400 shadow-2xl border border-slate-700 ring-4 ring-brand-400/10 print:hidden">
+          <div className="w-16 h-16 bg-slate-900 dark:bg-slate-800 rounded-[24px] flex items-center justify-center text-brand-400 shadow-2xl border border-slate-700 ring-4 ring-brand-400/10">
             <Users size={32} strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">
-              Payers
-            </h1>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Payers</h1>
             <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">
-              Who pays · how many students · total fee · tick when paid
+              Fee Payer Directory & Checklist
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3 print:hidden">
+
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={handleExportPDF}
-            className="flex items-center gap-2 px-5 py-3.5 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
+            className="flex items-center gap-2 px-6 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-95"
           >
-            <FileDown size={16} /> Download PDF
+            <FileDown size={16} /> Export PDF
           </button>
           <button
             onClick={handlePrint}
@@ -168,29 +184,34 @@ const PayersManagement = () => {
       </div>
 
       {/* Search */}
-      <div className="flex items-center bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm max-w-md print:hidden">
-        <Search size={18} className="text-slate-400 mr-3" />
+      <div className="flex items-center bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm max-w-md print:hidden focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
+        <Search size={18} className="text-slate-400 mr-3 shrink-0" />
         <input
           type="text"
-          placeholder="Search by payer name or number..."
+          placeholder="Search by payer name, number 1, or number 2..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400"
+          className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400 font-medium"
         />
+        {search && (
+          <button onClick={() => setSearch('')} className="text-slate-400 hover:text-slate-600 p-1">
+            <X size={14} />
+          </button>
+        )}
       </div>
 
       {/* Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden print:rounded-none print:border-0 print:shadow-none">
+      <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden print:rounded-none print:border-0 print:shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                <th className="px-4 py-5 w-10 print:hidden"></th>
-                <th className="px-4 py-5">Payer Name</th>
-                <th className="px-8 py-5">Number</th>
-                <th className="px-8 py-5 text-center">Students</th>
-                <th className="px-8 py-5 text-right">Total Money</th>
-                <th className="px-8 py-5 text-center">Paid</th>
+              <tr className="bg-slate-50/70 dark:bg-slate-800/40 text-slate-400 text-[10px] font-black uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
+                <th className="px-4 py-4 w-10 print:hidden"></th>
+                <th className="px-5 py-4">Payer Name</th>
+                <th className="px-5 py-4">Numbers (Phone 1 & 2)</th>
+                <th className="px-5 py-4 text-center">Students</th>
+                <th className="px-5 py-4 text-right">Total Money</th>
+                <th className="px-5 py-4 text-center">Paid</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -204,26 +225,53 @@ const PayersManagement = () => {
                         isOpen ? 'bg-slate-50 dark:bg-slate-800/30' : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/10'
                       }`}
                     >
-                      <td className="px-4 py-6 text-slate-400 print:hidden">
+                      <td className="px-4 py-4 text-slate-400 print:hidden">
                         {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                       </td>
-                      <td className="px-4 py-6 text-sm font-bold text-slate-900 dark:text-slate-100">{p.name}</td>
-                      <td className="px-8 py-6 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                        <span className="inline-flex items-center gap-1.5 font-mono">
-                          <Phone size={13} className="text-slate-400 print:hidden" />
-                          {p.phone || '—'}
-                        </span>
+                      <td className="px-5 py-4 text-sm font-bold text-slate-900 dark:text-slate-100">
+                        {p.name}
+                        {p.relationship && (
+                          <span className="block text-[10px] text-slate-400 font-semibold uppercase">{p.relationship}</span>
+                        )}
                       </td>
-                      <td className="px-8 py-6 text-center">
+                      <td className="px-5 py-4 text-sm font-semibold text-slate-600 dark:text-slate-300">
+                        <div className="flex flex-col gap-1.5">
+                          {p.phone ? (
+                            <a
+                              href={`tel:${p.phone}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-500/20 w-fit"
+                              title="Phone 1 (Primary)"
+                            >
+                              <Phone size={11} className="shrink-0 print:hidden text-emerald-500" />
+                              <span>{p.phone}</span>
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 font-mono text-xs">—</span>
+                          )}
+                          {p.alternatePhone && p.alternatePhone !== p.phone && (
+                            <a
+                              href={`tel:${p.alternatePhone}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 rounded-lg border border-blue-500/20 w-fit"
+                              title="Phone 2 (Second Number)"
+                            >
+                              <Phone size={11} className="shrink-0 print:hidden text-blue-500" />
+                              <span>{p.alternatePhone}</span>
+                            </a>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-center">
                         <span className="px-3 py-1 text-xs font-black rounded-full bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-300">
                           {p.studentCount}
                         </span>
                       </td>
-                      <td className="px-8 py-6 text-right text-sm font-black text-slate-900 dark:text-white">
+                      <td className="px-5 py-4 text-right text-sm font-black text-slate-900 dark:text-white">
                         ${fmtMoney(p.totalFee)}
                       </td>
                       {/* Empty box — printed and ticked by hand */}
-                      <td className="px-8 py-6">
+                      <td className="px-5 py-4">
                         <div className="flex items-center justify-center">
                           <span className="inline-block w-6 h-6 rounded-md border-2 border-slate-900 dark:border-slate-300 print:border-black" />
                         </div>
@@ -265,7 +313,32 @@ const PayersManagement = () => {
                   </React.Fragment>
                 );
               })}
-              {filtered.length === 0 && (
+              {loading && (
+                <tr>
+                  <td colSpan={6} className="px-8 py-16 text-center text-slate-400 text-sm font-medium">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                      <span className="text-slate-500 font-semibold">Loading payers...</span>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {!loading && error && (
+                <tr>
+                  <td colSpan={6} className="px-8 py-12 text-center">
+                    <div className="max-w-md mx-auto p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-rose-700 dark:text-rose-300 text-sm flex flex-col items-center gap-3">
+                      <p className="font-semibold">{error}</p>
+                      <button
+                        onClick={fetchPayers}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shadow-sm"
+                      >
+                        Retry Loading
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {!loading && !error && filtered.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-8 py-12 text-center text-slate-400 text-sm font-medium">
                     No payers found. They appear here once students with a responsible person's number are added.

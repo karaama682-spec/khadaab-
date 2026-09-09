@@ -312,19 +312,33 @@ const StudentsManagement = () => {
     fetchData();
   }, []);
 
-  // Real-time lookup for Who Pays the Fee by phone number
+  // Real-time lookup for Who Pays the Fee by phone number (primary or second number)
   useEffect(() => {
     const phone = (formData.guardianPhone || '').trim();
-    if (!phone || phone.length < 3) {
+    const altPhone = (formData.guardianAlternatePhone || '').trim();
+    const searchPhone = phone || altPhone;
+
+    if (!searchPhone || searchPhone.length < 3) {
       setFoundGuardian(null);
-      setFormData(prev => ({ ...prev, guardianId: '' }));
+      setFormData(prev => (prev.guardianId ? { ...prev, guardianId: '' } : prev));
+      return;
+    }
+
+    // Skip redundant network call if the already found guardian matches either number
+    if (
+      foundGuardian &&
+      (phone === foundGuardian.phone ||
+        phone === foundGuardian.alternatePhone ||
+        altPhone === foundGuardian.phone ||
+        altPhone === foundGuardian.alternatePhone)
+    ) {
       return;
     }
 
     const timer = setTimeout(async () => {
       try {
         setIsSearchingGuardian(true);
-        const res = await api.get(`/guardians?phone=${encodeURIComponent(phone)}`);
+        const res = await api.get(`/guardians?phone=${encodeURIComponent(searchPhone)}`);
         const existing = Array.isArray(res.data) && res.data.length > 0 ? res.data[0] : null;
 
         if (existing) {
@@ -333,11 +347,13 @@ const StudentsManagement = () => {
             ...prev,
             guardianId: existing._id,
             guardianName: existing.fullName || prev.guardianName,
-            guardianRelationship: existing.relationship || prev.guardianRelationship || 'Father'
+            guardianRelationship: existing.relationship || prev.guardianRelationship || 'Father',
+            guardianPhone: existing.phone || prev.guardianPhone || '',
+            guardianAlternatePhone: existing.alternatePhone || prev.guardianAlternatePhone || ''
           }));
         } else {
           setFoundGuardian(null);
-          setFormData(prev => ({ ...prev, guardianId: '' }));
+          setFormData(prev => (prev.guardianId ? { ...prev, guardianId: '' } : prev));
         }
       } catch (err) {
         console.error('Phone lookup failed:', err);
@@ -347,7 +363,7 @@ const StudentsManagement = () => {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [formData.guardianPhone]);
+  }, [formData.guardianPhone, formData.guardianAlternatePhone, foundGuardian]);
 
   // ── Excel template ────────────────────────────────────────────────────────
   // Same columns as the export, so a filled-in template and an exported file are
@@ -1126,9 +1142,17 @@ const StudentsManagement = () => {
                             <span className="font-bold text-slate-900 dark:text-slate-100 block truncate max-w-[180px]" title={guardian.fullName}>
                               {guardian.fullName}
                             </span>
-                            <span className="text-[11px] text-slate-400 block font-mono truncate max-w-[180px]">
-                              {guardian.phone}{guardian.relationship ? ` (${guardian.relationship})` : ''}
-                            </span>
+                            <div className="text-[11px] font-mono truncate max-w-[200px] flex items-center gap-1.5 flex-wrap mt-0.5">
+                              {guardian.phone && (
+                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{guardian.phone}</span>
+                              )}
+                              {guardian.alternatePhone && guardian.alternatePhone !== guardian.phone && (
+                                <span className="text-blue-600 dark:text-blue-400 font-semibold">• {guardian.alternatePhone}</span>
+                              )}
+                              {guardian.relationship && (
+                                <span className="text-[10px] uppercase font-semibold text-slate-400">({guardian.relationship})</span>
+                              )}
+                            </div>
                           </div>
                         ) : (
                           <div className="min-w-0">
@@ -1349,13 +1373,23 @@ const StudentsManagement = () => {
                 {foundGuardian && (
                   <div className="mt-3 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-3 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
                     <CheckCircle2 size={18} className="shrink-0 text-emerald-500" />
-                    <div>
-                      <span className="font-bold">Existing Fee Payer Found:</span> {foundGuardian.fullName} ({foundGuardian.relationship || 'Payer'}). Reusing record & linking student.
+                    <div className="flex-1 min-w-0">
+                      <div>
+                        <span className="font-bold">Existing Fee Payer Found:</span> {foundGuardian.fullName} ({foundGuardian.relationship || 'Payer'}). Reusing record & linking student.
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-[11px] font-mono text-emerald-700 dark:text-emerald-300 flex-wrap">
+                        {foundGuardian.phone && (
+                          <span>Phone 1: <strong className="font-bold underline">{foundGuardian.phone}</strong></span>
+                        )}
+                        {foundGuardian.alternatePhone && (
+                          <span>Phone 2: <strong className="font-bold underline">{foundGuardian.alternatePhone}</strong></span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {!foundGuardian && formData.guardianPhone && formData.guardianPhone.trim().length >= 3 && !isSearchingGuardian && (
+                {!foundGuardian && (formData.guardianPhone || formData.guardianAlternatePhone) && (formData.guardianPhone || formData.guardianAlternatePhone).trim().length >= 3 && !isSearchingGuardian && (
                   <div className="mt-3 p-3.5 rounded-2xl bg-brand-500/10 border border-brand-500/30 flex items-center gap-3 text-xs font-semibold text-brand-700 dark:text-brand-300">
                     <UserPlus size={18} className="shrink-0 text-brand-500" />
                     <div>

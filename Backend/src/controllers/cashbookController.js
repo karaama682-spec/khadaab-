@@ -586,20 +586,37 @@ const getPayers = asyncHandler(async (req, res) => {
         const endOfMonth = new Date(Date.UTC(year, mon, 0, 23, 59, 59, 999));
         studentQuery.registrationDate = { $lte: endOfMonth };
         studentQuery.status = { $ne: 'Inactive' };
+    } else {
+        studentQuery.status = { $ne: 'Inactive' };
     }
 
     const students = await Student.find(studentQuery)
         .select('fullName fatherName fatherPhone guardianId monthlyFee fee classId registrationDate status studentCode')
         .populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } })
-        .populate('guardianId', 'fullName phone')
+        .populate('guardianId', 'fullName phone alternatePhone relationship')
         .lean();
+
+    // Batch fetch payments for all students in one query to eliminate N+1 latency
+    const studentIds = students.map((s) => s._id);
+    const payments = await Payment.find({
+        studentId: { $in: studentIds },
+        status: 'Completed',
+        month
+    }).select('studentId amount').lean();
+
+    const paidByStudent = new Map();
+    for (const p of payments) {
+        const sId = String(p.studentId);
+        paidByStudent.set(sId, (paidByStudent.get(sId) || 0) + (Number(p.amount) || 0));
+    }
 
     const groups = new Map();
     for (const s of students) {
         // Group by the fee payer (guardian), not the responsible person.
         const guardian = s.guardianId && typeof s.guardianId === 'object' ? s.guardianId : null;
-        const payerName = guardian?.fullName || '';
-        const payerPhone = guardian?.phone || '';
+        const payerName = guardian?.fullName || s.fatherName || '';
+        const payerPhone = guardian?.phone || s.fatherPhone || '';
+        const payerAltPhone = guardian?.alternatePhone || '';
         const phoneKey = digitsOnly(payerPhone);
         const key = (guardian?._id && `g:${guardian._id}`) || phoneKey || `s:${s._id}`;
         if (!groups.has(key)) {
@@ -607,6 +624,8 @@ const getPayers = asyncHandler(async (req, res) => {
                 key,
                 name: payerName,
                 phone: payerPhone,
+                alternatePhone: payerAltPhone,
+                relationship: guardian?.relationship || '',
                 guardianId: guardian?._id || null,
                 students: [],
                 totalFee: 0
@@ -617,6 +636,8 @@ const getPayers = asyncHandler(async (req, res) => {
         g.totalFee += Number(s.monthlyFee || s.fee || 0);
         if (!g.name && payerName) g.name = payerName;
         if (!g.phone && payerPhone) g.phone = payerPhone;
+        if (!g.alternatePhone && payerAltPhone) g.alternatePhone = payerAltPhone;
+        if (!g.relationship && guardian?.relationship) g.relationship = guardian.relationship;
     }
 
     const result = [];
@@ -625,8 +646,7 @@ const getPayers = asyncHandler(async (req, res) => {
         const studentDetails = [];
         let paidAmount = 0;
         for (const s of g.students) {
-            const pays = await Payment.find({ studentId: s._id, status: 'Completed', month }).select('amount');
-            const paid = pays.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            const paid = paidByStudent.get(String(s._id)) || 0;
             const fee = Number(s.monthlyFee || s.fee || 0);
             paidAmount += paid;
             studentDetails.push({
@@ -643,6 +663,8 @@ const getPayers = asyncHandler(async (req, res) => {
             key: g.key,
             name: g.name || 'Unknown',
             phone: g.phone,
+            alternatePhone: g.alternatePhone || '',
+            relationship: g.relationship || '',
             guardianId: g.guardianId,
             studentIds: g.students.map((s) => s._id),
             students: studentDetails,

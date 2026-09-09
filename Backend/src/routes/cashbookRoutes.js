@@ -20,6 +20,7 @@ const { checkAnyPermission, checkAnyPermissionSet } = require('../middleware/rol
 const canReadPayers = checkAnyPermissionSet([
     { moduleName: 'Finance', actions: ['Read'], subModuleName: 'Payers' },
     { moduleName: 'Finance', actions: ['Read'], subModuleName: 'Monthly Payments' },
+    { moduleName: 'Finance', actions: ['Read'] },
     { moduleName: 'Reports', actions: ['Read'] }
 ]);
 

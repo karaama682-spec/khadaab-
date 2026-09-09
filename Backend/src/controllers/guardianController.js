@@ -4,7 +4,23 @@ const { phoneVariants, digitsOnly } = require('../utils/somaliPhone');
 
 const getGuardians = asyncHandler(async (req, res) => {
     const phone = (req.query.phone || '').trim();
-    const query = phone ? { phone } : {};
+    let query = {};
+    if (phone) {
+        const variants = phoneVariants(phone);
+        const clean = digitsOnly(phone);
+        query = {
+            $or: [
+                { phone: { $in: variants } },
+                { alternatePhone: { $in: variants } },
+                { phone },
+                { alternatePhone: phone },
+                ...(clean ? [
+                    { phone: new RegExp(clean, 'i') },
+                    { alternatePhone: new RegExp(clean, 'i') }
+                ] : [])
+            ]
+        };
+    }
     const data = await Guardian.find(query).lean();
     res.json(data);
 });
@@ -21,6 +37,7 @@ const getGuardianById = asyncHandler(async (req, res) => {
 
 const createGuardian = asyncHandler(async (req, res) => {
     const normalizedPhone = (req.body.phone || '').trim();
+    const normalizedAltPhone = (req.body.alternatePhone || '').trim();
 
     if (!normalizedPhone) {
         res.status(400);
@@ -36,31 +53,49 @@ const createGuardian = asyncHandler(async (req, res) => {
     }
 
     // Match on every spelling of the number rather than the exact string typed,
-    // so the same parent entered as 0614…, 614… or +252 614… resolves to the one
-    // payer record instead of a second being created alongside it. One parent
-    // keeps one payer identity across branches and programmes.
-    const existingGuardian = await Guardian.findOne({ phone: { $in: phoneVariants(normalizedPhone) } });
+    // and check both primary phone and alternatePhone so either number resolves to the payer.
+    const variants = phoneVariants(normalizedPhone);
+    const altVariants = normalizedAltPhone ? phoneVariants(normalizedAltPhone) : [];
+    const queryConditions = [
+        { phone: { $in: variants } },
+        { alternatePhone: { $in: variants } }
+    ];
+    if (altVariants.length > 0) {
+        queryConditions.push(
+            { phone: { $in: altVariants } },
+            { alternatePhone: { $in: altVariants } }
+        );
+    }
+
+    const existingGuardian = await Guardian.findOne({ $or: queryConditions });
     if (existingGuardian) {
+        // If the existing guardian doesn't have an alternatePhone yet but one is supplied now, save it
+        if (!existingGuardian.alternatePhone && normalizedAltPhone) {
+            existingGuardian.alternatePhone = digitsOnly(normalizedAltPhone) || normalizedAltPhone;
+            await existingGuardian.save();
+        }
         res.status(200).json(existingGuardian);
         return;
     }
 
     // Stored as digits so the record is found again by any of its spellings,
-    // matching how cashbook entries already store phone numbers. Existing rows
-    // are left exactly as they are — the variant lookup above still finds them.
-    const data = await Guardian.create({ ...req.body, phone: phoneDigits });
+    // matching how cashbook entries already store phone numbers.
+    const data = await Guardian.create({
+        ...req.body,
+        phone: phoneDigits,
+        alternatePhone: digitsOnly(normalizedAltPhone) || normalizedAltPhone || ''
+    });
     res.status(201).json(data);
 });
 
 const updateGuardian = asyncHandler(async (req, res) => {
     const normalizedPhone = (req.body.phone || '').trim();
+    const normalizedAltPhone = (req.body.alternatePhone || '').trim();
 
     if (normalizedPhone) {
         // Compare against every spelling of the number, matching how a guardian
         // is looked up on creation, so an edit cannot land on a number that
         // already belongs to a different payer just by being typed differently.
-        // The record being edited is excluded, so saving its own number — in any
-        // format — is never reported as a collision.
         const existingGuardian = await Guardian.findOne({
             phone: { $in: phoneVariants(normalizedPhone) },
             _id: { $ne: req.params.id }
@@ -71,13 +106,15 @@ const updateGuardian = asyncHandler(async (req, res) => {
         }
     }
 
-    // Stored as digits, the same rule createGuardian follows, so a record saved
-    // here stays discoverable by every spelling of its number. Leaving the raw
-    // text in place would write values such as "0614 047 121" that the variant
-    // lookups above could no longer match.
+    const updateData = {
+        ...req.body,
+        ...(normalizedPhone ? { phone: digitsOnly(normalizedPhone) || normalizedPhone } : {}),
+        alternatePhone: digitsOnly(normalizedAltPhone) || normalizedAltPhone || ''
+    };
+
     const data = await Guardian.findByIdAndUpdate(
         req.params.id,
-        { ...req.body, phone: digitsOnly(normalizedPhone) || undefined },
+        updateData,
         { new: true }
     );
     if (data) {
