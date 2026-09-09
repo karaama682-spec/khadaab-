@@ -676,8 +676,12 @@ const StudentsManagement = () => {
     try {
       let guardianId = formData.guardianId;
 
-      // If no existing fee payer matched but phone is supplied, create or fetch the fee payer
-      if (!guardianId && formData.guardianPhone) {
+      // When a fee payer phone is provided, resolve the guardian record:
+      // If a guardian with this phone already exists in the system, POST /guardians safely
+      // reuses and returns that existing record. If not, it creates a new guardian record.
+      // This links the student to the existing guardian without creating duplicates
+      // or throwing duplicate phone errors when re-assigning students to existing guardians.
+      if (formData.guardianPhone) {
         const guardianPayload = {
           fullName: formData.guardianName || formData.fatherName || 'Fee Payer',
           phone: formData.guardianPhone,
@@ -686,15 +690,9 @@ const StudentsManagement = () => {
         };
 
         const guardianRes = await api.post('/guardians', guardianPayload);
-        guardianId = guardianRes.data?._id || guardianRes.data?.id;
-      } else if (guardianId && formData.guardianPhone) {
-        // Keep both fee-payer phone numbers up to date when editing a student.
-        await api.put(`/guardians/${guardianId}`, {
-          fullName: formData.guardianName || formData.fatherName || 'Fee Payer',
-          phone: formData.guardianPhone,
-          alternatePhone: formData.guardianAlternatePhone,
-          relationship: formData.guardianRelationship || 'Father'
-        });
+        guardianId = guardianRes.data?._id || guardianRes.data?.id || guardianId;
+      } else {
+        guardianId = undefined;
       }
 
       const payload = {
