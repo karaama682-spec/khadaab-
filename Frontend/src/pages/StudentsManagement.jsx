@@ -244,7 +244,7 @@ const StudentsManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('ALL');
   const [viewMode, setViewMode] = useState(() => {
-    return localStorage.getItem('studentsViewMode') || 'grid';
+    return localStorage.getItem('studentsViewMode') || 'table';
   });
 
   const [foundGuardian, setFoundGuardian] = useState(null);
@@ -869,159 +869,94 @@ const StudentsManagement = () => {
         </div>
       )}
 
-      {/* Summary Metrics Bar */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
-          <div className="w-12 h-12 rounded-2xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 flex items-center justify-center font-black">
-            <Users size={22} />
-          </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Wadarta Ardayda</p>
-            <h3 className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{totalStudentsCount}</h3>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black">
-            <BookOpen size={22} />
-          </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Fasallada Firfircoon</p>
-            <h3 className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{classes.length}</h3>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-black">
-            <DollarSign size={22} />
-          </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Wadarta Fiiga (Filtered)</p>
-            <h3 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">${totalMonthlyFee.toLocaleString()}</h3>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
-          <div className="w-12 h-12 rounded-2xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 flex items-center justify-center font-black">
-            <GraduationCap size={22} />
-          </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ardayda Muuqata</p>
-            <h3 className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{filteredStudentsCount}</h3>
-          </div>
-        </div>
-      </div>
-
-      {/* Controls & Filter Bar */}
-      <div className="bg-white dark:bg-slate-900 rounded-[28px] p-4 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-        <div className="flex flex-1 flex-wrap items-center gap-3">
-          {/* Search Box */}
-          <div className="flex items-center bg-slate-50 dark:bg-slate-800 rounded-2xl px-4 py-2.5 border border-slate-200/80 dark:border-slate-700 flex-1 min-w-[240px] max-w-md focus-within:ring-2 focus-within:ring-brand-500/20 transition-all">
-            <Search size={18} className="text-slate-400 mr-2.5 shrink-0" />
-            <input
-              type="text"
-              placeholder="Raadi arday magac, ID, taleefan, fasal..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400 border-none p-0 focus:ring-0"
-            />
-            {searchTerm && (
-              <button onClick={() => setSearchTerm('')} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1">
-                <X size={14} />
-              </button>
-            )}
-          </div>
-
-          {/* Class Filter Dropdown */}
-          <div className="flex items-center bg-slate-50 dark:bg-slate-800 rounded-2xl px-3.5 py-2.5 border border-slate-200/80 dark:border-slate-700 min-w-[210px]">
-            <Filter size={16} className="text-brand-500 mr-2 shrink-0" />
-            <select
-              value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
-              className="w-full bg-transparent outline-none text-sm font-bold text-slate-800 dark:text-slate-200 border-none p-0 cursor-pointer focus:ring-0"
-            >
-              <option value="ALL">Dhammaan Fasallada ({data.length})</option>
-              {classes.map(c => {
-                const count = classCounts[String(c._id)] || 0;
-                const label = classLabel(c, c.name || c.className || 'Fasal');
-                return (
-                  <option key={c._id} value={c._id}>
-                    {label} ({count} arday)
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-        </div>
-
-        {/* View Switcher (Cards vs Table) */}
-        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl shrink-0 self-end md:self-auto">
-          <button
-            onClick={() => { setViewMode('grid'); localStorage.setItem('studentsViewMode', 'grid'); }}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              viewMode === 'grid'
-                ? 'bg-white dark:bg-slate-900 text-brand-600 dark:text-brand-400 shadow-sm'
-                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-            }`}
-            title="Kaadhadh (Grid View)"
-          >
-            <LayoutGrid size={16} />
-            <span>Kaadhadh</span>
-          </button>
-          <button
-            onClick={() => { setViewMode('table'); localStorage.setItem('studentsViewMode', 'table'); }}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-              viewMode === 'table'
-                ? 'bg-white dark:bg-slate-900 text-brand-600 dark:text-brand-400 shadow-sm'
-                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-            }`}
-            title="Shax (Table View)"
-          >
-            <List size={16} />
-            <span>Shax</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Quick Class Tabs (Pills) */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
-        <button
-          onClick={() => setSelectedClass('ALL')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${
-            selectedClass === 'ALL'
-              ? 'bg-brand-600 text-white shadow-md shadow-brand-600/25'
-              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200/70 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
-          }`}
-        >
-          <span>Dhammaan</span>
-          <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedClass === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
-            {data.length}
-          </span>
-        </button>
-        {classes.map(c => {
-          const count = classCounts[String(c._id)] || 0;
-          const isSelected = String(selectedClass) === String(c._id);
-          const label = classLabel(c, c.name || c.className || 'Fasal');
-          return (
-            <button
-              key={c._id}
-              onClick={() => setSelectedClass(c._id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${
-                isSelected
-                  ? 'bg-brand-600 text-white shadow-md shadow-brand-600/25'
-                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200/70 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
-              }`}
-            >
-              <span>{label}</span>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
-                {count}
-              </span>
+      {/* Search Bar & Class Filter Row - Positioned directly side-by-side matching the user's screenshot */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        {/* Search Bar */}
+        <div className="flex items-center bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm flex-1 max-w-md focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
+          <Search size={18} className="text-slate-400 mr-3 shrink-0" />
+          <input
+            type="text"
+            placeholder="Search students by name, roll no, fee payer..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400 border-none p-0 focus:ring-0 font-medium"
+          />
+          {searchTerm && (
+            <button onClick={() => setSearchTerm('')} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1">
+              <X size={14} />
             </button>
-          );
-        })}
+          )}
+        </div>
+
+        {/* Class Filter Dropdown directly beside the search bar */}
+        <div className="flex items-center bg-white dark:bg-slate-900 rounded-2xl px-4 py-3 border border-slate-100 dark:border-slate-800 shadow-sm min-w-[240px] focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
+          <Filter size={16} className="text-emerald-500 mr-2.5 shrink-0" />
+          <select
+            value={selectedClass}
+            onChange={(e) => setSelectedClass(e.target.value)}
+            className="w-full bg-transparent outline-none text-sm font-bold text-slate-800 dark:text-slate-200 cursor-pointer border-none p-0 focus:ring-0"
+          >
+            <option value="ALL">All Classes / Dhammaan ({data.length})</option>
+            {classes.map(c => {
+              const count = classCounts[String(c._id)] || 0;
+              const label = classLabel(c, c.name || c.className || 'Class');
+              return (
+                <option key={c._id} value={c._id}>
+                  {label} ({count} {count === 1 ? 'student' : 'students'})
+                </option>
+              );
+            })}
+          </select>
+          {selectedClass !== 'ALL' && (
+            <button 
+              onClick={() => setSelectedClass('ALL')}
+              title="Reset Filter"
+              className="ml-2 text-slate-400 hover:text-rose-500 transition-colors p-1"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Right side: Count Badge & View Mode Switcher */}
+        <div className="flex items-center justify-between sm:justify-end gap-3 sm:ml-auto">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 px-4 py-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+            <span>Showing:</span>
+            <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">{filteredStudentsCount}</span>
+            <span>of</span>
+            <span>{totalStudentsCount} Students</span>
+          </div>
+
+          <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+            <button
+              onClick={() => { setViewMode('table'); localStorage.setItem('studentsViewMode', 'table'); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                viewMode === 'table'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
+              title="Table View"
+            >
+              <List size={15} />
+              <span className="hidden md:inline">Table</span>
+            </button>
+            <button
+              onClick={() => { setViewMode('grid'); localStorage.setItem('studentsViewMode', 'grid'); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                viewMode === 'grid'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+              }`}
+              title="Cards View"
+            >
+              <LayoutGrid size={15} />
+              <span className="hidden md:inline">Cards</span>
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Main Student Directory Content: Cards (Grid) or Table View */}
+      {/* Main Student Directory Content: Table (default) or Cards View */}
       {viewMode === 'grid' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {filteredData.map(item => {
@@ -1032,12 +967,12 @@ const StudentsManagement = () => {
             return (
               <div 
                 key={item._id}
-                className="group relative bg-white dark:bg-slate-900 rounded-[30px] p-5 border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-card-hover hover:border-brand-500/30 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between"
+                className="group relative bg-white dark:bg-slate-900 rounded-[30px] p-5 border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-card-hover hover:border-emerald-500/30 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between"
               >
                 <div>
                   {/* Top: Avatar, Name & ID */}
                   <div className="flex items-start gap-3.5 mb-4">
-                    <div className="relative w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-tr from-brand-600 via-brand-500 to-emerald-500 text-white flex items-center justify-center font-black text-base shadow-md shadow-brand-600/20 ring-2 ring-white dark:ring-slate-800">
+                    <div className="relative w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-black text-base shadow-md shadow-emerald-600/20 ring-2 ring-white dark:ring-slate-800">
                       {(item.fullName || 'A').charAt(0).toUpperCase()}
                       <span className={`absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase tracking-tighter ${
                         item.gender === 'Female' ? 'bg-pink-500 text-white' : 'bg-blue-600 text-white'
@@ -1046,10 +981,10 @@ const StudentsManagement = () => {
                       </span>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h4 className="text-base font-extrabold text-slate-900 dark:text-white truncate leading-tight group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors" title={item.fullName}>
+                      <h4 className="text-base font-extrabold text-slate-900 dark:text-white truncate leading-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" title={item.fullName}>
                         {item.fullName}
                       </h4>
-                      <span className="inline-block mt-1 font-mono text-xs font-black text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/40 px-2 py-0.5 rounded-lg border border-brand-500/20">
+                      <span className="inline-block mt-1 font-mono text-xs font-black text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-lg border border-emerald-500/20">
                         {item.studentCode || 'No ID'}
                       </span>
                     </div>
@@ -1059,7 +994,7 @@ const StudentsManagement = () => {
                   <div className="space-y-2.5 my-3 pt-3 border-t border-slate-100 dark:border-slate-800/80">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400 font-semibold flex items-center gap-1.5">
-                        <BookOpen size={14} className="text-brand-500" /> Fasalka:
+                        <BookOpen size={14} className="text-emerald-500" /> Class:
                       </span>
                       <span className="font-extrabold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-xl truncate max-w-[150px]">
                         {cls?.name || cls?.className || '-'}
@@ -1068,7 +1003,7 @@ const StudentsManagement = () => {
 
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400 font-semibold flex items-center gap-1.5">
-                        <DollarSign size={14} className="text-emerald-500" /> Fiiga Bishii:
+                        <DollarSign size={14} className="text-emerald-500" /> Student Fee:
                       </span>
                       <span className="font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-xl border border-emerald-500/20">
                         ${Number(studentFee).toLocaleString()}
@@ -1079,7 +1014,7 @@ const StudentsManagement = () => {
                     <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-2.5 space-y-1">
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                          <UserIcon size={11} /> Qofka Bixiya:
+                          <UserIcon size={11} /> Who Pays:
                         </span>
                         <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[130px]">
                           {guardian?.fullName || item.fatherName || 'Not Linked'}
@@ -1087,10 +1022,10 @@ const StudentsManagement = () => {
                       </div>
                       {(guardian?.phone || item.fatherPhone) && (
                         <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
-                          <span className="text-slate-400 font-medium">Taleefan:</span>
+                          <span className="text-slate-400 font-medium">Phone:</span>
                           <a 
                             href={`tel:${guardian?.phone || item.fatherPhone}`}
-                            className="font-mono font-bold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
+                            className="font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
                           >
                             <Phone size={11} />
                             {guardian?.phone || item.fatherPhone}
@@ -1110,21 +1045,21 @@ const StudentsManagement = () => {
                   <div className="flex items-center gap-1.5">
                     <button 
                       onClick={() => setCardStudent(item)} 
-                      title="Daabaco Aqoonsiga (ID Card)" 
-                      className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-900/30 text-slate-600 dark:text-slate-300 hover:text-brand-600 rounded-xl transition-colors"
+                      title="ID Card" 
+                      className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-600 dark:text-slate-300 hover:text-emerald-600 rounded-xl transition-colors"
                     >
                       <IdCardIcon size={15} />
                     </button>
                     <button 
                       onClick={() => openEditModal(item)} 
-                      title="Wax ka beddel" 
+                      title="Edit Student" 
                       className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-slate-600 dark:text-slate-300 hover:text-blue-600 rounded-xl transition-colors"
                     >
                       <Edit2 size={15} />
                     </button>
                     <button 
                       onClick={() => handleDelete(item)} 
-                      title="Tirtir ardayga" 
+                      title="Delete Student" 
                       className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-slate-600 dark:text-slate-300 hover:text-rose-500 rounded-xl transition-colors"
                     >
                       <Trash2 size={15} />
@@ -1136,19 +1071,19 @@ const StudentsManagement = () => {
           })}
         </div>
       ) : (
-        /* Modern Table View */
-        <div className="bg-white dark:bg-slate-900 rounded-[36px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+        /* Data Table - Directly matches the user's screenshot layout */
+        <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="bg-slate-50/70 dark:bg-slate-800/40 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                  <th className="px-6 py-4">Ardayga (Student)</th>
-                  <th className="px-6 py-4">ID Number</th>
-                  <th className="px-6 py-4">Fasalka (Class)</th>
-                  <th className="px-6 py-4">Fiiga Bishii</th>
-                  <th className="px-6 py-4">Qofka Bixiya (Payer)</th>
-                  <th className="px-6 py-4">Diiwaangelinta</th>
-                  <th className="px-6 py-4 text-right">Waxqabadka</th>
+                <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
+                  <th className="px-8 py-5">Full Name</th>
+                  <th className="px-8 py-5">Student ID</th>
+                  <th className="px-8 py-5">Class</th>
+                  <th className="px-8 py-5">Student Fee ($)</th>
+                  <th className="px-8 py-5">Who Pays the Fee</th>
+                  <th className="px-8 py-5">Registration Date</th>
+                  <th className="px-8 py-5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1159,9 +1094,9 @@ const StudentsManagement = () => {
 
                   return (
                     <tr key={item._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-6 py-4">
+                      <td className="px-8 py-5">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-500 text-white flex items-center justify-center font-extrabold text-xs shrink-0 shadow-sm">
+                          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-extrabold text-xs shrink-0 shadow-sm">
                             {(item.fullName || 'A').charAt(0).toUpperCase()}
                           </div>
                           <div>
@@ -1170,40 +1105,43 @@ const StudentsManagement = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 font-mono text-xs font-black text-brand-600 dark:text-brand-400">
+                      <td className="px-8 py-5 font-mono text-sm font-black text-emerald-500">
                         {item.studentCode || '-'}
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="inline-block px-2.5 py-1 rounded-xl text-xs font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
-                          {cls?.name || cls?.className || '-'}
-                        </span>
+                      <td className="px-8 py-5 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        {cls?.name || cls?.className || '-'}
                       </td>
-                      <td className="px-6 py-4 text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                      <td className="px-8 py-5 text-sm font-bold text-emerald-600 dark:text-emerald-400">
                         ${Number(studentFee).toLocaleString()}
                       </td>
-                      <td className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      <td className="px-8 py-5 text-sm font-semibold text-slate-600 dark:text-slate-300">
                         {guardian ? (
                           <div>
-                            <span className="font-bold text-slate-900 dark:text-white block">{guardian.fullName}</span>
-                            <span className="text-slate-400 text-[11px] font-mono">{guardian.phone}</span>
+                            <span className="font-bold text-slate-900 dark:text-slate-100 block">{guardian.fullName}</span>
+                            <span className="text-xs text-slate-400 block font-mono">
+                              {guardian.phone}{guardian.alternatePhone ? ` / ${guardian.alternatePhone}` : ''} {guardian.relationship ? `(${guardian.relationship})` : ''}
+                            </span>
                           </div>
                         ) : (
-                          <span className="text-slate-400">{item.fatherName || 'Not Linked'}</span>
+                          <div>
+                            <span className="font-bold text-slate-900 dark:text-slate-100 block">{item.fatherName || 'Not Linked'}</span>
+                            {item.fatherPhone && <span className="text-xs text-slate-400 block font-mono">{item.fatherPhone}</span>}
+                          </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        {item.registrationDate ? fmtRegDate(item.registrationDate) : 'N/A'}
+                      <td className="px-8 py-5 text-sm font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        {item.registrationDate ? fmtRegDate(item.registrationDate) : <span className="text-slate-400 opacity-60">N/A</span>}
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end items-center gap-1.5">
-                          <button onClick={() => setCardStudent(item)} title="ID Card" className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-brand-600 transition-colors">
-                            <IdCardIcon size={15} />
+                      <td className="px-8 py-5 text-right">
+                        <div className="flex justify-end items-center gap-2">
+                          <button onClick={() => setCardStudent(item)} title="ID Card" className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-emerald-600 transition-all">
+                            <IdCardIcon size={16} />
                           </button>
-                          <button onClick={() => openEditModal(item)} title="Edit" className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-blue-600 transition-colors">
-                            <Edit2 size={15} />
+                          <button onClick={() => openEditModal(item)} title="Edit Student" className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-brand-600 transition-all">
+                            <Edit2 size={16} />
                           </button>
-                          <button onClick={() => handleDelete(item)} title="Delete" className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-rose-500 transition-colors">
-                            <Trash2 size={15} />
+                          <button onClick={() => handleDelete(item)} title="Delete Student" className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-rose-500 transition-all">
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </td>
