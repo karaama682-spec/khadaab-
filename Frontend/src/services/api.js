@@ -8,6 +8,7 @@ const apiBaseUrl = String(host).replace(/\/$/, '') + '/api';
 
 const api = axios.create({
     baseURL: apiBaseUrl,
+    timeout: 15000,
 });
 
 // Request interceptor to add auth token
