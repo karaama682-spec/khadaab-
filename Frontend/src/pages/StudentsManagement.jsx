@@ -217,10 +217,20 @@ const phoneVariants = (value) => {
 
 const StudentsManagement = () => {
   const { showAlert, showConfirm } = useAlert();
-  const [data, setData] = useState([]);
-  const [classes, setClasses] = useState([]);
+  const [data, setData] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('cachedStudentsData');
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
+  const [classes, setClasses] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('cachedClassesData');
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
   const [guardians, setGuardians] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !sessionStorage.getItem('cachedStudentsData'));
   const [cardStudent, setCardStudent] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importResults, setImportResults] = useState(null);
@@ -258,27 +268,31 @@ const StudentsManagement = () => {
     classId: '',
     gender: 'Male',
     monthlyFee: '',
+    fee: '',
     fatherName: '',
     fatherPhone: '',
-    guardianId: '',
-    guardianName: '',
     guardianPhone: '',
-    guardianAlternatePhone: '',
+    guardianName: '',
     guardianRelationship: 'Father',
-    registrationDate: toDateInput()
+    guardianAltPhone: '',
+    registrationDate: toDateInput(new Date())
   });
 
   const fetchData = async () => {
     try {
-      setLoading(true);
+      if (!data.length) setLoading(true);
       const [resStudents, resClasses, resGuardians] = await Promise.all([
         api.get('/students'),
         api.get('/classes'),
         api.get('/guardians')
       ]);
-      setData(resStudents.data || []);
-      setClasses(resClasses.data || []);
+      const studentsList = resStudents.data || [];
+      const classesList = resClasses.data || [];
+      setData(studentsList);
+      setClasses(classesList);
       setGuardians(resGuardians.data || []);
+      sessionStorage.setItem('cachedStudentsData', JSON.stringify(studentsList));
+      sessionStorage.setItem('cachedClassesData', JSON.stringify(classesList));
     } catch (error) {
       console.error("Failed to fetch students data", error);
     } finally {

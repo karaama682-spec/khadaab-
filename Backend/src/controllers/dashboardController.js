@@ -12,11 +12,25 @@ const StudentAttendance = require('../models/StudentAttendance');
 const TeacherAttendance = require('../models/TeacherAttendance');
 const Notification = require('../models/Notification');
 
+// In-memory cache to prevent re-running 13 aggregations on every dashboard visit
+const dashboardCache = new Map();
+const DASHBOARD_CACHE_TTL = 30 * 1000; // 30 seconds
+
 // @desc    Get complete institute dashboard analytics data
 // @route   GET /api/dashboard
 // @access  Private
 const getDashboardData = asyncHandler(async (req, res) => {
     const branchId = req.user.branchId || req.user.warehouseId;
+    const branchKey = String(branchId || 'all');
+    const nowTime = Date.now();
+
+    if (dashboardCache.has(branchKey)) {
+        const cached = dashboardCache.get(branchKey);
+        if (nowTime - cached.time < DASHBOARD_CACHE_TTL) {
+            return res.json(cached.data);
+        }
+    }
+
     const branchQuery = branchId ? { branchId } : {};
 
     const now = new Date();
@@ -81,7 +95,7 @@ const getDashboardData = asyncHandler(async (req, res) => {
     // Money still owed by students for the current month.
     const pendingStudentFees = Math.max(0, expectedMonthlyFees - collectedThisMonth);
 
-    res.json({
+    const responsePayload = {
         kpis: {
             totalStudents,
             totalTeachers,
@@ -110,7 +124,14 @@ const getDashboardData = asyncHandler(async (req, res) => {
             expiry: [],
             delayed: []
         }
+    };
+
+    dashboardCache.set(branchKey, {
+        time: nowTime,
+        data: responsePayload
     });
+
+    res.json(responsePayload);
 });
 
 module.exports = {

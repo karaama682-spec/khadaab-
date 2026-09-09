@@ -5,7 +5,7 @@ const { phoneVariants, digitsOnly } = require('../utils/somaliPhone');
 const getGuardians = asyncHandler(async (req, res) => {
     const phone = (req.query.phone || '').trim();
     const query = phone ? { phone } : {};
-    const data = await Guardian.find(query);
+    const data = await Guardian.find(query).lean();
     res.json(data);
 });
 

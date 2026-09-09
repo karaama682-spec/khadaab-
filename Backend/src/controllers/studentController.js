@@ -3,7 +3,10 @@ const Student = require('../models/Student');
 const { generateStudentCode, withRetry } = require('../utils/generateCode');
 
 const getStudents = asyncHandler(async (req, res) => {
-    const data = await Student.find().populate('guardianId').populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } });
+    const data = await Student.find()
+        .populate('guardianId')
+        .populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } })
+        .lean();
     res.json(data);
 });
 

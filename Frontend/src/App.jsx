@@ -129,6 +129,7 @@ const App = () => {
         const parsedUser = JSON.parse(userInfo);
         setUser(parsedUser);
         setCurrentRole(parsedUser.role || parsedUser.roles?.[0]?.name?.toUpperCase().replace(/ /g, '_'));
+        setLoading(false);
         fetchBranches();
         fetchTenantSettings();
         api.get('/settings').then(({ data }) => {

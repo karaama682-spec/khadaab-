@@ -3,7 +3,7 @@ const Class = require('../models/Class');
 const Branch = require('../models/Branch');
 
 const getClasss = asyncHandler(async (req, res) => {
-    const data = await Class.find().populate('branchId', 'name status');
+    const data = await Class.find().populate('branchId', 'name status').lean();
     res.json(data);
 });
 

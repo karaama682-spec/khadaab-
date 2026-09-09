@@ -14,7 +14,7 @@ const getBranchs = asyncHandler(async (req, res) => {
     // `?status=Active` backs the class form, which must only offer branches that
     // are still open. Without it the behaviour is unchanged: every branch.
     const filter = req.query.status ? { status: req.query.status } : {};
-    const data = await Branch.find(filter).sort({ name: 1 });
+    const data = await Branch.find(filter).sort({ name: 1 }).lean();
     res.json(data);
 });
 

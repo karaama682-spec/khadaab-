@@ -6,8 +6,13 @@ import { classLabel, classSearchText } from '../utils/classLabel';
 
 const ClassesManagement = () => {
   const { showAlert, showConfirm } = useAlert();
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('cachedClassesData');
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
+  const [loading, setLoading] = useState(() => !sessionStorage.getItem('cachedClassesData'));
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -25,13 +30,15 @@ const ClassesManagement = () => {
 
   const fetchData = async () => {
     try {
-      setLoading(true);
+      if (!data.length) setLoading(true);
       const [{ data: classesData }, { data: branchData }] = await Promise.all([
         api.get('/classes'),
         api.get('/branches', { params: { status: 'Active' } })
       ]);
-      setData(classesData || []);
+      const list = classesData || [];
+      setData(list);
       setBranches(branchData || []);
+      sessionStorage.setItem('cachedClassesData', JSON.stringify(list));
     } catch (error) {
       console.error("Failed to fetch classes", error);
     } finally {

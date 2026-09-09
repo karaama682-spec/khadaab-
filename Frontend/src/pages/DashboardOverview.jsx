@@ -9,13 +9,27 @@ import api from '../services/api';
 
 const DashboardOverview = () => {
     const navigate = useNavigate();
-    const [dashboardData, setDashboardData] = useState({
-        kpis: {},
-        activities: [],
-        notifications: [],
-        alerts: { lowStock: [], expiry: [], delayed: [] }
+    const [dashboardData, setDashboardData] = useState(() => {
+        try {
+            const cached = sessionStorage.getItem('cachedDashboardData');
+            return cached ? JSON.parse(cached) : {
+                kpis: {},
+                activities: [],
+                notifications: [],
+                alerts: { lowStock: [], expiry: [], delayed: [] }
+            };
+        } catch {
+            return {
+                kpis: {},
+                activities: [],
+                notifications: [],
+                alerts: { lowStock: [], expiry: [], delayed: [] }
+            };
+        }
     });
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(() => {
+        return !sessionStorage.getItem('cachedDashboardData');
+    });
 
     useEffect(() => {
         fetchDashboardData();
@@ -24,7 +38,10 @@ const DashboardOverview = () => {
     const fetchDashboardData = async () => {
         try {
             const { data } = await api.get('/dashboard');
-            setDashboardData(data);
+            if (data) {
+                setDashboardData(data);
+                sessionStorage.setItem('cachedDashboardData', JSON.stringify(data));
+            }
         } catch (error) {
             console.error('Failed to fetch dashboard data', error);
         } finally {
