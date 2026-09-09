@@ -143,7 +143,14 @@ const App = () => {
       setLoading(false);
     }
 
+    // Warm-up & Keep-alive ping so backend is warm immediately and stays awake
+    api.get('/health', { skipCache: true }).catch(() => {});
+    const warmUpInterval = setInterval(() => {
+      api.get('/health', { skipCache: true }).catch(() => {});
+    }, 9 * 60 * 1000);
+
     return () => {
+      clearInterval(warmUpInterval);
       window.removeEventListener('auth:unauthorized', handleUnauthorized);
       window.removeEventListener('tenant:updated', fetchTenantSettings);
     };

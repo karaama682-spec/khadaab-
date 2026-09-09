@@ -107,6 +107,10 @@ app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/tenants', require('./routes/tenantRoutes'));
 app.use('/api/exams', require('./routes/examRoutes'));
 
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date() });
+});
+
 app.get('/', (req, res) => {
     res.send('Institute API is running...');
 });
@@ -118,4 +122,20 @@ const PORT = process.env.PORT || 5005; // Was 5005 in .env
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
+
+    // Render Keep-Alive: Ping server every 10 minutes so Render never sleeps
+    const targetUrl = process.env.RENDER_EXTERNAL_URL || 'https://mach-backend-695y.onrender.com';
+    const isProduction = process.env.NODE_ENV === 'production' || Boolean(process.env.RENDER);
+    if (isProduction) {
+        const axios = require('axios');
+        const PING_INTERVAL = 10 * 60 * 1000; // 10 minutes
+        setInterval(async () => {
+            try {
+                await axios.get(`${targetUrl}/api/health`, { timeout: 15000 });
+                console.log(`[Keep-Alive] Pinged ${targetUrl}/api/health successfully.`);
+            } catch (err) {
+                console.warn(`[Keep-Alive] Ping note: ${err.message}`);
+            }
+        }, PING_INTERVAL);
+    }
 });
