@@ -9,6 +9,14 @@ const Login = ({ onLogin }) => {
   const [isRegister, setIsRegister] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [tenantBranding, setTenantBranding] = useState(() => {
+    try {
+      const cached = localStorage.getItem('tenantBranding');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -20,6 +28,24 @@ const Login = ({ onLogin }) => {
 
   useEffect(() => {
     let isMounted = true;
+
+    // Fetch live tenant branding so Settings updates reflect on Login immediately
+    api.get('/tenants/me')
+      .then(({ data }) => {
+        if (isMounted && data) {
+          const branding = {
+            name: data.name,
+            systemSubtitle: data.systemSubtitle,
+            logo: data.logo,
+            brandColor: data.settings?.brandColor,
+            accentColor: data.settings?.accentColor
+          };
+          setTenantBranding(branding);
+          localStorage.setItem('tenantBranding', JSON.stringify(branding));
+        }
+      })
+      .catch(() => {});
+
     const checkSetupStatus = async () => {
       try {
         const { data } = await api.get('/users/setup-status');
@@ -120,11 +146,19 @@ const Login = ({ onLogin }) => {
     <main className="flex min-h-screen items-center justify-center bg-slate-950 p-4">
       <section className="w-full max-w-md rounded-[32px] border border-white/10 bg-white p-8 shadow-2xl shadow-black/30 dark:bg-slate-900 md:p-10">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30">
-            <GraduationCap size={32} />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30">
+            {tenantBranding?.logo ? (
+              <img src={tenantBranding.logo} alt="Logo" className="h-full w-full object-cover" />
+            ) : (
+              <GraduationCap size={32} />
+            )}
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Cumar Binu Khadhaab</h1>
-          <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Ku soo dhowow nidaamka maamulka machadka</p>
+          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+            {tenantBranding?.name || 'Cumar Binu Khadhaab'}
+          </h1>
+          <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+            {tenantBranding?.systemSubtitle || 'Ku soo dhowow nidaamka maamulka machadka'}
+          </p>
         </div>
 
         {/* Tab Switcher: Only shown during one-time initial setup when no admin exists */}
