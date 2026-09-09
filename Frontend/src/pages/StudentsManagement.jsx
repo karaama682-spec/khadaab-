@@ -1071,19 +1071,19 @@ const StudentsManagement = () => {
           })}
         </div>
       ) : (
-        /* Data Table - Directly matches the user's screenshot layout */
-        <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
+        /* Data Table - Fitted cleanly to screen with no horizontal scrolling */
+        <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div className="w-full overflow-x-auto">
+            <table className="w-full text-left border-collapse table-auto">
               <thead>
-                <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                  <th className="px-8 py-5">Full Name</th>
-                  <th className="px-8 py-5">Student ID</th>
-                  <th className="px-8 py-5">Class</th>
-                  <th className="px-8 py-5">Student Fee ($)</th>
-                  <th className="px-8 py-5">Who Pays the Fee</th>
-                  <th className="px-8 py-5">Registration Date</th>
-                  <th className="px-8 py-5 text-right">Actions</th>
+                <tr className="bg-slate-50/70 dark:bg-slate-800/40 text-slate-400 text-[10px] font-black uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
+                  <th className="px-4 py-4 whitespace-nowrap">Full Name</th>
+                  <th className="px-3 py-4 whitespace-nowrap">Student ID</th>
+                  <th className="px-3 py-4 whitespace-nowrap">Class</th>
+                  <th className="px-3 py-4 whitespace-nowrap">Student Fee ($)</th>
+                  <th className="px-4 py-4 whitespace-nowrap">Who Pays the Fee</th>
+                  <th className="px-3 py-4 whitespace-nowrap">Registration Date</th>
+                  <th className="px-4 py-4 text-right whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1094,54 +1094,64 @@ const StudentsManagement = () => {
 
                   return (
                     <tr key={item._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-8 py-5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-extrabold text-xs shrink-0 shadow-sm">
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-extrabold text-xs shrink-0 shadow-sm">
                             {(item.fullName || 'A').charAt(0).toUpperCase()}
                           </div>
-                          <div>
-                            <span className="font-extrabold text-sm text-slate-900 dark:text-white block">{item.fullName}</span>
+                          <div className="min-w-0">
+                            <span className="font-bold text-sm text-slate-900 dark:text-white block truncate max-w-[200px]" title={item.fullName}>
+                              {item.fullName}
+                            </span>
                             <span className="text-[10px] text-slate-400 font-semibold uppercase">{item.gender || 'Male'}</span>
                           </div>
                         </div>
                       </td>
-                      <td className="px-8 py-5 font-mono text-sm font-black text-emerald-500">
-                        {item.studentCode || '-'}
+                      <td className="px-3 py-3.5 font-mono text-xs font-black text-emerald-500 whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          {item.studentCode || '-'}
+                        </span>
                       </td>
-                      <td className="px-8 py-5 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                        {cls?.name || cls?.className || '-'}
+                      <td className="px-3 py-3.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        <span className="truncate block max-w-[140px]" title={cls?.name || cls?.className || '-'}>
+                          {cls?.name || cls?.className || '-'}
+                        </span>
                       </td>
-                      <td className="px-8 py-5 text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                      <td className="px-3 py-3.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                         ${Number(studentFee).toLocaleString()}
                       </td>
-                      <td className="px-8 py-5 text-sm font-semibold text-slate-600 dark:text-slate-300">
+                      <td className="px-4 py-3.5 text-xs">
                         {guardian ? (
-                          <div>
-                            <span className="font-bold text-slate-900 dark:text-slate-100 block">{guardian.fullName}</span>
-                            <span className="text-xs text-slate-400 block font-mono">
-                              {guardian.phone}{guardian.alternatePhone ? ` / ${guardian.alternatePhone}` : ''} {guardian.relationship ? `(${guardian.relationship})` : ''}
+                          <div className="min-w-0">
+                            <span className="font-bold text-slate-900 dark:text-slate-100 block truncate max-w-[180px]" title={guardian.fullName}>
+                              {guardian.fullName}
+                            </span>
+                            <span className="text-[11px] text-slate-400 block font-mono truncate max-w-[180px]">
+                              {guardian.phone}{guardian.relationship ? ` (${guardian.relationship})` : ''}
                             </span>
                           </div>
                         ) : (
-                          <div>
-                            <span className="font-bold text-slate-900 dark:text-slate-100 block">{item.fatherName || 'Not Linked'}</span>
-                            {item.fatherPhone && <span className="text-xs text-slate-400 block font-mono">{item.fatherPhone}</span>}
+                          <div className="min-w-0">
+                            <span className="font-bold text-slate-900 dark:text-slate-100 block truncate max-w-[180px]">
+                              {item.fatherName || 'Not Linked'}
+                            </span>
+                            {item.fatherPhone && <span className="text-[11px] text-slate-400 block font-mono">{item.fatherPhone}</span>}
                           </div>
                         )}
                       </td>
-                      <td className="px-8 py-5 text-sm font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                      <td className="px-3 py-3.5 text-xs font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap">
                         {item.registrationDate ? fmtRegDate(item.registrationDate) : <span className="text-slate-400 opacity-60">N/A</span>}
                       </td>
-                      <td className="px-8 py-5 text-right">
-                        <div className="flex justify-end items-center gap-2">
-                          <button onClick={() => setCardStudent(item)} title="ID Card" className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-emerald-600 transition-all">
-                            <IdCardIcon size={16} />
+                      <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                        <div className="flex justify-end items-center gap-1.5">
+                          <button onClick={() => setCardStudent(item)} title="ID Card" className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-all">
+                            <IdCardIcon size={15} />
                           </button>
-                          <button onClick={() => openEditModal(item)} title="Edit Student" className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-brand-600 transition-all">
-                            <Edit2 size={16} />
+                          <button onClick={() => openEditModal(item)} title="Edit Student" className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-all">
+                            <Edit2 size={15} />
                           </button>
-                          <button onClick={() => handleDelete(item)} title="Delete Student" className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-rose-500 transition-all">
-                            <Trash2 size={16} />
+                          <button onClick={() => handleDelete(item)} title="Delete Student" className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all">
+                            <Trash2 size={15} />
                           </button>
                         </div>
                       </td>

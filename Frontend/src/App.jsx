@@ -260,7 +260,7 @@ const App = () => {
               onLogout={handleLogout}
             />
 
-            <main className="flex-1 bg-slate-50 dark:bg-slate-950 overflow-y-auto">
+            <main className="flex-1 bg-slate-50 dark:bg-slate-950 overflow-y-auto overflow-x-hidden">
               <RoleGuard currentRole={currentRole} user={user}>
                 <Routes>
                   <Route path="/" element={<DashboardOverview />} />
