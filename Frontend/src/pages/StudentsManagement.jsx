@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, Edit2, Trash2, Users, Search, CheckCircle2, UserPlus, Loader2, DollarSign, IdCard as IdCardIcon, Download, Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
+import { 
+  Plus, X, Edit2, Trash2, Users, Search, CheckCircle2, UserPlus, Loader2, 
+  DollarSign, IdCard as IdCardIcon, Download, Upload, FileSpreadsheet, AlertCircle,
+  LayoutGrid, List, Filter, GraduationCap, Phone, Calendar, BookOpen, Sparkles, User as UserIcon
+} from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import IdCard from '../components/IdCard.jsx';
@@ -238,6 +242,10 @@ const StudentsManagement = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedClass, setSelectedClass] = useState('ALL');
+  const [viewMode, setViewMode] = useState(() => {
+    return localStorage.getItem('studentsViewMode') || 'grid';
+  });
 
   const [foundGuardian, setFoundGuardian] = useState(null);
   const [isSearchingGuardian, setIsSearchingGuardian] = useState(false);
@@ -724,20 +732,47 @@ const StudentsManagement = () => {
   };
 
   const filteredData = data.filter(item => {
+    if (selectedClass !== 'ALL') {
+      const itemClassId = String(item.classId?._id || item.classId || '');
+      if (itemClassId !== String(selectedClass)) {
+        return false;
+      }
+    }
+
+    if (!searchTerm.trim()) return true;
+
+    const term = searchTerm.toLowerCase();
     const gName = item.guardianId?.fullName || '';
     const gPhone = item.guardianId?.phone || '';
     const className = classSearchText(item.classId);
     return (
-      (item.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.studentCode || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.fatherName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.fatherPhone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      gName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      gPhone.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.guardianId?.alternatePhone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      className.toLowerCase().includes(searchTerm.toLowerCase())
+      (item.fullName || '').toLowerCase().includes(term) ||
+      (item.studentCode || '').toLowerCase().includes(term) ||
+      (item.fatherName || '').toLowerCase().includes(term) ||
+      (item.fatherPhone || '').toLowerCase().includes(term) ||
+      gName.toLowerCase().includes(term) ||
+      gPhone.toLowerCase().includes(term) ||
+      (item.guardianId?.alternatePhone || '').toLowerCase().includes(term) ||
+      className.toLowerCase().includes(term)
     );
   });
+
+  // Summary Metrics
+  const totalStudentsCount = data.length;
+  const filteredStudentsCount = filteredData.length;
+  const totalMonthlyFee = filteredData.reduce((acc, curr) => acc + Number(curr.monthlyFee ?? curr.fee ?? 0), 0);
+
+  // Class student counts map for filter
+  const classCounts = React.useMemo(() => {
+    const map = {};
+    data.forEach(s => {
+      const cid = String(s.classId?._id || s.classId || '');
+      if (cid) {
+        map[cid] = (map[cid] || 0) + 1;
+      }
+    });
+    return map;
+  }, [data]);
 
   if (loading) return <div className="p-10 text-center text-slate-500">Loading Students...</div>;
 
@@ -834,93 +869,382 @@ const StudentsManagement = () => {
         </div>
       )}
 
-      {/* Search Bar */}
-      <div className="flex items-center bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm max-w-md">
-        <Search size={18} className="text-slate-400 mr-3" />
-        <input
-          type="text"
-          placeholder="Search students by name, roll no, fee payer..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400"
-        />
-      </div>
+      {/* Summary Metrics Bar */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
+          <div className="w-12 h-12 rounded-2xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 flex items-center justify-center font-black">
+            <Users size={22} />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Wadarta Ardayda</p>
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{totalStudentsCount}</h3>
+          </div>
+        </div>
 
-      {/* Data Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                <th className="px-8 py-5">Full Name</th>
-                <th className="px-8 py-5">Student ID</th>
-                <th className="px-8 py-5">Class</th>
-                <th className="px-8 py-5">Student Fee ($)</th>
-                <th className="px-8 py-5">Who Pays the Fee</th>
-                <th className="px-8 py-5">Registration Date</th>
-                <th className="px-8 py-5 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredData.map((item) => {
-                const guardian = item.guardianId && typeof item.guardianId === 'object' ? item.guardianId : null;
-                const cls = item.classId && typeof item.classId === 'object' ? item.classId : classes.find(c => c._id === item.classId);
-                const studentFee = item.monthlyFee !== undefined ? item.monthlyFee : (item.fee || 0);
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black">
+            <BookOpen size={22} />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Fasallada Firfircoon</p>
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{classes.length}</h3>
+          </div>
+        </div>
 
-                return (
-                  <tr key={item._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
-                    <td className="px-8 py-6 text-sm font-bold text-slate-900 dark:text-slate-100">
-                      {item.fullName}
-                    </td>
-                    {/* Issued by the system; shown read-only so it can never be typed over. */}
-                    <td className="px-8 py-6 font-mono text-sm font-black text-brand-600 dark:text-brand-400">
-                      {item.studentCode || '-'}
-                    </td>
-                    <td className="px-8 py-6 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                      {cls?.name || '-'}
-                    </td>
-                    <td className="px-8 py-6 text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                      ${Number(studentFee).toLocaleString()}
-                    </td>
-                    <td className="px-8 py-6 text-sm font-semibold text-slate-500 dark:text-slate-400">
-                      {guardian ? (
-                        <div>
-                          <span className="font-bold text-slate-900 dark:text-slate-100">{guardian.fullName}</span>
-                          <span className="text-xs text-slate-400 block font-mono">{guardian.phone}{guardian.alternatePhone ? ` / ${guardian.alternatePhone}` : ''} ({guardian.relationship || 'Payer'})</span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 opacity-60">Not Linked</span>
-                      )}
-                    </td>
-                    {/* The date already stored on the record; nothing is generated here. */}
-                    <td className="px-8 py-6 text-sm font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                      {item.registrationDate ? fmtRegDate(item.registrationDate) : <span className="text-slate-400 opacity-60">N/A</span>}
-                    </td>
-                    <td className="px-8 py-6 text-right">
-                      <div className="flex justify-end items-center gap-2">
-                        <button onClick={() => setCardStudent(item)} title="ID Card" className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-emerald-600 transition-all">
-                          <IdCardIcon size={16} />
-                        </button>
-                        <button onClick={() => openEditModal(item)} className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-brand-600 transition-all">
-                          <Edit2 size={16} />
-                        </button>
-                        <button onClick={() => handleDelete(item)} className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-rose-500 transition-all">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filteredData.length === 0 && (
-                <tr>
-                  <td colSpan="7" className="px-8 py-10 text-center text-slate-400 text-sm font-medium">No students found. Click "Add New Student" to register a student.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-black">
+            <DollarSign size={22} />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Wadarta Fiiga (Filtered)</p>
+            <h3 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">${totalMonthlyFee.toLocaleString()}</h3>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
+          <div className="w-12 h-12 rounded-2xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 flex items-center justify-center font-black">
+            <GraduationCap size={22} />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ardayda Muuqata</p>
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{filteredStudentsCount}</h3>
+          </div>
         </div>
       </div>
+
+      {/* Controls & Filter Bar */}
+      <div className="bg-white dark:bg-slate-900 rounded-[28px] p-4 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        <div className="flex flex-1 flex-wrap items-center gap-3">
+          {/* Search Box */}
+          <div className="flex items-center bg-slate-50 dark:bg-slate-800 rounded-2xl px-4 py-2.5 border border-slate-200/80 dark:border-slate-700 flex-1 min-w-[240px] max-w-md focus-within:ring-2 focus-within:ring-brand-500/20 transition-all">
+            <Search size={18} className="text-slate-400 mr-2.5 shrink-0" />
+            <input
+              type="text"
+              placeholder="Raadi arday magac, ID, taleefan, fasal..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400 border-none p-0 focus:ring-0"
+            />
+            {searchTerm && (
+              <button onClick={() => setSearchTerm('')} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Class Filter Dropdown */}
+          <div className="flex items-center bg-slate-50 dark:bg-slate-800 rounded-2xl px-3.5 py-2.5 border border-slate-200/80 dark:border-slate-700 min-w-[210px]">
+            <Filter size={16} className="text-brand-500 mr-2 shrink-0" />
+            <select
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              className="w-full bg-transparent outline-none text-sm font-bold text-slate-800 dark:text-slate-200 border-none p-0 cursor-pointer focus:ring-0"
+            >
+              <option value="ALL">Dhammaan Fasallada ({data.length})</option>
+              {classes.map(c => {
+                const count = classCounts[String(c._id)] || 0;
+                const label = classLabel(c, c.name || c.className || 'Fasal');
+                return (
+                  <option key={c._id} value={c._id}>
+                    {label} ({count} arday)
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        </div>
+
+        {/* View Switcher (Cards vs Table) */}
+        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl shrink-0 self-end md:self-auto">
+          <button
+            onClick={() => { setViewMode('grid'); localStorage.setItem('studentsViewMode', 'grid'); }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              viewMode === 'grid'
+                ? 'bg-white dark:bg-slate-900 text-brand-600 dark:text-brand-400 shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+            }`}
+            title="Kaadhadh (Grid View)"
+          >
+            <LayoutGrid size={16} />
+            <span>Kaadhadh</span>
+          </button>
+          <button
+            onClick={() => { setViewMode('table'); localStorage.setItem('studentsViewMode', 'table'); }}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+              viewMode === 'table'
+                ? 'bg-white dark:bg-slate-900 text-brand-600 dark:text-brand-400 shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+            }`}
+            title="Shax (Table View)"
+          >
+            <List size={16} />
+            <span>Shax</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Quick Class Tabs (Pills) */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
+        <button
+          onClick={() => setSelectedClass('ALL')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${
+            selectedClass === 'ALL'
+              ? 'bg-brand-600 text-white shadow-md shadow-brand-600/25'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200/70 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+          }`}
+        >
+          <span>Dhammaan</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedClass === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
+            {data.length}
+          </span>
+        </button>
+        {classes.map(c => {
+          const count = classCounts[String(c._id)] || 0;
+          const isSelected = String(selectedClass) === String(c._id);
+          const label = classLabel(c, c.name || c.className || 'Fasal');
+          return (
+            <button
+              key={c._id}
+              onClick={() => setSelectedClass(c._id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${
+                isSelected
+                  ? 'bg-brand-600 text-white shadow-md shadow-brand-600/25'
+                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200/70 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+            >
+              <span>{label}</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Main Student Directory Content: Cards (Grid) or Table View */}
+      {viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {filteredData.map(item => {
+            const guardian = item.guardianId && typeof item.guardianId === 'object' ? item.guardianId : null;
+            const cls = item.classId && typeof item.classId === 'object' ? item.classId : classes.find(c => c._id === item.classId);
+            const studentFee = item.monthlyFee !== undefined ? item.monthlyFee : (item.fee || 0);
+
+            return (
+              <div 
+                key={item._id}
+                className="group relative bg-white dark:bg-slate-900 rounded-[30px] p-5 border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-card-hover hover:border-brand-500/30 hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between"
+              >
+                <div>
+                  {/* Top: Avatar, Name & ID */}
+                  <div className="flex items-start gap-3.5 mb-4">
+                    <div className="relative w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-tr from-brand-600 via-brand-500 to-emerald-500 text-white flex items-center justify-center font-black text-base shadow-md shadow-brand-600/20 ring-2 ring-white dark:ring-slate-800">
+                      {(item.fullName || 'A').charAt(0).toUpperCase()}
+                      <span className={`absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase tracking-tighter ${
+                        item.gender === 'Female' ? 'bg-pink-500 text-white' : 'bg-blue-600 text-white'
+                      }`}>
+                        {item.gender === 'Female' ? 'F' : 'M'}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-base font-extrabold text-slate-900 dark:text-white truncate leading-tight group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors" title={item.fullName}>
+                        {item.fullName}
+                      </h4>
+                      <span className="inline-block mt-1 font-mono text-xs font-black text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/40 px-2 py-0.5 rounded-lg border border-brand-500/20">
+                        {item.studentCode || 'No ID'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Details Badges */}
+                  <div className="space-y-2.5 my-3 pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                        <BookOpen size={14} className="text-brand-500" /> Fasalka:
+                      </span>
+                      <span className="font-extrabold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-xl truncate max-w-[150px]">
+                        {cls?.name || cls?.className || '-'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                        <DollarSign size={14} className="text-emerald-500" /> Fiiga Bishii:
+                      </span>
+                      <span className="font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-xl border border-emerald-500/20">
+                        ${Number(studentFee).toLocaleString()}
+                      </span>
+                    </div>
+
+                    {/* Fee Payer Info */}
+                    <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-2.5 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                          <UserIcon size={11} /> Qofka Bixiya:
+                        </span>
+                        <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[130px]">
+                          {guardian?.fullName || item.fatherName || 'Not Linked'}
+                        </span>
+                      </div>
+                      {(guardian?.phone || item.fatherPhone) && (
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
+                          <span className="text-slate-400 font-medium">Taleefan:</span>
+                          <a 
+                            href={`tel:${guardian?.phone || item.fatherPhone}`}
+                            className="font-mono font-bold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
+                          >
+                            <Phone size={11} />
+                            {guardian?.phone || item.fatherPhone}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Actions */}
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                    <Calendar size={12} />
+                    {item.registrationDate ? fmtRegDate(item.registrationDate) : 'N/A'}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button 
+                      onClick={() => setCardStudent(item)} 
+                      title="Daabaco Aqoonsiga (ID Card)" 
+                      className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-900/30 text-slate-600 dark:text-slate-300 hover:text-brand-600 rounded-xl transition-colors"
+                    >
+                      <IdCardIcon size={15} />
+                    </button>
+                    <button 
+                      onClick={() => openEditModal(item)} 
+                      title="Wax ka beddel" 
+                      className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-slate-600 dark:text-slate-300 hover:text-blue-600 rounded-xl transition-colors"
+                    >
+                      <Edit2 size={15} />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(item)} 
+                      title="Tirtir ardayga" 
+                      className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-slate-600 dark:text-slate-300 hover:text-rose-500 rounded-xl transition-colors"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* Modern Table View */
+        <div className="bg-white dark:bg-slate-900 rounded-[36px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50/70 dark:bg-slate-800/40 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
+                  <th className="px-6 py-4">Ardayga (Student)</th>
+                  <th className="px-6 py-4">ID Number</th>
+                  <th className="px-6 py-4">Fasalka (Class)</th>
+                  <th className="px-6 py-4">Fiiga Bishii</th>
+                  <th className="px-6 py-4">Qofka Bixiya (Payer)</th>
+                  <th className="px-6 py-4">Diiwaangelinta</th>
+                  <th className="px-6 py-4 text-right">Waxqabadka</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredData.map((item) => {
+                  const guardian = item.guardianId && typeof item.guardianId === 'object' ? item.guardianId : null;
+                  const cls = item.classId && typeof item.classId === 'object' ? item.classId : classes.find(c => c._id === item.classId);
+                  const studentFee = item.monthlyFee !== undefined ? item.monthlyFee : (item.fee || 0);
+
+                  return (
+                    <tr key={item._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-500 text-white flex items-center justify-center font-extrabold text-xs shrink-0 shadow-sm">
+                            {(item.fullName || 'A').charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-sm text-slate-900 dark:text-white block">{item.fullName}</span>
+                            <span className="text-[10px] text-slate-400 font-semibold uppercase">{item.gender || 'Male'}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 font-mono text-xs font-black text-brand-600 dark:text-brand-400">
+                        {item.studentCode || '-'}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="inline-block px-2.5 py-1 rounded-xl text-xs font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                          {cls?.name || cls?.className || '-'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                        ${Number(studentFee).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                        {guardian ? (
+                          <div>
+                            <span className="font-bold text-slate-900 dark:text-white block">{guardian.fullName}</span>
+                            <span className="text-slate-400 text-[11px] font-mono">{guardian.phone}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">{item.fatherName || 'Not Linked'}</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        {item.registrationDate ? fmtRegDate(item.registrationDate) : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex justify-end items-center gap-1.5">
+                          <button onClick={() => setCardStudent(item)} title="ID Card" className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-brand-600 transition-colors">
+                            <IdCardIcon size={15} />
+                          </button>
+                          <button onClick={() => openEditModal(item)} title="Edit" className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-blue-600 transition-colors">
+                            <Edit2 size={15} />
+                          </button>
+                          <button onClick={() => handleDelete(item)} title="Delete" className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-rose-500 transition-colors">
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {filteredData.length === 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-[36px] border border-slate-100 dark:border-slate-800 p-12 text-center shadow-sm">
+          <div className="w-16 h-16 rounded-3xl bg-slate-100 dark:bg-slate-800 text-slate-400 mx-auto flex items-center justify-center mb-4">
+            <Users size={32} />
+          </div>
+          <h3 className="text-lg font-black text-slate-900 dark:text-white">Arday lama helin</h3>
+          <p className="text-slate-400 text-sm mt-1 max-w-sm mx-auto">
+            {searchTerm || selectedClass !== 'ALL'
+              ? 'Wax arday ah kuma jiraan shuruudaha aad dooratay. Isku day inaad fasal kale doorato ama raadinta tirtirto.'
+              : 'Wali wax arday ah kuma jiraan nidaamka. Guji "Add New Student" si aad arday cusub u diiwaangeliso.'}
+          </p>
+          {(searchTerm || selectedClass !== 'ALL') ? (
+            <button
+              onClick={() => { setSearchTerm(''); setSelectedClass('ALL'); }}
+              className="mt-5 px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-brand-600/20"
+            >
+              Nadiifi Shaandheynta (Reset Filters)
+            </button>
+          ) : (
+            <button
+              onClick={openAddModal}
+              className="mt-5 px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-brand-600/20"
+            >
+              + Diiwaangeli Arday Cusub
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Modal Overlay */}
       {isModalOpen && (
