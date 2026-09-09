@@ -80,19 +80,43 @@
 
 @layer components {
   .premium-card {
-    @apply rounded-3xl border border-white/80 bg-white/95 shadow-[0_18px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800/80 dark:bg-slate-900/90 dark:shadow-black/20;
+    @apply rounded-3xl border border-white/80 bg-white/95 shadow-[0_18px_60px_rgba(15,23,42,0.06)] backdrop-blur-xl transition-all duration-300 hover:shadow-[0_22px_70px_rgba(15,23,42,0.10)] dark:border-slate-800/80 dark:bg-slate-900/90 dark:shadow-black/25 dark:hover:border-slate-700/80;
+  }
+
+  .glass-panel {
+    @apply rounded-3xl border border-white/40 bg-white/75 backdrop-blur-2xl shadow-glass transition-all duration-300 dark:border-white/10 dark:bg-slate-900/70 dark:shadow-black/40;
+  }
+
+  .glass-card-interactive {
+    @apply rounded-3xl border border-slate-200/60 bg-white/90 backdrop-blur-xl shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover hover:border-brand-500/30 dark:border-slate-800/80 dark:bg-slate-900/80 dark:hover:border-brand-500/40;
+  }
+
+  .metric-card {
+    @apply relative overflow-hidden rounded-3xl border border-slate-100/80 bg-white p-6 shadow-[0_10px_30px_-5px_rgba(0,0,0,0.04)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-slate-200 dark:border-slate-800 dark:bg-slate-900/90 dark:hover:border-slate-700;
   }
 
   .premium-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-slate-900/10 transition-all hover:-translate-y-0.5 hover:bg-slate-800 active:translate-y-0 dark:bg-white dark:text-slate-950;
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-slate-900/10 transition-all duration-200 hover:-translate-y-0.5 hover:bg-slate-800 active:translate-y-0 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100;
   }
 
   .premium-button-primary {
-    @apply bg-gradient-to-r from-emerald-500 via-blue-600 to-violet-600 text-white shadow-blue-600/20 hover:shadow-xl hover:shadow-blue-600/25 dark:text-white;
+    @apply bg-gradient-to-r from-brand-600 via-brand-500 to-emerald-600 text-white shadow-lg shadow-brand-600/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-brand-600/35 active:translate-y-0;
   }
 
   .status-pill {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-black uppercase tracking-wider;
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider;
+  }
+
+  .pulse-dot {
+    @apply relative flex h-2 w-2;
+  }
+
+  .pulse-dot span:first-child {
+    @apply absolute inline-flex h-full w-full animate-ping rounded-full opacity-75;
+  }
+
+  .pulse-dot span:last-child {
+    @apply relative inline-flex h-2 w-2 rounded-full;
   }
 }
 

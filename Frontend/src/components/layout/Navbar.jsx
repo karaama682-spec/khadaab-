@@ -31,9 +31,9 @@ const Navbar = ({
   const notificationsRef = useRef(null);
 
   const notifications = [
-    { title: 'Low stock alert', detail: 'Several products are below minimum stock.', time: 'Now', tone: 'bg-amber-500' },
-    { title: 'Receiving updated', detail: 'Latest receiving quantities are available.', time: '12m', tone: 'bg-emerald-500' },
-    { title: 'Dispatch queue', detail: 'Pending dispatches need review today.', time: '1h', tone: 'bg-blue-500' },
+    { title: 'Diiwaangelin Cusub', detail: 'Arday cusub ayaa is-diiwaangeliyay nidaamka.', time: 'Hadda', tone: 'bg-emerald-500' },
+    { title: 'Kharash & Lacag-bixin', detail: 'Fiiga waxbarashada bishan ayaa la diiwaangeliyay.', time: '12m', tone: 'bg-brand-500' },
+    { title: 'Jadwalka Fasallada', detail: 'Jadwalka cusub ee waxbarashada waa la cusbooneysiiyay.', time: '1h', tone: 'bg-blue-500' },
   ];
 
   const goTo = (path) => {

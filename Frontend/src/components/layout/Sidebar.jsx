@@ -118,28 +118,34 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
   const roleLabel = user?.roles?.[0]?.name || userRole || 'Super Admin';
 
   const SidebarContent = () => (
-    <div className="flex flex-col h-full bg-[#071124] text-slate-300">
-      <div className="p-5 flex items-center gap-3 border-b border-white/10">
-        <div className="w-12 h-12 bg-gradient-to-tr from-[#0B1E3F] via-[#1E7A3C] to-[#B8860B] rounded-2xl flex items-center justify-center font-black text-white shadow-xl shadow-emerald-900/30 overflow-hidden shrink-0 ring-1 ring-white/20">
+    <div className="flex flex-col h-full bg-[#080E1A] text-slate-300 relative overflow-hidden">
+      {/* Ambient background glow */}
+      <div className="pointer-events-none absolute -top-24 -left-24 h-56 w-56 rounded-full bg-brand-500/10 blur-3xl" />
+      <div className="pointer-events-none absolute top-1/2 -right-24 h-48 w-48 rounded-full bg-emerald-500/5 blur-3xl" />
+
+      {/* Brand Header */}
+      <div className="p-5 flex items-center gap-3.5 border-b border-white/10 relative z-10 backdrop-blur-md">
+        <div className="w-11 h-11 bg-gradient-to-tr from-brand-700 via-brand-600 to-emerald-500 rounded-2xl flex items-center justify-center font-black text-white shadow-xl shadow-brand-950/50 overflow-hidden shrink-0 ring-1 ring-white/25">
           {tenantInfo.logo ? (
             <img src={tenantInfo.logo} alt="Logo" className="w-full h-full object-cover" />
           ) : (
-            <span className="text-xl">{(tenantInfo.name || 'I').charAt(0).toUpperCase()}</span>
+            <span className="text-lg tracking-tight">{(tenantInfo.name || 'I').charAt(0).toUpperCase()}</span>
           )}
         </div>
         <div className="overflow-hidden min-w-0">
-          <span className="text-base font-black text-white tracking-tight block truncate" title={tenantInfo.name || 'Cumar Binu Khadhaab'}>{tenantInfo.name || 'Cumar Binu Khadhaab'}</span>
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-300">{tenantInfo.systemSubtitle || t('instituteManagement')}</span>
+          <span className="text-sm font-black text-white tracking-tight block truncate" title={tenantInfo.name || 'Cumar Binu Khadhaab'}>{tenantInfo.name || 'Cumar Binu Khadhaab'}</span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-400 block truncate">{tenantInfo.systemSubtitle || t('instituteManagement')}</span>
         </div>
       </div>
 
-      <nav ref={navRef} className="flex-1 overflow-y-auto py-5 px-3 space-y-1.5 custom-scrollbar">
+      {/* Navigation Links */}
+      <nav ref={navRef} className="flex-1 overflow-y-auto py-5 px-3 space-y-1 custom-scrollbar relative z-10">
         {filteredNav.map((item) => {
           const isExpanded = expandedItems.includes(item.label);
           const active = isParentActive(item);
 
           return (
-            <div key={item.label} className="space-y-1">
+            <div key={item.label} className="space-y-0.5">
               <button
                 ref={(el) => itemRefs.current[item.label] = el}
                 onClick={() => {
@@ -150,28 +156,28 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
                     setIsMobileOpen(false);
                   }
                 }}
-                className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all duration-200 group relative overflow-hidden ${active
-                  ? 'bg-gradient-to-r from-[#155C2E] via-[#1E7A3C] to-[#B8860B] text-white shadow-xl shadow-emerald-950/40 ring-1 ring-white/15'
-                  : 'text-slate-400 hover:bg-white/7 hover:text-slate-100'
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl transition-all duration-200 group relative overflow-hidden ${active
+                  ? 'bg-gradient-to-r from-brand-600 via-brand-500 to-emerald-600 text-white shadow-lg shadow-brand-900/40 ring-1 ring-white/20 font-bold'
+                  : 'text-slate-400 hover:bg-white/6 hover:text-slate-100 font-medium'
                   }`}
               >
-                <div className="flex items-center gap-3 relative z-10">
-                  <div className={`transition-colors duration-200 ${active ? 'text-white' : 'text-slate-500 group-hover:text-emerald-300'}`}>
-                    {React.createElement(item.icon, { size: 20 })}
+                <div className="flex items-center gap-3 relative z-10 min-w-0">
+                  <div className={`transition-transform duration-200 group-hover:scale-110 ${active ? 'text-white' : 'text-slate-400 group-hover:text-emerald-400'}`}>
+                    {React.createElement(item.icon, { size: 19 })}
                   </div>
-                  <span className="text-sm font-bold transition-colors duration-200">
+                  <span className="text-sm tracking-tight truncate">
                     {t(item.translationKey) || item.label}
                   </span>
                 </div>
                 {item.subItems && item.subItems.length > 0 && (
                   <div className={`transition-transform duration-200 relative z-10 ${isExpanded ? 'rotate-180' : ''}`}>
-                    <ChevronDown size={14} className={active ? 'text-white' : 'text-slate-500'} />
+                    <ChevronDown size={14} className={active ? 'text-white' : 'text-slate-400'} />
                   </div>
                 )}
               </button>
 
               {item.subItems && item.subItems.length > 0 && isExpanded && (
-                <div className={`mt-1 space-y-1`}>
+                <div className="mt-1 ml-4 pl-3 border-l border-white/10 space-y-1">
                   {item.subItems.map(sub => {
                     const subActive = isActive(sub.path);
                     return (
@@ -181,15 +187,15 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
                           onNavigate(sub.path);
                           setIsMobileOpen(false);
                         }}
-                        className={`w-full flex items-center gap-3 p-2.5 pl-3 rounded-xl text-xs font-bold transition-all duration-200 group ${subActive
-                          ? 'bg-white/12 text-white ring-1 ring-white/10'
-                          : 'text-slate-500 hover:text-slate-100 hover:bg-white/7'
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-200 group ${subActive
+                          ? 'bg-white/15 text-white ring-1 ring-white/15 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-100 hover:bg-white/6'
                           }`}
                       >
-                        <div className={`w-5 flex justify-center transition-colors ${subActive ? 'text-emerald-300' : 'text-slate-600 group-hover:text-emerald-300'}`}>
-                          {React.createElement(sub.icon, { size: 16 })}
+                        <div className={`transition-colors ${subActive ? 'text-emerald-300' : 'text-slate-500 group-hover:text-emerald-300'}`}>
+                          {React.createElement(sub.icon, { size: 15 })}
                         </div>
-                        {t(sub.translationKey) || sub.label}
+                        <span className="truncate">{t(sub.translationKey) || sub.label}</span>
                       </button>
                     );
                   })}
@@ -200,24 +206,25 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
         })}
       </nav>
 
-      <div className="p-4 border-t border-white/10 bg-[#071124]/80 backdrop-blur-md">
-        <div className="mb-3 flex items-center gap-3 rounded-2xl bg-white/7 p-3 ring-1 ring-white/10">
-          <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[#1E7A3C] to-[#B8860B] text-sm font-black text-white">
+      {/* User Card & Logout Footer */}
+      <div className="p-4 border-t border-white/10 bg-[#080E1A]/90 backdrop-blur-md relative z-10">
+        <div className="mb-2.5 flex items-center gap-3 rounded-2xl bg-white/6 p-2.5 ring-1 ring-white/10 hover:bg-white/10 transition-colors">
+          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-600 to-emerald-500 text-xs font-black text-white shadow-md shadow-brand-900/30">
             {(user?.username || user?.fullName || user?.email || 'A').charAt(0).toUpperCase()}
-            <span className="absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-[#071124] bg-emerald-400" />
+            <span className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#080E1A] bg-emerald-400" />
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-black text-white">{user?.username || user?.fullName || 'Admin'}</p>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-black text-white">{user?.username || user?.fullName || 'Admin'}</p>
             <p className="truncate text-[10px] font-bold uppercase tracking-wider text-slate-400">{roleLabel}</p>
           </div>
         </div>
         <button
           onClick={onLogout}
-          className="w-full flex items-center gap-3 p-3 rounded-2xl text-slate-400 hover:bg-rose-500/10 hover:text-rose-300 transition-all duration-200 group">
-          <div className="p-1.5 rounded-xl bg-white/7 group-hover:bg-rose-500/20 transition-colors">
-            <LogOut size={18} />
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-400 hover:bg-rose-500/15 hover:text-rose-300 transition-all duration-200 group">
+          <div className="p-1 rounded-lg bg-white/6 group-hover:bg-rose-500/20 transition-colors">
+            <LogOut size={15} />
           </div>
-          <span className="text-sm font-bold">{t('logout')}</span>
+          <span>{t('logout')}</span>
         </button>
       </div>
     </div>
@@ -225,7 +232,7 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
 
   return (
     <>
-      <aside className="hidden lg:block w-64 h-screen sticky top-0 bg-[#071124] overflow-hidden border-r border-white/10">
+      <aside className="hidden lg:block w-64 h-screen sticky top-0 bg-[#080E1A] overflow-hidden border-r border-white/10">
         <SidebarContent />
       </aside>
 

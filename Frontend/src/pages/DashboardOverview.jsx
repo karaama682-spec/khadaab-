@@ -77,24 +77,38 @@ const DashboardOverview = () => {
         : [];
 
     return (
-        <div className="mx-auto max-w-[1800px] space-y-7 p-4 pb-12 md:p-8">
-            <section className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-brand-600 via-purple-600 to-blue-700 p-6 text-white shadow-2xl shadow-brand-900/20 md:p-8">
-                <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(30deg, rgba(255,255,255,.18) 12%, transparent 12.5%, transparent 87%, rgba(255,255,255,.18) 87.5%, rgba(255,255,255,.18)), linear-gradient(150deg, rgba(255,255,255,.18) 12%, transparent 12.5%, transparent 87%, rgba(255,255,255,.18) 87.5%, rgba(255,255,255,.18))', backgroundSize: '56px 96px' }} />
-                <div className="relative grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="mx-auto max-w-[1800px] space-y-7 p-4 pb-12 md:p-8 animate-in fade-in duration-500">
+            {/* Hero Welcome Banner */}
+            <section className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-brand-700 via-brand-600 to-emerald-700 p-7 text-white shadow-2xl shadow-brand-900/25 md:p-10 border border-white/15">
+                {/* Luminous ambient background lighting */}
+                <div className="pointer-events-none absolute -top-32 -left-32 h-80 w-80 rounded-full bg-white/15 blur-3xl" />
+                <div className="pointer-events-none absolute -bottom-32 -right-32 h-80 w-80 rounded-full bg-emerald-400/20 blur-3xl" />
+                
+                <div className="relative z-10 grid gap-8 xl:grid-cols-[1.2fr_0.8fr] items-center">
                     <div>
-                        <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-xs font-black uppercase tracking-wider ring-1 ring-white/20">
-                            <ShieldCheck size={15} /> Institute System Active
+                        <div className="mb-5 inline-flex items-center gap-2.5 rounded-full bg-white/15 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider ring-1 ring-white/25 backdrop-blur-md">
+                            <span className="relative flex h-2 w-2">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-300" />
+                            </span>
+                            <ShieldCheck size={15} /> Nidaamka Machadka Waa Firfircoon yahay
                         </div>
-                        <h1 className="text-3xl font-black tracking-tight md:text-5xl">Welcome back, Admin!</h1>
-                        <p className="mt-3 max-w-2xl text-sm font-medium text-white/80 md:text-base">Here is your Institute performance overview for today.</p>
+                        <h1 className="text-3xl font-extrabold tracking-tight md:text-5xl text-white">
+                            Ku soo dhowow, Maamul!
+                        </h1>
+                        <p className="mt-3 max-w-2xl text-sm font-medium text-white/85 md:text-base leading-relaxed">
+                            Halkan waxaad ka arki kartaa xogta guud ee ardayda, fasallada, iyo dhaqdhaqaaqa maaliyadeed ee machadka maanta.
+                        </p>
                         <div className="mt-6 flex flex-wrap gap-3">
-                            <div className="rounded-2xl bg-white/15 px-4 py-3 ring-1 ring-white/20 backdrop-blur">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-white/60">Today</p>
-                                <p className="text-sm font-black">{today.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                            <div className="rounded-2xl bg-white/12 px-4 py-3 ring-1 ring-white/20 backdrop-blur-md">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">Taariikhda Maanta</p>
+                                <p className="text-sm font-extrabold text-white mt-0.5">{today.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</p>
                             </div>
-                            <div className="rounded-2xl bg-white/15 px-4 py-3 ring-1 ring-white/20 backdrop-blur">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-white/60">Status</p>
-                                <p className="text-sm font-black">Classes Operational</p>
+                            <div className="rounded-2xl bg-white/12 px-4 py-3 ring-1 ring-white/20 backdrop-blur-md">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">Xaaladda Nidaamka</p>
+                                <p className="text-sm font-extrabold text-white mt-0.5 flex items-center gap-1.5">
+                                    <span className="h-2 w-2 rounded-full bg-emerald-400" /> Fasalladu Waa Diyaar
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -103,13 +117,13 @@ const DashboardOverview = () => {
                             <button
                                 key={action.title}
                                 onClick={() => navigate(action.path)}
-                                className="group rounded-3xl bg-white/15 p-4 text-left ring-1 ring-white/20 backdrop-blur transition-all hover:-translate-y-1 hover:bg-white/25"
+                                className="group rounded-3xl bg-white/12 p-4 text-left ring-1 ring-white/20 backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:bg-white/20 hover:shadow-xl active:translate-y-0"
                             >
-                                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-brand-700 shadow-lg">
+                                <div className="mb-3.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-brand-700 shadow-lg shadow-black/10 group-hover:scale-110 group-hover:shadow-brand-900/20 transition-all duration-300">
                                     {React.createElement(action.icon, { size: 20 })}
                                 </div>
-                                <p className="font-black">{action.title}</p>
-                                <p className="text-xs font-semibold text-white/70">{action.subtitle}</p>
+                                <p className="font-extrabold text-white tracking-tight">{action.title}</p>
+                                <p className="text-xs font-medium text-white/75 mt-0.5">{action.subtitle}</p>
                             </button>
                         ))}
                     </div>

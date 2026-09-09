@@ -143,20 +143,25 @@ const Login = ({ onLogin }) => {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 p-4">
-      <section className="w-full max-w-md rounded-[32px] border border-white/10 bg-white p-8 shadow-2xl shadow-black/30 dark:bg-slate-900 md:p-10">
+    <main className="relative flex min-h-screen items-center justify-center bg-[#070D18] p-4 overflow-hidden">
+      {/* Ambient background light glows */}
+      <div className="pointer-events-none absolute -top-40 -left-40 h-[28rem] w-[28rem] rounded-full bg-brand-500/20 blur-[130px]" />
+      <div className="pointer-events-none absolute -bottom-40 -right-40 h-[28rem] w-[28rem] rounded-full bg-emerald-500/15 blur-[130px]" />
+      <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-64 w-64 rounded-full bg-blue-600/10 blur-[100px]" />
+
+      <section className="relative z-10 w-full max-w-md rounded-[36px] border border-white/20 bg-white/95 p-8 shadow-[0_30px_90px_rgba(0,0,0,0.45)] backdrop-blur-2xl dark:border-white/10 dark:bg-slate-900/90 md:p-10 transition-all duration-300">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-brand-600 text-white shadow-lg shadow-brand-600/30">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-tr from-brand-600 to-emerald-500 text-white shadow-xl shadow-brand-500/30 ring-4 ring-brand-500/20">
             {tenantBranding?.logo ? (
               <img src={tenantBranding.logo} alt="Logo" className="h-full w-full object-cover" />
             ) : (
               <GraduationCap size={32} />
             )}
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             {tenantBranding?.name || 'Cumar Binu Khadhaab'}
           </h1>
-          <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+          <p className="mt-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
             {tenantBranding?.systemSubtitle || 'Ku soo dhowow nidaamka maamulka machadka'}
           </p>
         </div>
@@ -308,10 +313,13 @@ const Login = ({ onLogin }) => {
           <button
             type="submit"
             disabled={isLoading}
-            className="group mt-2 w-full rounded-2xl bg-brand-600 py-3.5 text-sm font-black text-white shadow-lg shadow-brand-600/30 transition hover:bg-brand-700 disabled:opacity-70"
+            className="group mt-3 w-full rounded-2xl bg-gradient-to-r from-brand-600 via-brand-500 to-emerald-600 py-3.5 text-sm font-extrabold text-white shadow-xl shadow-brand-600/30 transition-all duration-200 hover:shadow-2xl hover:shadow-brand-600/40 hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-70 cursor-pointer"
           >
             {isLoading ? (
-              'Fadlan sug…'
+              <span className="flex items-center justify-center gap-2">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                Fadlan sug…
+              </span>
             ) : isRegister ? (
               <span className="flex items-center justify-center gap-2">
                 Abuur Akoonka oo Soo Gal <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
