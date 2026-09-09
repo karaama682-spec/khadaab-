@@ -32,9 +32,50 @@ api.interceptors.request.use(
     }
 );
 
-// Response interceptor to handle 401 (unauthorized)
+// In-memory cache for GET requests to make page switching instant (0ms)
+const getCache = new Map();
+const CACHE_TTL_MS = 45 * 1000; // 45 seconds
+
+export const clearApiCache = () => {
+    getCache.clear();
+};
+
+const originalGet = api.get.bind(api);
+api.get = async function (url, config = {}) {
+    if (config?.skipCache) {
+        return originalGet(url, config);
+    }
+    const cacheKey = `${url}?${JSON.stringify(config?.params || '')}`;
+    const cached = getCache.get(cacheKey);
+    const now = Date.now();
+
+    if (cached && (now - cached.timestamp < CACHE_TTL_MS)) {
+        return Promise.resolve({
+            ...cached.response,
+            data: JSON.parse(JSON.stringify(cached.response.data))
+        });
+    }
+
+    const response = await originalGet(url, config);
+    if (response && response.status >= 200 && response.status < 300) {
+        getCache.set(cacheKey, {
+            timestamp: Date.now(),
+            response
+        });
+    }
+    return response;
+};
+
+// Response interceptor to handle 401 and auto-invalidate cache on mutations
 api.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        const method = (response?.config?.method || 'get').toLowerCase();
+        if (method !== 'get') {
+            // Any mutation (add student, pay fees, update class) clears cache so views are always fresh
+            getCache.clear();
+        }
+        return response;
+    },
     (error) => {
         if (error.response && error.response.status === 401) {
             console.error('Unauthorized access:', error.response.data);
@@ -48,6 +89,7 @@ api.interceptors.response.use(
             ) {
                 sessionStorage.removeItem('userInfo');
                 localStorage.removeItem('userInfo');
+                getCache.clear();
                 window.dispatchEvent(new Event('auth:unauthorized'));
             }
         }
