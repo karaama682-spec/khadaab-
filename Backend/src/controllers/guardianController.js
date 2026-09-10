@@ -1,5 +1,6 @@
 const asyncHandler = require('../middleware/asyncHandler');
 const Guardian = require('../models/Guardian');
+const Student = require('../models/Student');
 const { phoneVariants, digitsOnly } = require('../utils/somaliPhone');
 
 const getGuardians = asyncHandler(async (req, res) => {
@@ -69,10 +70,28 @@ const createGuardian = asyncHandler(async (req, res) => {
 
     const existingGuardian = await Guardian.findOne({ $or: queryConditions });
     if (existingGuardian) {
-        // If the existing guardian doesn't have an alternatePhone yet but one is supplied now, save it
-        if (!existingGuardian.alternatePhone && normalizedAltPhone) {
+        let updated = false;
+        const newName = (req.body.fullName || '').trim();
+        if (newName && newName !== 'Fee Payer' && newName !== existingGuardian.fullName) {
+            existingGuardian.fullName = newName;
+            updated = true;
+        }
+        if (req.body.relationship && req.body.relationship !== existingGuardian.relationship) {
+            existingGuardian.relationship = req.body.relationship;
+            updated = true;
+        }
+        if (normalizedAltPhone && normalizedAltPhone !== existingGuardian.alternatePhone) {
             existingGuardian.alternatePhone = digitsOnly(normalizedAltPhone) || normalizedAltPhone;
+            updated = true;
+        }
+        if (updated) {
             await existingGuardian.save();
+            if (newName && newName !== 'Fee Payer') {
+                await Student.updateMany(
+                    { guardianId: existingGuardian._id },
+                    { fatherName: newName }
+                );
+            }
         }
         res.status(200).json(existingGuardian);
         return;
@@ -118,6 +137,13 @@ const updateGuardian = asyncHandler(async (req, res) => {
         { new: true }
     );
     if (data) {
+        const newName = (req.body.fullName || '').trim();
+        if (newName && newName !== 'Fee Payer') {
+            await Student.updateMany(
+                { guardianId: data._id },
+                { fatherName: newName }
+            );
+        }
         res.json(data);
     } else {
         res.status(404);

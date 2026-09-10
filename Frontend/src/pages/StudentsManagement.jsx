@@ -701,8 +701,8 @@ const StudentsManagement = () => {
         gender: formData.gender,
         monthlyFee: Number(formData.monthlyFee) || 0,
         fee: Number(formData.monthlyFee) || 0,
-        fatherName: formData.fatherName || formData.guardianName || '',
-        fatherPhone: formData.fatherPhone || formData.guardianPhone || '',
+        fatherName: formData.guardianName || formData.fatherName || '',
+        fatherPhone: formData.guardianPhone || formData.fatherPhone || '',
         guardianId: guardianId || undefined,
         // Sent only when the field holds a date, so clearing the input can never
         // blank a registration date already stored against the student.
