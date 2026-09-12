@@ -45,6 +45,46 @@ const emptyCategoryForm = () => ({
   description: ''
 });
 
+const getMonthOptions = () => {
+  const options = [];
+  const now = new Date();
+  const currentY = now.getFullYear();
+  const currentM = now.getMonth();
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  for (let i = 0; i <= 6; i++) {
+    const d = new Date(Date.UTC(currentY, currentM + i, 1));
+    const ym = d.toISOString().slice(0, 7);
+    const mName = monthNames[d.getUTCMonth()];
+    const yr = d.getUTCFullYear();
+    let label = `${mName} ${yr}`;
+    if (i === 0) {
+      label += ' (Bisha Hadda)';
+    } else {
+      label += ' (Hormarin / Advance)';
+    }
+    options.push({ value: ym, label, monthName: mName, year: yr, isAdvance: i > 0 });
+  }
+  return options;
+};
+
+const getPayerMonthLabel = (baseYm, offset = 0) => {
+  const [y, m] = (baseYm || new Date().toISOString().slice(0, 7)).split('-').map(Number);
+  const d = new Date(Date.UTC(y, (m - 1) + offset, 1));
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  return {
+    name: monthNames[d.getUTCMonth()],
+    year: d.getUTCFullYear(),
+    ym: d.toISOString().slice(0, 7)
+  };
+};
+
 const emptyTransactionForm = () => ({
   type: 'Income',
   categoryId: '',
@@ -60,6 +100,7 @@ const emptyTransactionForm = () => ({
   receiverEntityType: '',
   receiverEntityId: '',
   date: new Date().toISOString().split('T')[0],
+  targetMonth: new Date().toISOString().slice(0, 7),
   description: ''
 });
 
@@ -85,24 +126,34 @@ const CashbookManagement = () => {
   const [dateTo, setDateTo] = useState('');
   const [senderLocked, setSenderLocked] = useState(false);
   const [receiverLocked, setReceiverLocked] = useState(false);
-  const [walletDirection, setWalletDirection] = useState('neutral');
+  const [walletDirection, setWalletDirection] = useState('receiver');
   const [payerInfo, setPayerInfo] = useState(null);
   const [monthsToPay, setMonthsToPay] = useState(1);
 
-  // The most a responsible payer may pay: the current month's outstanding balance
-  // plus a full monthly fee for each additional month being pre-paid.
+  // The most a responsible payer may pay: the current month's outstanding balance,
+  // or the advance fee for the selected advance month(s).
   const maxPayable = (payerInfo && payerInfo.kind === 'responsible')
-    ? Number(payerInfo.totalBalance || 0) + Number(payerInfo.totalMonthlyFee || 0) * Math.max(0, monthsToPay - 1)
+    ? (monthsToPay === 1
+        ? Number(payerInfo.totalBalance || 0)
+        : Number(payerInfo.totalMonthlyFee || 0) * (monthsToPay - 1))
     : null;
 
-  // When the number of pre-paid months changes, re-fill the amount with the new cap.
+  const currentMonthStr = new Date().toISOString().slice(0, 7);
+  const monthOptions = getMonthOptions();
+
+  // When the number of pre-paid months changes, re-fill the amount with the target month(s) amount.
   useEffect(() => {
     if (payerInfo && payerInfo.kind === 'responsible') {
-      const max = Number(payerInfo.totalBalance || 0) + Number(payerInfo.totalMonthlyFee || 0) * Math.max(0, monthsToPay - 1);
-      setTransactionForm((prev) => ({ ...prev, amount: max }));
+      const targetAmount = monthsToPay === 1
+        ? Number(payerInfo.totalBalance || 0)
+        : Number(payerInfo.totalMonthlyFee || 0) * (monthsToPay - 1);
+      setTransactionForm((prev) => ({ ...prev, amount: targetAmount }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monthsToPay]);
+
+  const isInstituteAccount = (phone, list = wallets) =>
+    (list || []).some((w) => w.accountNumber && (w.accountNumber === phone || digitsOnly(w.accountNumber) === digitsOnly(phone)));
 
   const fetchAll = async () => {
     try {
@@ -119,7 +170,7 @@ const CashbookManagement = () => {
       const walletList = walletRes.data || [];
       setWallets(walletList);
 
-      // Build the type-and-select payer list (guardians + students' fathers), unique by number.
+      // Build the type-and-select payer list (guardians + students' fathers + contacts), unique by number.
       const optMap = new Map();
       (guardRes.data?.guardians || guardRes.data || []).forEach((g) => {
         const ph = digitsOnly(g.phone);
@@ -129,11 +180,34 @@ const CashbookManagement = () => {
         const ph = digitsOnly(s.fatherPhone);
         if (ph && !optMap.has(ph)) optMap.set(ph, s.fatherName || '');
       });
+      (entryRes.data || []).forEach((e) => {
+        const sp = digitsOnly(e.senderPhone);
+        if (sp && !optMap.has(sp) && !isInstituteAccount(sp, walletList)) {
+          optMap.set(sp, e.senderName || e.payerName || '');
+        }
+        const rp = digitsOnly(e.receiverPhone);
+        if (rp && !optMap.has(rp) && !isInstituteAccount(rp, walletList)) {
+          optMap.set(rp, e.receiverName || '');
+        }
+      });
       setPayerOptions([...optMap.entries()].map(([phone, name]) => ({ phone, name })));
       // Default the form to the first active wallet if none picked yet.
       const firstWallet = walletList.find((w) => w.status !== 'Disabled') || walletList[0];
       if (firstWallet) {
-        setTransactionForm((prev) => (prev.walletId ? prev : { ...prev, walletId: firstWallet._id }));
+        setTransactionForm((prev) => {
+          if (prev.walletId) return prev;
+          const isExp = prev.type === 'Expense';
+          return {
+            ...prev,
+            walletId: firstWallet._id,
+            senderPhone: isExp ? (firstWallet.accountNumber || '') : prev.senderPhone,
+            senderName: isExp ? (firstWallet.name || '') : prev.senderName,
+            receiverPhone: !isExp ? (firstWallet.accountNumber || '') : prev.receiverPhone,
+            receiverName: !isExp ? (firstWallet.name || '') : prev.receiverName,
+            receiverEntityType: !isExp ? 'manual' : prev.receiverEntityType,
+            senderEntityType: isExp ? 'manual' : prev.senderEntityType
+          };
+        });
       }
     } catch (error) {
       console.error('Failed to load cashbook', error);
@@ -147,61 +221,71 @@ const CashbookManagement = () => {
     fetchAll();
   }, []);
 
-  // Handle explicit direction selection: neutral (unassigned), sender (outgoing), receiver (incoming)
-  const handleDirectionChange = (newDirection) => {
-    setWalletDirection(newDirection);
-    const selectedWallet = wallets.find((w) => w._id === transactionForm.walletId);
+  // Synchronize Type and Wallet Direction:
+  // Type === 'Expense' <=> Wallet Direction === 'sender'
+  // Type === 'Income' <=> Wallet Direction === 'receiver'
+  const applyTypeAndDirection = (newType, newDirection, targetWalletId) => {
+    const type = newType || (newDirection === 'sender' ? 'Expense' : 'Income');
+    const direction = newDirection || (type === 'Expense' ? 'sender' : 'receiver');
+    setWalletDirection(direction);
 
-    if (newDirection === 'sender') {
-      setTransactionForm((prev) => ({
-        ...prev,
-        senderPhone: selectedWallet?.accountNumber || prev.senderPhone || '',
-        senderName: selectedWallet?.name || prev.senderName || '',
-        senderEntityType: 'manual',
-        senderEntityId: '',
-        receiverPhone: walletDirection === 'receiver' ? '' : prev.receiverPhone,
-        receiverName: walletDirection === 'receiver' ? '' : prev.receiverName,
-        receiverEntityType: walletDirection === 'receiver' ? '' : prev.receiverEntityType,
-        receiverEntityId: walletDirection === 'receiver' ? '' : prev.receiverEntityId
-      }));
+    const wId = targetWalletId !== undefined ? targetWalletId : transactionForm.walletId;
+    const selectedWallet = wallets.find((w) => w._id === wId) || wallets.find((w) => w.status !== 'Disabled') || wallets[0];
+
+    setTransactionForm((prev) => {
+      const typeChanged = prev.type !== type;
+      const nextCategoryId = typeChanged ? '' : prev.categoryId;
+
+      if (direction === 'sender') {
+        const clearReceiver = isInstituteAccount(prev.receiverPhone);
+        return {
+          ...prev,
+          type,
+          categoryId: nextCategoryId,
+          walletId: wId !== undefined ? wId : prev.walletId,
+          senderPhone: selectedWallet?.accountNumber || '',
+          senderName: selectedWallet?.name || '',
+          senderEntityType: 'manual',
+          senderEntityId: '',
+          receiverPhone: clearReceiver ? '' : prev.receiverPhone,
+          receiverName: clearReceiver ? '' : prev.receiverName,
+          receiverEntityType: clearReceiver ? '' : prev.receiverEntityType,
+          receiverEntityId: clearReceiver ? '' : prev.receiverEntityId
+        };
+      } else {
+        const clearSender = isInstituteAccount(prev.senderPhone);
+        return {
+          ...prev,
+          type,
+          categoryId: nextCategoryId,
+          walletId: wId !== undefined ? wId : prev.walletId,
+          receiverPhone: selectedWallet?.accountNumber || '',
+          receiverName: selectedWallet?.name || '',
+          receiverEntityType: 'manual',
+          receiverEntityId: '',
+          senderPhone: clearSender ? '' : prev.senderPhone,
+          senderName: clearSender ? '' : prev.senderName,
+          senderEntityType: clearSender ? '' : prev.senderEntityType,
+          senderEntityId: clearSender ? '' : prev.senderEntityId
+        };
+      }
+    });
+
+    if (direction === 'sender') {
       setSenderLocked(false);
       setPayerInfo(null);
-    } else if (newDirection === 'receiver') {
-      setTransactionForm((prev) => ({
-        ...prev,
-        receiverPhone: selectedWallet?.accountNumber || prev.receiverPhone || '',
-        receiverName: selectedWallet?.name || prev.receiverName || '',
-        receiverEntityType: 'manual',
-        receiverEntityId: '',
-        senderPhone: walletDirection === 'sender' ? '' : prev.senderPhone,
-        senderName: walletDirection === 'sender' ? '' : prev.senderName,
-        senderEntityType: walletDirection === 'sender' ? '' : prev.senderEntityType,
-        senderEntityId: walletDirection === 'sender' ? '' : prev.senderEntityId
-      }));
-      setReceiverLocked(false);
     } else {
-      // Neutral: if either side was assigned from wallet, clear it so user has clean slate
-      setTransactionForm((prev) => {
-        const next = { ...prev };
-        if (walletDirection === 'sender') {
-          next.senderPhone = '';
-          next.senderName = '';
-          next.senderEntityType = '';
-          next.senderEntityId = '';
-        } else if (walletDirection === 'receiver') {
-          next.receiverPhone = '';
-          next.receiverName = '';
-          next.receiverEntityType = '';
-          next.receiverEntityId = '';
-        }
-        return next;
-      });
-      setSenderLocked(false);
       setReceiverLocked(false);
     }
   };
 
-  const lookupPhone = useCallback(async (phone, side) => {
+  const handleDirectionChange = (direction) => {
+    const targetDirection = direction === 'sender' ? 'sender' : 'receiver';
+    const targetType = targetDirection === 'sender' ? 'Expense' : 'Income';
+    applyTypeAndDirection(targetType, targetDirection);
+  };
+
+  const lookupPhone = useCallback(async (phone, side, overrideMonth = null) => {
     const cleaned = digitsOnly(phone);
     if (cleaned.length < 4) return;
 
@@ -210,20 +294,28 @@ const CashbookManagement = () => {
       return;
     }
 
+    const monthToUse = overrideMonth || transactionForm.targetMonth || (transactionForm.date || new Date().toISOString().split('T')[0]).slice(0, 7);
+
     try {
-      const res = await api.get('/cashbook/lookup', { params: { phone: cleaned, purpose: side } });
+      const res = await api.get('/cashbook/lookup', {
+        params: { phone: cleaned, purpose: side, date: transactionForm.date, month: monthToUse }
+      });
       const { found, name, entityType, entityId, payerInfo: info } = res.data || {};
 
       if (side === 'sender') {
         if (found) {
-          // Auto-fill the amount with what the payer still owes (they can edit it).
-          const owed = info?.kind === 'responsible' ? Number(info.totalBalance || 0) : 0;
+          // Auto-fill the amount with the current remaining balance owed/payable.
+          const rem = info?.remainingBalance !== undefined
+            ? Number(info.remainingBalance)
+            : info?.totalBalance !== undefined
+            ? Number(info.totalBalance)
+            : null;
           setTransactionForm((prev) => ({
             ...prev,
             senderName: name,
             senderEntityType: entityType === 'teacher' ? 'user' : entityType,
             senderEntityId: entityId || '',
-            amount: owed > 0 ? owed : prev.amount
+            amount: rem !== null && !isNaN(rem) ? rem : prev.amount
           }));
           setSenderLocked(true);
           setPayerInfo(info || null);
@@ -234,13 +326,21 @@ const CashbookManagement = () => {
         }
       } else {
         if (found) {
+          // Auto-fill the amount with the current remaining balance owed/payable.
+          const rem = info?.remainingBalance !== undefined
+            ? Number(info.remainingBalance)
+            : info?.totalBalance !== undefined
+            ? Number(info.totalBalance)
+            : null;
           setTransactionForm((prev) => ({
             ...prev,
             receiverName: name,
             receiverEntityType: entityType === 'teacher' ? 'teacher' : entityType === 'user' ? 'user' : entityType,
-            receiverEntityId: entityId || ''
+            receiverEntityId: entityId || '',
+            amount: rem !== null && !isNaN(rem) ? rem : prev.amount
           }));
           setReceiverLocked(true);
+          setPayerInfo(info || null);
         } else {
           setReceiverLocked(false);
         }
@@ -249,9 +349,20 @@ const CashbookManagement = () => {
       if (side === 'sender') {
         setSenderLocked(false);
         setPayerInfo(null);
-      } else setReceiverLocked(false);
+      } else {
+        setReceiverLocked(false);
+      }
     }
-  }, [transactionForm.method]);
+  }, [transactionForm.method, transactionForm.date, transactionForm.targetMonth]);
+
+  const handleTargetMonthChange = (newMonth) => {
+    setTransactionForm((prev) => ({ ...prev, targetMonth: newMonth }));
+    const activePhone = walletDirection === 'sender' ? transactionForm.receiverPhone : transactionForm.senderPhone;
+    const activeSide = walletDirection === 'sender' ? 'receiver' : 'sender';
+    if (activePhone) {
+      lookupPhone(activePhone, activeSide, newMonth);
+    }
+  };
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -277,12 +388,20 @@ const CashbookManagement = () => {
   };
 
   const resetTransactionForm = () => {
-    setTransactionForm(emptyTransactionForm());
+    const firstWallet = wallets.find((w) => w.status !== 'Disabled') || wallets[0];
+    const initialForm = emptyTransactionForm();
     setEditingEntry(null);
     setSenderLocked(false);
     setReceiverLocked(false);
-    setWalletDirection('neutral');
+    setWalletDirection('receiver');
     setPayerInfo(null);
+    if (firstWallet) {
+      initialForm.walletId = firstWallet._id;
+      initialForm.receiverPhone = firstWallet.accountNumber || '';
+      initialForm.receiverName = firstWallet.name || '';
+      initialForm.receiverEntityType = 'manual';
+    }
+    setTransactionForm(initialForm);
   };
 
   const handleCategorySubmit = async (e) => {
@@ -418,18 +537,14 @@ const CashbookManagement = () => {
     const itemWalletId = item.walletId?._id || item.walletId || '';
     const itemWallet = wallets.find((w) => w._id === itemWalletId);
 
-    let detectedDirection = 'neutral';
-    if (itemWallet?.accountNumber) {
-      if (item.receiverPhone && item.receiverPhone === itemWallet.accountNumber) {
-        detectedDirection = 'receiver';
-      } else if (item.senderPhone && item.senderPhone === itemWallet.accountNumber) {
-        detectedDirection = 'sender';
-      }
-    }
+    const itemType = item.categoryId?.type || item.type || (
+      itemWallet?.accountNumber && item.senderPhone === itemWallet.accountNumber ? 'Expense' : 'Income'
+    );
+    const detectedDirection = itemType === 'Expense' ? 'sender' : 'receiver';
     setWalletDirection(detectedDirection);
 
     setTransactionForm({
-      type: item.categoryId?.type || 'Income',
+      type: itemType,
       categoryId: item.categoryId?._id || item.categoryId || '',
       amount: item.amount ?? '',
       method: item.method || 'Mobile Money',
@@ -443,6 +558,7 @@ const CashbookManagement = () => {
       receiverEntityType: item.receiverEntityType || '',
       receiverEntityId: item.receiverEntityId || '',
       date: item.date || new Date().toISOString().split('T')[0],
+      targetMonth: item.targetMonth || (item.date || new Date().toISOString().split('T')[0]).slice(0, 7),
       description: item.description || ''
     });
     setSenderLocked(!!item.senderEntityType && item.senderEntityType !== 'manual' && detectedDirection !== 'sender');
@@ -698,9 +814,11 @@ const CashbookManagement = () => {
                 <label className="block text-xs font-black uppercase text-slate-500 mb-1">Type</label>
                 <select
                   value={transactionForm.type}
-                  onChange={(e) =>
-                    setTransactionForm({ ...transactionForm, type: e.target.value, categoryId: '' })
-                  }
+                  onChange={(e) => {
+                    const newType = e.target.value;
+                    const newDir = newType === 'Expense' ? 'sender' : 'receiver';
+                    applyTypeAndDirection(newType, newDir);
+                  }}
                   className={`w-full px-4 py-3 rounded-xl border text-sm font-black uppercase tracking-wide outline-none ${
                     transactionForm.type === 'Income'
                       ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300'
@@ -751,18 +869,7 @@ const CashbookManagement = () => {
                   value={transactionForm.walletId}
                   onChange={(e) => {
                     const nextWalletId = e.target.value;
-                    const nextWallet = wallets.find((w) => w._id === nextWalletId);
-                    setTransactionForm((prev) => {
-                      const next = { ...prev, walletId: nextWalletId };
-                      if (walletDirection === 'sender' && nextWallet) {
-                        next.senderPhone = nextWallet.accountNumber || '';
-                        next.senderName = nextWallet.name || '';
-                      } else if (walletDirection === 'receiver' && nextWallet) {
-                        next.receiverPhone = nextWallet.accountNumber || '';
-                        next.receiverName = nextWallet.name || '';
-                      }
-                      return next;
-                    });
+                    applyTypeAndDirection(transactionForm.type, walletDirection, nextWalletId);
                   }}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                 >
@@ -794,7 +901,9 @@ const CashbookManagement = () => {
                     Doorka Wallet-ka / Transaction Direction
                   </span>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Wallet-ku si default ah waa neutral (aan dhinacna loo xirin). Dooro haddii uu yahay lacag dire (Sender) ama lacag qaate (Receiver).
+                    {transactionForm.type === 'Expense'
+                      ? 'Expense: Wallet-ka machadka waa Lacag Dire (Sender).'
+                      : 'Income: Wallet-ka machadka waa Lacag Qaate (Receiver).'}
                   </p>
                 </div>
                 {selectedWallet && (
@@ -805,22 +914,8 @@ const CashbookManagement = () => {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {/* 1. Neutral */}
-                <button
-                  type="button"
-                  onClick={() => handleDirectionChange('neutral')}
-                  className={`px-4 py-2.5 rounded-xl border text-xs font-black uppercase tracking-wide flex items-center justify-center gap-2 transition-all ${
-                    walletDirection === 'neutral'
-                      ? 'bg-white dark:bg-slate-900 border-brand-500 text-brand-600 dark:text-brand-400 shadow-sm ring-2 ring-brand-500/20'
-                      : 'bg-slate-100/70 dark:bg-slate-800 border-transparent text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-900'
-                  }`}
-                >
-                  <span className={`w-2 h-2 rounded-full ${walletDirection === 'neutral' ? 'bg-brand-500' : 'bg-slate-400'}`} />
-                  Neutral (Aan loo xirin)
-                </button>
-
-                {/* 2. Wallet as Sender */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {/* 1. Wallet as Sender */}
                 <button
                   type="button"
                   onClick={() => handleDirectionChange('sender')}
@@ -834,7 +929,7 @@ const CashbookManagement = () => {
                   Wallet = Lacag Dire (Sender)
                 </button>
 
-                {/* 3. Wallet as Receiver */}
+                {/* 2. Wallet as Receiver */}
                 <button
                   type="button"
                   onClick={() => handleDirectionChange('receiver')}
@@ -866,7 +961,7 @@ const CashbookManagement = () => {
                         onClick={() => handleDirectionChange('sender')}
                         className="text-[10px] font-bold text-slate-500 hover:text-brand-600 dark:text-slate-400 hover:underline"
                       >
-                        + Set Wallet as Sender
+                        + Set Wallet as Sender (Expense)
                       </button>
                     )}
                   </div>
@@ -967,7 +1062,7 @@ const CashbookManagement = () => {
                         onClick={() => handleDirectionChange('receiver')}
                         className="text-[10px] font-bold text-slate-500 hover:text-brand-600 dark:text-slate-400 hover:underline"
                       >
-                        + Set Wallet as Receiver
+                        + Set Wallet as Receiver (Income)
                       </button>
                     )}
                   </div>
@@ -978,6 +1073,8 @@ const CashbookManagement = () => {
                     <input
                       type="text"
                       readOnly={walletDirection === 'receiver'}
+                      list={walletDirection === 'receiver' ? undefined : 'payer-phone-options'}
+                      autoComplete="off"
                       value={transactionForm.receiverPhone}
                       onChange={(e) => {
                         setReceiverLocked(false);
@@ -1040,20 +1137,114 @@ const CashbookManagement = () => {
                 )}
               </div>
 
-            {/* Amount — sits under the payer. Auto-filled with the money owed when a
-                payer in the system is matched; edit it to pay only what he has. */}
-            {payerInfo && payerInfo.kind === 'responsible' && Number(payerInfo.totalMonthlyFee || 0) > 0 && (
+            {/* Monthly Pay — sits under the payer. Shows Current Month & Advance Months with clear breakdown. */}
+            {payerInfo && payerInfo.kind === 'responsible' && Number(payerInfo.totalMonthlyFee || 0) > 0 && (() => {
+              const currentMonthObj = getPayerMonthLabel(payerInfo.month, 0);
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-black uppercase text-slate-500">
+                      Monthly Pay / Bisha &amp; Bilaha Hormarinta (Advance)
+                    </label>
+                    {monthsToPay > 1 ? (
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                        {monthsToPay - 1} Month{monthsToPay > 2 ? 's' : ''} Advance
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                        {currentMonthObj.name} (Current Month)
+                      </span>
+                    )}
+                  </div>
+                  <select
+                    value={monthsToPay}
+                    onChange={(e) => setMonthsToPay(Number(e.target.value))}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+                  >
+                    {[1, 2, 3, 4, 5, 6].map((m) => {
+                      const targetObj = getPayerMonthLabel(payerInfo.month, m - 1);
+                      const amountForM = m === 1
+                        ? Number(payerInfo.totalBalance || 0)
+                        : Number(payerInfo.totalMonthlyFee || 0) * (m - 1);
+                      return (
+                        <option key={m} value={m}>
+                          {m === 1
+                            ? `${currentMonthObj.name} ${currentMonthObj.year} (Current Month) · ${fmtMoney(amountForM)}`
+                            : `${targetObj.name} ${targetObj.year} (Advance · ${m - 1} bilood oo hormarin ah) · ${fmtMoney(amountForM)}`}
+                        </option>
+                      );
+                    })}
+                  </select>
+
+                  {/* Advance breakdown detail card when monthsToPay > 1 */}
+                  {monthsToPay > 1 && (
+                    <div className="p-3.5 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/30 text-xs space-y-2.5 animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between font-black text-amber-900 dark:text-amber-200">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                          Lacagta Hormarinta ah ({monthsToPay - 1} bilood):
+                        </span>
+                        <span>Wadarta Advance: {fmtMoney(maxPayable)}</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                        {Array.from({ length: monthsToPay - 1 }).map((_, idx) => {
+                          const mo = getPayerMonthLabel(payerInfo.month, idx + 1);
+                          const moAmount = Number(payerInfo.totalMonthlyFee || 0);
+                          return (
+                            <div
+                              key={idx}
+                              className="px-3 py-2 rounded-lg border bg-amber-100/70 dark:bg-amber-900/40 border-amber-300 dark:border-amber-800 shadow-sm"
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="font-black text-slate-900 dark:text-white">{mo.name}</span>
+                                <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100">
+                                  Advance
+                                </span>
+                              </div>
+                              <p className="text-sm font-black text-slate-800 dark:text-slate-200 mt-1">
+                                {fmtMoney(moAmount)}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300 font-medium pt-1 border-t border-amber-200/60 dark:border-amber-900/40">
+                        * Bisha/bilaha mustaqbalka (tusaale {getPayerMonthLabel(payerInfo.month, 1).name}) marka la gaaro, system-ku wuxuu si toos ah u ogaanayaa in horay loo hormariyay (Amount = $0).
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Bisha lacagta loo hormarinayo / bixinayo — For Expense / Registered non-payers (Teachers, Staff, Rent, Accounts) */}
+            {walletDirection === 'sender' && (
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Months to pay</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-black uppercase text-slate-500">
+                    Bisha lacagta loo hormarinayo / bixinayo (Target Month)
+                  </label>
+                  {(transactionForm.targetMonth || currentMonthStr) > currentMonthStr && (
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                      Hormarin (Advance)
+                    </span>
+                  )}
+                </div>
                 <select
-                  value={monthsToPay}
-                  onChange={(e) => setMonthsToPay(Number(e.target.value))}
+                  value={transactionForm.targetMonth || currentMonthStr}
+                  onChange={(e) => handleTargetMonthChange(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
                 >
-                  {[1, 2, 3, 4, 5, 6, 12].map((m) => (
-                    <option key={m} value={m}>{m} month{m > 1 ? 's' : ''} · {fmtMoney(Number(payerInfo.totalBalance || 0) + Number(payerInfo.totalMonthlyFee || 0) * (m - 1))}</option>
+                  {monthOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
                   ))}
                 </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Dooro bisha lacagta loo bixinayo ama loo hormarinayo. Marka bisha la doorto, Amount-ku si toos ah ayuu u noqonayaa inta bishaas ku hartay.
+                </p>
               </div>
             )}
 
@@ -1077,24 +1268,93 @@ const CashbookManagement = () => {
             </div>
 
             {payerInfo && payerInfo.kind === 'staff' && (
-              <div className="rounded-2xl border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-950/30 p-5">
-                <p className="text-[10px] font-black uppercase tracking-widest text-brand-400 mb-2">
-                  Staff record · {payerInfo.role}
-                </p>
-                <div className="flex flex-wrap gap-8">
+              <div className="rounded-2xl border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-950/30 p-5 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">
+                    Diiwaanka Qofka · {payerInfo.role || 'Macallin / Shaqaale'}
+                  </p>
+                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                    (transactionForm.targetMonth || payerInfo.month) > currentMonthStr
+                      ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                      : 'bg-brand-100 dark:bg-brand-900/50 text-brand-700 dark:text-brand-300'
+                  }`}>
+                    Bisha: {transactionForm.targetMonth || payerInfo.month} {(transactionForm.targetMonth || payerInfo.month) > currentMonthStr ? '· Hormarin' : ''}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400">Monthly salary</p>
-                    <p className="text-2xl font-black text-brand-600 dark:text-brand-300">{fmtMoney(payerInfo.salary)}</p>
+                    <p className="text-[10px] font-black uppercase text-slate-400">Mushaharka Bisha</p>
+                    <p className="text-xl font-black text-brand-600 dark:text-brand-300">{fmtMoney(payerInfo.salary)}</p>
                   </div>
-                  {payerInfo.lastSalary && (
-                    <div>
-                      <p className="text-[10px] font-black uppercase text-slate-400">Last paid ({payerInfo.lastSalary.month})</p>
-                      <p className="text-2xl font-black text-slate-700 dark:text-slate-200">
-                        {fmtMoney(payerInfo.lastSalary.amount)}
-                        <span className="text-[10px] ml-2 font-bold text-slate-400">{payerInfo.lastSalary.status}</span>
-                      </p>
-                    </div>
-                  )}
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400">Horay loo bixiyay ({transactionForm.targetMonth || payerInfo.month})</p>
+                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{fmtMoney(payerInfo.totalPaid)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400">Hadda ku hartay (Remaining)</p>
+                    <p className={`text-xl font-black ${Number(payerInfo.remainingBalance ?? payerInfo.totalBalance) > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      {Number(payerInfo.remainingBalance ?? payerInfo.totalBalance) > 0 ? fmtMoney(payerInfo.remainingBalance ?? payerInfo.totalBalance) : 'Fully Paid ($0)'}
+                    </p>
+                  </div>
+                </div>
+
+                {payerInfo.totalBalance === 0 && Number(payerInfo.salary || 0) > 0 && (transactionForm.targetMonth || payerInfo.month) <= currentMonthStr && (
+                  <div className="pt-3 border-t border-brand-200/70 dark:border-brand-800/70 flex items-center justify-between flex-wrap gap-2">
+                    <p className="text-xs text-brand-700 dark:text-brand-300 font-semibold">
+                      Bisha hadda waa la wada bixiyay ($0 haraa). Ma rabtaa inaad u hormariso bisha soo socota?
+                    </p>
+                    {monthOptions.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleTargetMonthChange(monthOptions[1].value)}
+                        className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black tracking-wide shadow-sm"
+                      >
+                        + Hormari Bisha Soo Socota ({monthOptions[1].monthName} · {fmtMoney(payerInfo.salary)})
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {payerInfo.lastSalary && (
+                  <div className="pt-2 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                    <span>Mushaharkii ugu dambeeyay:</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">
+                      {fmtMoney(payerInfo.lastSalary.amount)} ({payerInfo.lastSalary.month}) · {payerInfo.lastSalary.status}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {payerInfo && (payerInfo.kind === 'account' || payerInfo.kind === 'contact') && (
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-5 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Diiwaanka Account-ka / Kiro · {payerInfo.name}
+                  </p>
+                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                    (transactionForm.targetMonth || payerInfo.month) > currentMonthStr
+                      ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                  }`}>
+                    Bisha: {transactionForm.targetMonth || payerInfo.month} {(transactionForm.targetMonth || payerInfo.month) > currentMonthStr ? '· Hormarin' : ''}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400">Lacagta Guud (Total/Balance)</p>
+                    <p className="text-xl font-black text-slate-700 dark:text-slate-200">{fmtMoney(payerInfo.baseBalance ?? payerInfo.totalBalance)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400">Horay loo bixiyay ({transactionForm.targetMonth || payerInfo.month})</p>
+                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{fmtMoney(payerInfo.paidThisMonth || 0)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase text-slate-400">Hadda ku hartay (Remaining)</p>
+                    <p className={`text-xl font-black ${Number(payerInfo.remainingBalance ?? payerInfo.totalBalance) > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      {Number(payerInfo.remainingBalance ?? payerInfo.totalBalance) > 0 ? fmtMoney(payerInfo.remainingBalance ?? payerInfo.totalBalance) : 'Fully Paid ($0)'}
+                    </p>
+                  </div>
                 </div>
               </div>
             )}

@@ -298,6 +298,7 @@ const createEntry = asyncHandler(async (req, res) => {
         receiverEntityType: receiverEntityType || '',
         receiverEntityId: receiverEntityId || undefined,
         date: date || new Date().toISOString().split('T')[0],
+        targetMonth: req.body.targetMonth || (date || new Date().toISOString().split('T')[0]).slice(0, 7),
         description: description || '',
         branchId,
         walletId: wallet?._id,
@@ -321,7 +322,107 @@ const createEntry = asyncHandler(async (req, res) => {
 
     // Record student fee payments (partial-aware) linked to this entry, and
     // snapshot how much the payer still owes after this payment.
-    const feeRemaining = await syncFeePayments(data, category, req.user?._id);
+    let feeRemaining = await syncFeePayments(data, category, req.user?._id);
+
+    // If not a student fee payment, snapshot remaining balance for Expense (Teacher / Rent / Account / Contact)
+    if (feeRemaining === null || feeRemaining === undefined) {
+        if (category.type === 'Expense') {
+            const selectedMonth = req.body.targetMonth || (data.date || new Date().toISOString().split('T')[0]).slice(0, 7);
+            const currentCalendarMonth = new Date().toISOString().slice(0, 7);
+            const isAdvance = selectedMonth > currentCalendarMonth;
+
+            // If receiver is a Teacher / User with salary:
+            if (data.receiverEntityId && ['teacher', 'user'].includes(data.receiverEntityType)) {
+                const user = await User.findById(data.receiverEntityId).select('salary');
+                const totalSalary = Number(user?.salary || 0);
+                if (totalSalary > 0) {
+                    try {
+                        await Salary.create({
+                            teacherId: data.receiverEntityId,
+                            walletId: wallet?._id,
+                            month: selectedMonth,
+                            amount: data.amount,
+                            paymentMethod: data.method || 'Cash',
+                            paymentDate: new Date(data.date || Date.now()),
+                            status: 'Paid',
+                            notes: `Cashbook: ${category.title} (${selectedMonth}${isAdvance ? ' · Hormarin' : ''}) · ref:${data._id}${data.description ? ` · ${data.description}` : ''}`,
+                            paidBy: req.user?._id
+                        });
+                    } catch (e) {
+                        console.error('Salary sync note:', e.message);
+                    }
+
+                    // Calculate remaining balance for this selected month after this payment
+                    const salaryDocs = await Salary.find({
+                        teacherId: data.receiverEntityId,
+                        month: selectedMonth,
+                        status: { $ne: 'Cancelled' }
+                    }).select('amount notes');
+                    const externalSalaryPaid = salaryDocs
+                        .filter((s) => !s.notes || !s.notes.startsWith('Cashbook:'))
+                        .reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+
+                    const entryDocs = await CashbookEntry.find({
+                        _id: { $ne: data._id },
+                        $and: [
+                            {
+                                $or: [
+                                    { receiverEntityId: data.receiverEntityId },
+                                    phoneOrQuery('receiverPhone', phoneVariants(data.receiverPhone || ''))
+                                ]
+                            },
+                            {
+                                $or: [
+                                    { targetMonth: selectedMonth },
+                                    { date: { $regex: `^${selectedMonth}` } }
+                                ]
+                            }
+                        ]
+                    }).populate('categoryId');
+                    const cashbookPaid = entryDocs
+                        .filter((e) => !e.categoryId || e.categoryId.type === 'Expense')
+                        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+                    const totalPaidForMonth = externalSalaryPaid + cashbookPaid + Number(data.amount || 0);
+                    feeRemaining = Math.max(0, totalSalary - totalPaidForMonth);
+                }
+            } else if (data.receiverPhone) {
+                // If receiver is Rent or other contact with previous feeRemaining or Account:
+                const Account = require('../models/Account');
+                const variants = phoneVariants(data.receiverPhone);
+                const acc = await Account.findOne({
+                    $or: [
+                        phoneOrQuery('accountNo', variants),
+                        phoneOrQuery('code', variants)
+                    ]
+                });
+
+                const prevEntry = await CashbookEntry.findOne({
+                    _id: { $ne: data._id },
+                    receiverPhone: data.receiverPhone,
+                    $or: [
+                        { targetMonth: selectedMonth },
+                        { date: { $regex: `^${selectedMonth}` } }
+                    ],
+                    feeRemaining: { $ne: null }
+                }).sort({ date: -1, createdAt: -1 });
+
+                let remainingBefore = null;
+                if (prevEntry && prevEntry.feeRemaining !== null && prevEntry.feeRemaining !== undefined) {
+                    remainingBefore = Number(prevEntry.feeRemaining);
+                } else if (acc && acc.balance !== undefined && Number(acc.balance) > 0) {
+                    remainingBefore = Number(acc.balance);
+                }
+
+                if (remainingBefore !== null) {
+                    feeRemaining = Math.max(0, remainingBefore - Number(data.amount || 0));
+                }
+            }
+
+            data.targetMonth = selectedMonth;
+        }
+    }
+
     if (feeRemaining !== null && feeRemaining !== undefined) {
         data.feeRemaining = feeRemaining;
         await data.save();
@@ -424,8 +525,9 @@ const deleteEntry = asyncHandler(async (req, res) => {
         if (wallet && category) await applyWalletEffect(wallet, category.type, existing.amount, -1);
     }
     await Transaction.deleteMany({ referenceId: existing._id });
-    // Remove any student fee payments recorded from this entry.
+    // Remove any student fee payments or salary disbursements recorded from this entry.
     await Payment.deleteMany({ sourceEntryId: existing._id });
+    await Salary.deleteMany({ notes: new RegExp(existing._id) });
 
     await existing.deleteOne();
     res.json({ message: 'Transaction removed' });
@@ -462,8 +564,8 @@ const lookupStudent = async (variants) => {
 const lookupUser = async (variants, preferTeacher = false) => {
     const baseQuery = phoneOrQuery('phone', variants);
     const user = preferTeacher
-        ? await User.findOne({ ...baseQuery, role: 'Teacher' }).select('fullName phone role')
-        : await User.findOne(baseQuery).select('fullName phone role');
+        ? await User.findOne({ ...baseQuery, role: 'Teacher' }).select('fullName phone role salary')
+        : await User.findOne(baseQuery).select('fullName phone role salary');
     if (!user) return null;
     const entityType = user.role === 'Teacher' ? 'teacher' : 'user';
     return {
@@ -473,6 +575,46 @@ const lookupUser = async (variants, preferTeacher = false) => {
         entityId: user._id,
         role: user.role,
         phone: user.phone
+    };
+};
+
+const lookupAccount = async (variants) => {
+    const Account = require('../models/Account');
+    const acc = await Account.findOne({
+        $or: [
+            phoneOrQuery('accountNo', variants),
+            phoneOrQuery('code', variants)
+        ]
+    }).select('name code accountNo type balance');
+    if (!acc) return null;
+    return {
+        found: true,
+        name: acc.name,
+        entityType: 'account',
+        entityId: acc._id,
+        role: acc.type || 'Account',
+        phone: acc.accountNo || acc.code,
+        balance: Number(acc.balance || 0)
+    };
+};
+
+const lookupPreviousEntry = async (variants, purpose) => {
+    const query = purpose === 'receiver'
+        ? phoneOrQuery('receiverPhone', variants)
+        : phoneOrQuery('senderPhone', variants);
+    const lastEntry = await CashbookEntry.findOne(query).sort({ date: -1, createdAt: -1 });
+    if (!lastEntry) return null;
+    const name = purpose === 'receiver' ? (lastEntry.receiverName || lastEntry.payerName) : (lastEntry.senderName || lastEntry.payerName);
+    const entityType = purpose === 'receiver' ? (lastEntry.receiverEntityType || 'manual') : (lastEntry.senderEntityType || 'manual');
+    const entityId = purpose === 'receiver' ? lastEntry.receiverEntityId : lastEntry.senderEntityId;
+    return {
+        found: true,
+        name: name || '',
+        entityType: entityType || 'manual',
+        entityId: entityId || null,
+        role: 'Contact',
+        phone: purpose === 'receiver' ? lastEntry.receiverPhone : lastEntry.senderPhone,
+        lastEntry
     };
 };
 
@@ -508,36 +650,219 @@ const summarizeStudents = async (students) => {
     return { students: list, totalMonthlyFee, totalPaid, totalBalance, month: currentMonth, count: list.length };
 };
 
-// Attach financial context to a matched payer: teacher salary, or the students they are responsible for.
-const buildPayerInfo = async (match, variants) => {
+// Attach financial context to a matched payer/receiver:
+// Calculates current remaining balance for:
+// - Parent / Waalid (responsible student fees)
+// - Teacher / Macallin (salary minus payments this month)
+// - Rent / Kiro or other registered accounts / contacts
+const buildPayerInfo = async (match, variants, purpose = 'sender', reqDate = null) => {
     if (!match) return null;
+    const currentMonth = (reqDate || new Date().toISOString().split('T')[0]).slice(0, 7); // YYYY-MM
 
-    // Teacher / staff → show their configured salary and latest paid salary record.
-    if (match.entityType === 'teacher' || match.entityType === 'user') {
-        const user = await User.findById(match.entityId).select('fullName role salary');
-        const lastSalary = await Salary.findOne({ teacherId: match.entityId }).sort({ month: -1, createdAt: -1 }).select('amount month status');
+    // 1. Guardian / responsible / student's father → gather all students under them.
+    if (match.entityType === 'guardian' || match.entityType === 'student') {
+        const orConds = [{ fatherPhone: { $in: variants } }];
+        if (match.entityType === 'guardian') orConds.push({ guardianId: match.entityId });
+        const students = await Student.find({ $or: orConds })
+            .select('fullName classId monthlyFee fee fatherPhone guardianId')
+            .populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } });
+
+        if (!students.length) return { kind: 'responsible', students: [], totalMonthlyFee: 0, totalPaid: 0, totalBalance: 0, remainingBalance: 0, count: 0 };
+        const summary = await summarizeStudents(students);
         return {
-            kind: 'staff',
-            role: user?.role || match.role,
-            salary: Number(user?.salary || 0),
-            lastSalary: lastSalary ? { amount: Number(lastSalary.amount || 0), month: lastSalary.month, status: lastSalary.status } : null
+            kind: 'responsible',
+            ...summary,
+            remainingBalance: summary.totalBalance
         };
     }
 
-    // Guardian / responsible / student's father → gather all students under them.
-    const orConds = [{ fatherPhone: { $in: variants } }];
-    if (match.entityType === 'guardian') orConds.push({ guardianId: match.entityId });
-    const students = await Student.find({ $or: orConds })
-        .select('fullName classId monthlyFee fee fatherPhone guardianId')
-        .populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } });
+    // 2. Teacher / staff / user → calculate salary and payments this month.
+    if (match.entityType === 'teacher' || match.entityType === 'user') {
+        const user = await User.findById(match.entityId).select('fullName role salary');
+        const totalSalary = Number(user?.salary || 0);
 
-    if (!students.length) return { kind: 'responsible', students: [], totalMonthlyFee: 0, totalPaid: 0, count: 0 };
-    return { kind: 'responsible', ...(await summarizeStudents(students)) };
+        // Find payments this month from Salary model (excluding any Cashbook mirrors to prevent double counting)
+        const salaryDocs = await Salary.find({
+            teacherId: match.entityId,
+            month: currentMonth,
+            status: { $ne: 'Cancelled' }
+        }).select('amount month status notes');
+        const externalSalaryPaid = salaryDocs
+            .filter((s) => !s.notes || !s.notes.startsWith('Cashbook:'))
+            .reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+
+        // Find payments this month from CashbookEntry (where teacher is receiver)
+        const entryDocs = await CashbookEntry.find({
+            $or: [
+                { receiverEntityId: match.entityId },
+                phoneOrQuery('receiverPhone', variants)
+            ],
+            $or: [
+                { targetMonth: currentMonth },
+                {
+                    $and: [
+                        { $or: [{ targetMonth: null }, { targetMonth: '' }, { targetMonth: { $exists: false } }] },
+                        { date: { $regex: `^${currentMonth}` } }
+                    ]
+                }
+            ]
+        }).populate('categoryId');
+        const cashbookPaid = entryDocs
+            .filter((e) => !e.categoryId || e.categoryId.type === 'Expense')
+            .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+        const totalPaid = externalSalaryPaid + cashbookPaid;
+        const remaining = totalSalary > 0 ? Math.max(0, totalSalary - totalPaid) : 0;
+        const lastSalary = salaryDocs.sort((a, b) => (b.month || '').localeCompare(a.month || ''))[0] || null;
+
+        if (totalSalary > 0) {
+            return {
+                kind: 'staff',
+                role: user?.role || match.role,
+                salary: totalSalary,
+                totalMonthlyFee: totalSalary,
+                totalPaid,
+                totalBalance: remaining,
+                remainingBalance: remaining,
+                month: currentMonth,
+                isAdvance: currentMonth > new Date().toISOString().slice(0, 7),
+                lastSalary: lastSalary ? { amount: Number(lastSalary.amount || 0), month: lastSalary.month, status: lastSalary.status } : null
+            };
+        }
+
+        // If user has no salary, check previous CashbookEntry snapshots
+        const lastEntry = await CashbookEntry.findOne({
+            $or: [
+                { receiverEntityId: match.entityId },
+                phoneOrQuery('receiverPhone', variants)
+            ]
+        }).sort({ date: -1, createdAt: -1 });
+
+        if (lastEntry && lastEntry.feeRemaining !== null && lastEntry.feeRemaining !== undefined) {
+            const rem = Math.max(0, Number(lastEntry.feeRemaining));
+            return {
+                kind: 'staff',
+                role: user?.role || match.role,
+                salary: 0,
+                totalBalance: rem,
+                remainingBalance: rem,
+                month: currentMonth
+            };
+        }
+
+        return {
+            kind: 'staff',
+            role: user?.role || match.role,
+            salary: 0,
+            totalBalance: 0,
+            remainingBalance: 0,
+            month: currentMonth
+        };
+    }
+
+    // 3. Account model match (e.g. Rent, Utilities, or general ledger account)
+    if (match.entityType === 'account') {
+        const phoneQuery = purpose === 'receiver'
+            ? phoneOrQuery('receiverPhone', variants)
+            : phoneOrQuery('senderPhone', variants);
+
+        const monthQuery = {
+            $and: [
+                phoneQuery,
+                {
+                    $or: [
+                        { targetMonth: currentMonth },
+                        {
+                            $and: [
+                                { $or: [{ targetMonth: null }, { targetMonth: '' }, { targetMonth: { $exists: false } }] },
+                                { date: { $regex: `^${currentMonth}` } }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+        const monthEntries = await CashbookEntry.find(monthQuery).populate('categoryId');
+        const paidThisMonth = monthEntries
+            .filter((e) => !e.categoryId || (purpose === 'receiver' ? e.categoryId.type === 'Expense' : e.categoryId.type === 'Income'))
+            .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+        const baseBalance = Math.max(0, Number(match.balance || 0));
+        let rem = baseBalance;
+        if (baseBalance > 0) {
+            rem = Math.max(0, baseBalance - paidThisMonth);
+        } else {
+            const lastEntry = await CashbookEntry.findOne(phoneQuery).sort({ date: -1, createdAt: -1 });
+            if (lastEntry && lastEntry.feeRemaining !== null && lastEntry.feeRemaining !== undefined) {
+                rem = Math.max(0, Number(lastEntry.feeRemaining) - paidThisMonth);
+            }
+        }
+
+        return {
+            kind: 'account',
+            name: match.name,
+            totalBalance: rem,
+            remainingBalance: rem,
+            month: currentMonth,
+            baseBalance,
+            paidThisMonth
+        };
+    }
+
+    // 4. Any other registered account or contact (check previous CashbookEntry records for this phone/account)
+    const phoneQuery = purpose === 'receiver'
+        ? phoneOrQuery('receiverPhone', variants)
+        : phoneOrQuery('senderPhone', variants);
+
+    const monthQuery = {
+        $and: [
+            phoneQuery,
+            {
+                $or: [
+                    { targetMonth: currentMonth },
+                    {
+                        $and: [
+                            { $or: [{ targetMonth: null }, { targetMonth: '' }, { targetMonth: { $exists: false } }] },
+                            { date: { $regex: `^${currentMonth}` } }
+                        ]
+                    }
+                ]
+            }
+        ]
+    };
+    const monthEntries = await CashbookEntry.find(monthQuery).populate('categoryId');
+    const paidThisMonth = monthEntries
+        .filter((e) => !e.categoryId || (purpose === 'receiver' ? e.categoryId.type === 'Expense' : e.categoryId.type === 'Income'))
+        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+    const lastEntry = match.lastEntry || await CashbookEntry.findOne(phoneQuery).sort({ date: -1, createdAt: -1 });
+    if (lastEntry) {
+        let base = 0;
+        if (lastEntry.amount && Number(lastEntry.amount) > 0) {
+            base = Number(lastEntry.amount);
+        }
+        if (lastEntry.feeRemaining !== null && lastEntry.feeRemaining !== undefined) {
+            base = Number(lastEntry.feeRemaining);
+        }
+        const rem = Math.max(0, base - paidThisMonth);
+        return {
+            kind: 'contact',
+            name: match.name,
+            totalBalance: rem,
+            remainingBalance: rem,
+            month: currentMonth,
+            baseBalance: base,
+            paidThisMonth
+        };
+    }
+
+    return null;
 };
 
 const lookupPhone = asyncHandler(async (req, res) => {
     const raw = (req.query.phone || '').trim();
     const purpose = (req.query.purpose || 'sender').toLowerCase();
+    const reqDate = req.query.month || req.query.date || null;
     const variants = phoneVariants(raw);
 
     if (!variants.length) {
@@ -549,19 +874,23 @@ const lookupPhone = asyncHandler(async (req, res) => {
             ? [
                   () => lookupUser(variants, true),
                   () => lookupUser(variants, false),
+                  () => lookupAccount(variants),
                   () => lookupGuardian(variants),
-                  () => lookupStudent(variants)
+                  () => lookupStudent(variants),
+                  () => lookupPreviousEntry(variants, 'receiver')
               ]
             : [
                   () => lookupGuardian(variants),
                   () => lookupStudent(variants),
-                  () => lookupUser(variants, false)
+                  () => lookupAccount(variants),
+                  () => lookupUser(variants, false),
+                  () => lookupPreviousEntry(variants, 'sender')
               ];
 
     for (const lookup of tryOrder) {
         const match = await lookup();
         if (match) {
-            const payerInfo = await buildPayerInfo(match, variants);
+            const payerInfo = await buildPayerInfo(match, variants, purpose, reqDate);
             return res.json({ ...match, payerInfo });
         }
     }

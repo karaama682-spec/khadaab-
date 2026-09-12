@@ -147,3 +147,4 @@ Mashruucani wuxuu horey u leeyahay habaynta [`vercel.json`](vercel.json):
 
 ## 📄 License & Xuquuqda
 Dhammaan xuquuqda waxay u dhawran yihiin **Machad Management System**.
+

@@ -61,6 +61,10 @@ const cashbookEntrySchema = new mongoose.Schema({
         type: String,
         default: () => new Date().toISOString().split('T')[0]
     },
+    targetMonth: {
+        type: String,
+        default: null
+    },
     description: {
         type: String,
         default: '',
