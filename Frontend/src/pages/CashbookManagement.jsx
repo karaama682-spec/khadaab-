@@ -6,6 +6,8 @@ import {
   Search,
   Tags,
   ArrowLeftRight,
+  ArrowUpRight,
+  ArrowDownLeft,
   Save,
   RotateCcw
 } from 'lucide-react';
@@ -83,7 +85,7 @@ const CashbookManagement = () => {
   const [dateTo, setDateTo] = useState('');
   const [senderLocked, setSenderLocked] = useState(false);
   const [receiverLocked, setReceiverLocked] = useState(false);
-  const [receiverAuto, setReceiverAuto] = useState(false);
+  const [walletDirection, setWalletDirection] = useState('neutral');
   const [payerInfo, setPayerInfo] = useState(null);
   const [monthsToPay, setMonthsToPay] = useState(1);
 
@@ -145,31 +147,59 @@ const CashbookManagement = () => {
     fetchAll();
   }, []);
 
-  // For incoming money (Income) via Bank / Mobile Money, the receiver is the
-  // institute. If the chosen wallet has an account number, fill the receiver
-  // automatically; otherwise leave it blank so it can be typed manually.
-  useEffect(() => {
-    const isIncome = transactionForm.type === 'Income';
-    const methodOk = ['Bank', 'Mobile Money'].includes(transactionForm.method);
-    const wallet = wallets.find((w) => w._id === transactionForm.walletId);
-    if (isIncome && methodOk && wallet?.accountNumber) {
-      setReceiverAuto(true);
-      setTransactionForm((prev) =>
-        prev.receiverPhone === wallet.accountNumber && prev.receiverName === wallet.name
-          ? prev
-          : {
-              ...prev,
-              receiverPhone: wallet.accountNumber,
-              receiverName: wallet.name,
-              receiverEntityType: 'manual',
-              receiverEntityId: ''
-            }
-      );
+  // Handle explicit direction selection: neutral (unassigned), sender (outgoing), receiver (incoming)
+  const handleDirectionChange = (newDirection) => {
+    setWalletDirection(newDirection);
+    const selectedWallet = wallets.find((w) => w._id === transactionForm.walletId);
+
+    if (newDirection === 'sender') {
+      setTransactionForm((prev) => ({
+        ...prev,
+        senderPhone: selectedWallet?.accountNumber || prev.senderPhone || '',
+        senderName: selectedWallet?.name || prev.senderName || '',
+        senderEntityType: 'manual',
+        senderEntityId: '',
+        receiverPhone: walletDirection === 'receiver' ? '' : prev.receiverPhone,
+        receiverName: walletDirection === 'receiver' ? '' : prev.receiverName,
+        receiverEntityType: walletDirection === 'receiver' ? '' : prev.receiverEntityType,
+        receiverEntityId: walletDirection === 'receiver' ? '' : prev.receiverEntityId
+      }));
+      setSenderLocked(false);
+      setPayerInfo(null);
+    } else if (newDirection === 'receiver') {
+      setTransactionForm((prev) => ({
+        ...prev,
+        receiverPhone: selectedWallet?.accountNumber || prev.receiverPhone || '',
+        receiverName: selectedWallet?.name || prev.receiverName || '',
+        receiverEntityType: 'manual',
+        receiverEntityId: '',
+        senderPhone: walletDirection === 'sender' ? '' : prev.senderPhone,
+        senderName: walletDirection === 'sender' ? '' : prev.senderName,
+        senderEntityType: walletDirection === 'sender' ? '' : prev.senderEntityType,
+        senderEntityId: walletDirection === 'sender' ? '' : prev.senderEntityId
+      }));
+      setReceiverLocked(false);
     } else {
-      setReceiverAuto(false);
+      // Neutral: if either side was assigned from wallet, clear it so user has clean slate
+      setTransactionForm((prev) => {
+        const next = { ...prev };
+        if (walletDirection === 'sender') {
+          next.senderPhone = '';
+          next.senderName = '';
+          next.senderEntityType = '';
+          next.senderEntityId = '';
+        } else if (walletDirection === 'receiver') {
+          next.receiverPhone = '';
+          next.receiverName = '';
+          next.receiverEntityType = '';
+          next.receiverEntityId = '';
+        }
+        return next;
+      });
+      setSenderLocked(false);
+      setReceiverLocked(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transactionForm.type, transactionForm.method, transactionForm.walletId, wallets]);
+  };
 
   const lookupPhone = useCallback(async (phone, side) => {
     const cleaned = digitsOnly(phone);
@@ -225,19 +255,21 @@ const CashbookManagement = () => {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      if (transactionForm.senderPhone) lookupPhone(transactionForm.senderPhone, 'sender');
+      if (transactionForm.senderPhone && walletDirection !== 'sender') {
+        lookupPhone(transactionForm.senderPhone, 'sender');
+      }
     }, 400);
     return () => clearTimeout(t);
-  }, [transactionForm.senderPhone, lookupPhone]);
+  }, [transactionForm.senderPhone, lookupPhone, walletDirection]);
 
   useEffect(() => {
-    // Skip lookup when the receiver is auto-filled from the institute wallet account.
-    if (receiverAuto) return;
+    // Skip lookup when the receiver is assigned from the institute wallet.
+    if (walletDirection === 'receiver') return;
     const t = setTimeout(() => {
       if (transactionForm.receiverPhone) lookupPhone(transactionForm.receiverPhone, 'receiver');
     }, 400);
     return () => clearTimeout(t);
-  }, [transactionForm.receiverPhone, lookupPhone, receiverAuto]);
+  }, [transactionForm.receiverPhone, lookupPhone, walletDirection]);
 
   const resetCategoryForm = () => {
     setCategoryForm(emptyCategoryForm());
@@ -249,6 +281,7 @@ const CashbookManagement = () => {
     setEditingEntry(null);
     setSenderLocked(false);
     setReceiverLocked(false);
+    setWalletDirection('neutral');
     setPayerInfo(null);
   };
 
@@ -332,13 +365,13 @@ const CashbookManagement = () => {
       return false;
     }
     const senderErr = phoneError(transactionForm.method, transactionForm.senderPhone);
-    if (senderErr) {
+    if (senderErr && walletDirection !== 'sender') {
       showAlert({ type: 'warning', title: 'Sender number', message: senderErr });
       return false;
     }
-    // Institute account numbers are auto-filled from the wallet and not held to
-    // the sender digit rules, so only validate a manually typed receiver.
-    if (!receiverAuto) {
+    // Institute account numbers assigned from the wallet are not held to the
+    // mobile digit rules, so only validate when not assigned from wallet.
+    if (walletDirection !== 'receiver') {
       const receiverErr = phoneError(transactionForm.method, transactionForm.receiverPhone);
       if (receiverErr) {
         showAlert({ type: 'warning', title: 'Receiver number', message: receiverErr });
@@ -382,12 +415,25 @@ const CashbookManagement = () => {
 
   const handleTransactionEdit = (item) => {
     setEditingEntry(item);
+    const itemWalletId = item.walletId?._id || item.walletId || '';
+    const itemWallet = wallets.find((w) => w._id === itemWalletId);
+
+    let detectedDirection = 'neutral';
+    if (itemWallet?.accountNumber) {
+      if (item.receiverPhone && item.receiverPhone === itemWallet.accountNumber) {
+        detectedDirection = 'receiver';
+      } else if (item.senderPhone && item.senderPhone === itemWallet.accountNumber) {
+        detectedDirection = 'sender';
+      }
+    }
+    setWalletDirection(detectedDirection);
+
     setTransactionForm({
       type: item.categoryId?.type || 'Income',
       categoryId: item.categoryId?._id || item.categoryId || '',
       amount: item.amount ?? '',
       method: item.method || 'Mobile Money',
-      walletId: item.walletId?._id || item.walletId || '',
+      walletId: itemWalletId,
       senderPhone: item.senderPhone || '',
       senderName: item.senderName || '',
       senderEntityType: item.senderEntityType || '',
@@ -399,8 +445,8 @@ const CashbookManagement = () => {
       date: item.date || new Date().toISOString().split('T')[0],
       description: item.description || ''
     });
-    setSenderLocked(!!item.senderEntityType && item.senderEntityType !== 'manual');
-    setReceiverLocked(!!item.receiverEntityType && item.receiverEntityType !== 'manual');
+    setSenderLocked(!!item.senderEntityType && item.senderEntityType !== 'manual' && detectedDirection !== 'sender');
+    setReceiverLocked(!!item.receiverEntityType && item.receiverEntityType !== 'manual' && detectedDirection !== 'receiver');
     setActivePanel('transaction');
   };
 
@@ -446,8 +492,9 @@ const CashbookManagement = () => {
 
   const showReceiverFields = METHODS_WITH_PARTIES.includes(transactionForm.method);
   const categoriesForType = categories.filter((c) => c.type === transactionForm.type);
-  const senderPhoneErr = phoneError(transactionForm.method, transactionForm.senderPhone);
-  const receiverPhoneErr = phoneError(transactionForm.method, transactionForm.receiverPhone);
+  const selectedWallet = wallets.find((w) => w._id === transactionForm.walletId);
+  const senderPhoneErr = walletDirection === 'sender' ? '' : phoneError(transactionForm.method, transactionForm.senderPhone);
+  const receiverPhoneErr = walletDirection === 'receiver' ? '' : phoneError(transactionForm.method, transactionForm.receiverPhone);
   const phoneHint = PHONE_RULES[transactionForm.method]?.label || '';
 
   const fmtMoney = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -702,7 +749,21 @@ const CashbookManagement = () => {
                 <label className="block text-xs font-black uppercase text-slate-500 mb-1">Institute Wallet / Account</label>
                 <select
                   value={transactionForm.walletId}
-                  onChange={(e) => setTransactionForm({ ...transactionForm, walletId: e.target.value })}
+                  onChange={(e) => {
+                    const nextWalletId = e.target.value;
+                    const nextWallet = wallets.find((w) => w._id === nextWalletId);
+                    setTransactionForm((prev) => {
+                      const next = { ...prev, walletId: nextWalletId };
+                      if (walletDirection === 'sender' && nextWallet) {
+                        next.senderPhone = nextWallet.accountNumber || '';
+                        next.senderName = nextWallet.name || '';
+                      } else if (walletDirection === 'receiver' && nextWallet) {
+                        next.receiverPhone = nextWallet.accountNumber || '';
+                        next.receiverName = nextWallet.name || '';
+                      }
+                      return next;
+                    });
+                  }}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                 >
                   <option value="">Auto (active wallet)</option>
@@ -724,14 +785,99 @@ const CashbookManagement = () => {
               </div>
             </div>
 
+            {/* Wallet Direction / Role Selector */}
+            <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                    <ArrowLeftRight size={14} className="text-brand-500" />
+                    Doorka Wallet-ka / Transaction Direction
+                  </span>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Wallet-ku si default ah waa neutral (aan dhinacna loo xirin). Dooro haddii uu yahay lacag dire (Sender) ama lacag qaate (Receiver).
+                  </p>
+                </div>
+                {selectedWallet && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300 border border-brand-200 dark:border-brand-800/50 self-start sm:self-auto">
+                    <Wallet size={12} />
+                    {selectedWallet.name}{selectedWallet.accountNumber ? ` · ${selectedWallet.accountNumber}` : ''}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {/* 1. Neutral */}
+                <button
+                  type="button"
+                  onClick={() => handleDirectionChange('neutral')}
+                  className={`px-4 py-2.5 rounded-xl border text-xs font-black uppercase tracking-wide flex items-center justify-center gap-2 transition-all ${
+                    walletDirection === 'neutral'
+                      ? 'bg-white dark:bg-slate-900 border-brand-500 text-brand-600 dark:text-brand-400 shadow-sm ring-2 ring-brand-500/20'
+                      : 'bg-slate-100/70 dark:bg-slate-800 border-transparent text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-900'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${walletDirection === 'neutral' ? 'bg-brand-500' : 'bg-slate-400'}`} />
+                  Neutral (Aan loo xirin)
+                </button>
+
+                {/* 2. Wallet as Sender */}
+                <button
+                  type="button"
+                  onClick={() => handleDirectionChange('sender')}
+                  className={`px-4 py-2.5 rounded-xl border text-xs font-black uppercase tracking-wide flex items-center justify-center gap-2 transition-all ${
+                    walletDirection === 'sender'
+                      ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-500 text-rose-600 dark:text-rose-300 shadow-sm ring-2 ring-rose-500/20'
+                      : 'bg-slate-100/70 dark:bg-slate-800 border-transparent text-slate-600 dark:text-slate-400 hover:bg-rose-50/50 dark:hover:bg-rose-950/20'
+                  }`}
+                >
+                  <ArrowUpRight size={14} className={walletDirection === 'sender' ? 'text-rose-600' : 'text-slate-400'} />
+                  Wallet = Lacag Dire (Sender)
+                </button>
+
+                {/* 3. Wallet as Receiver */}
+                <button
+                  type="button"
+                  onClick={() => handleDirectionChange('receiver')}
+                  className={`px-4 py-2.5 rounded-xl border text-xs font-black uppercase tracking-wide flex items-center justify-center gap-2 transition-all ${
+                    walletDirection === 'receiver'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-600 dark:text-emerald-300 shadow-sm ring-2 ring-emerald-500/20'
+                      : 'bg-slate-100/70 dark:bg-slate-800 border-transparent text-slate-600 dark:text-slate-400 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20'
+                  }`}
+                >
+                  <ArrowDownLeft size={14} className={walletDirection === 'receiver' ? 'text-emerald-600' : 'text-slate-400'} />
+                  Wallet = Lacag Qaate (Receiver)
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <div className="space-y-4">
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Payer / Sender</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                      {walletDirection === 'sender' ? 'Sender (Institute Wallet)' : 'Payer / Sender'}
+                    </p>
+                    {walletDirection === 'sender' ? (
+                      <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800">
+                        Wallet Assigned
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleDirectionChange('sender')}
+                        className="text-[10px] font-bold text-slate-500 hover:text-brand-600 dark:text-slate-400 hover:underline"
+                      >
+                        + Set Wallet as Sender
+                      </button>
+                    )}
+                  </div>
                   <div>
-                    <label className="block text-xs font-black uppercase text-slate-500 mb-1">Payer phone</label>
+                    <label className="block text-xs font-black uppercase text-slate-500 mb-1">
+                      {walletDirection === 'sender' ? 'Institute Account Number' : 'Payer phone'}
+                    </label>
                     <input
                       type="text"
-                      list="payer-phone-options"
+                      readOnly={walletDirection === 'sender'}
+                      list={walletDirection === 'sender' ? undefined : 'payer-phone-options'}
                       autoComplete="off"
                       value={transactionForm.senderPhone}
                       onChange={(e) => {
@@ -744,31 +890,41 @@ const CashbookManagement = () => {
                           senderEntityId: ''
                         });
                       }}
-                      placeholder={transactionForm.method === 'Bank' ? 'Select a payer or type a bank number' : 'Select a payer or type a number'}
-                      className={`w-full px-4 py-3 rounded-xl border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white ${
-                        senderPhoneErr
-                          ? 'border-rose-500 dark:border-rose-500 focus:ring-2 focus:ring-rose-500'
-                          : 'border-slate-200 dark:border-slate-700'
+                      placeholder={walletDirection === 'sender' ? '' : transactionForm.method === 'Bank' ? 'Select a payer or type a bank number' : 'Select a payer or type a number'}
+                      className={`w-full px-4 py-3 rounded-xl border text-slate-900 dark:text-white ${
+                        walletDirection === 'sender'
+                          ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800 font-mono'
+                          : senderPhoneErr
+                          ? 'bg-slate-50 dark:bg-slate-800 border-rose-500 dark:border-rose-500 focus:ring-2 focus:ring-rose-500'
+                          : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
                       }`}
                     />
-                    <datalist id="payer-phone-options">
-                      {payerOptions.map((o) => (
-                        <option key={o.phone} value={o.phone}>
-                          {o.name ? `${o.name} — ${o.phone}` : o.phone}
-                        </option>
-                      ))}
-                    </datalist>
-                    {senderPhoneErr ? (
+                    {walletDirection !== 'sender' && (
+                      <datalist id="payer-phone-options">
+                        {payerOptions.map((o) => (
+                          <option key={o.phone} value={o.phone}>
+                            {o.name ? `${o.name} — ${o.phone}` : o.phone}
+                          </option>
+                        ))}
+                      </datalist>
+                    )}
+                    {walletDirection === 'sender' ? (
+                      <p className="text-[10px] text-rose-600 dark:text-rose-400 mt-1 font-semibold">
+                        Wallet-ka machadka ayaa ah lacag diraha (Sender)
+                      </p>
+                    ) : senderPhoneErr ? (
                       <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1 font-bold">{senderPhoneErr}</p>
                     ) : (
                       <p className="text-[10px] text-slate-400 mt-1">{phoneHint}</p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-black uppercase text-slate-500 mb-1">Payer name</label>
+                    <label className="block text-xs font-black uppercase text-slate-500 mb-1">
+                      {walletDirection === 'sender' ? 'Institute Account Name' : 'Payer name'}
+                    </label>
                     <input
                       type="text"
-                      readOnly={senderLocked}
+                      readOnly={senderLocked || walletDirection === 'sender'}
                       value={transactionForm.senderName}
                       onChange={(e) =>
                         setTransactionForm({
@@ -778,14 +934,16 @@ const CashbookManagement = () => {
                           senderEntityId: ''
                         })
                       }
-                      placeholder={senderLocked ? '' : 'Type name if not in system'}
+                      placeholder={senderLocked || walletDirection === 'sender' ? '' : 'Type name if not in system'}
                       className={`w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 ${
-                        senderLocked
+                        walletDirection === 'sender'
+                          ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-900 dark:text-rose-100'
+                          : senderLocked
                           ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-100'
                           : 'bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white'
                       }`}
                     />
-                    {senderLocked && (
+                    {senderLocked && walletDirection !== 'sender' && (
                       <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
                         Matched from institute records
                       </p>
@@ -795,16 +953,31 @@ const CashbookManagement = () => {
 
                 {showReceiverFields && (
                 <div className="space-y-4">
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                    {receiverAuto ? 'Receiver (institute account)' : 'Receiver (teacher / other)'}
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                      {walletDirection === 'receiver' ? 'Receiver (Institute Wallet)' : 'Receiver (teacher / vendor / other)'}
+                    </p>
+                    {walletDirection === 'receiver' ? (
+                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                        Wallet Assigned
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleDirectionChange('receiver')}
+                        className="text-[10px] font-bold text-slate-500 hover:text-brand-600 dark:text-slate-400 hover:underline"
+                      >
+                        + Set Wallet as Receiver
+                      </button>
+                    )}
+                  </div>
                   <div>
                     <label className="block text-xs font-black uppercase text-slate-500 mb-1">
-                      {receiverAuto ? 'Institute account number' : 'Phone'}
+                      {walletDirection === 'receiver' ? 'Institute Account Number' : 'Phone / Account number'}
                     </label>
                     <input
                       type="text"
-                      readOnly={receiverAuto}
+                      readOnly={walletDirection === 'receiver'}
                       value={transactionForm.receiverPhone}
                       onChange={(e) => {
                         setReceiverLocked(false);
@@ -815,18 +988,18 @@ const CashbookManagement = () => {
                           receiverEntityId: ''
                         });
                       }}
-                      placeholder={transactionForm.method === 'Bank' ? 'Bank number (6–7 digits)' : '61…/62… or 061…/062…'}
+                      placeholder={walletDirection === 'receiver' ? '' : transactionForm.method === 'Bank' ? 'Bank number (6–7 digits)' : '61…/62… or 061…/062…'}
                       className={`w-full px-4 py-3 rounded-xl border text-slate-900 dark:text-white ${
-                        receiverAuto
+                        walletDirection === 'receiver'
                           ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 font-mono'
-                          : !receiverAuto && receiverPhoneErr
+                          : receiverPhoneErr
                           ? 'bg-slate-50 dark:bg-slate-800 border-rose-500 dark:border-rose-500 focus:ring-2 focus:ring-rose-500'
                           : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
                       }`}
                     />
-                    {receiverAuto ? (
+                    {walletDirection === 'receiver' ? (
                       <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
-                        Auto-filled from the institute wallet account
+                        Wallet-ka machadka ayaa ah lacag qaataha (Receiver)
                       </p>
                     ) : receiverPhoneErr ? (
                       <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1 font-bold">{receiverPhoneErr}</p>
@@ -835,10 +1008,12 @@ const CashbookManagement = () => {
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-black uppercase text-slate-500 mb-1">Name</label>
+                    <label className="block text-xs font-black uppercase text-slate-500 mb-1">
+                      {walletDirection === 'receiver' ? 'Institute Account Name' : 'Name'}
+                    </label>
                     <input
                       type="text"
-                      readOnly={receiverLocked || receiverAuto}
+                      readOnly={receiverLocked || walletDirection === 'receiver'}
                       value={transactionForm.receiverName}
                       onChange={(e) =>
                         setTransactionForm({
@@ -848,14 +1023,14 @@ const CashbookManagement = () => {
                           receiverEntityId: ''
                         })
                       }
-                      placeholder={receiverLocked ? '' : 'Type name if not in system'}
+                      placeholder={receiverLocked || walletDirection === 'receiver' ? '' : 'Type name if not in system'}
                       className={`w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 ${
-                        receiverLocked || receiverAuto
+                        walletDirection === 'receiver' || receiverLocked
                           ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-100'
                           : 'bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white'
                       }`}
                     />
-                    {receiverLocked && (
+                    {receiverLocked && walletDirection !== 'receiver' && (
                       <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
                         Matched from institute records (e.g. teacher)
                       </p>
