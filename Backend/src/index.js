@@ -113,6 +113,37 @@ app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date() });
 });
 
+app.get('/api/diagnostic-db', async (req, res) => {
+    try {
+        const mongoose = require('mongoose');
+        const Student = require('./models/Student');
+        const Transaction = require('./models/Transaction');
+        const CashbookEntry = require('./models/CashbookEntry');
+
+        const uri = process.env.MONGO_URI || '';
+        // Safely mask password: mongodb+srv://user:****@cluster/db
+        const maskedUri = uri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@');
+        const cluster = mongoose.connection.host || 'unknown';
+        const databaseName = mongoose.connection.name || 'unknown';
+        const students = await Student.countDocuments();
+        const transactions = await Transaction.countDocuments();
+        const cashbookentries = await CashbookEntry.countDocuments();
+
+        res.json({
+            maskedUri,
+            cluster,
+            databaseName,
+            counts: {
+                students,
+                transactions,
+                cashbookentries
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/', (req, res) => {
     res.send('Institute API is running...');
 });
