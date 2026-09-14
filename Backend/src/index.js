@@ -144,6 +144,66 @@ app.get('/api/diagnostic-db', async (req, res) => {
     }
 });
 
+app.get('/api/clean-prod-transactions', async (req, res) => {
+    try {
+        const mongoose = require('mongoose');
+        const Student = require('./models/Student');
+        const Transaction = require('./models/Transaction');
+        const CashbookEntry = require('./models/CashbookEntry');
+
+        const dbHost = mongoose.connection.host || '';
+        const dbName = mongoose.connection.name || '';
+
+        // Strict assertion 1: Must be connected to cluster0.hybxg2k.mongodb.net and database machad
+        if (!dbHost.includes('hybxg2k') || dbName !== 'machad') {
+            return res.status(400).json({ error: 'Safety abort: not connected to production database machad on hybxg2k' });
+        }
+
+        // Strict assertion 2: Must have 403 students, 4 transactions, 4 cashbookentries before deletion
+        const studentsBefore = await Student.countDocuments();
+        const txBefore = await Transaction.countDocuments();
+        const cbBefore = await CashbookEntry.countDocuments();
+
+        if (studentsBefore !== 403) {
+            return res.status(400).json({ error: `Safety abort: students count is ${studentsBefore}, expected 403` });
+        }
+        if (txBefore !== 4 || cbBefore !== 4) {
+            return res.status(400).json({ error: `Safety abort: expected 4 tx and 4 cb, found ${txBefore} and ${cbBefore}` });
+        }
+
+        // Delete ONLY transactions and cashbookentries collections
+        const deletedTx = await Transaction.deleteMany({});
+        const deletedCb = await CashbookEntry.deleteMany({});
+
+        // After counts
+        const studentsAfter = await Student.countDocuments();
+        const txAfter = await Transaction.countDocuments();
+        const cbAfter = await CashbookEntry.countDocuments();
+
+        res.json({
+            status: 'success',
+            cluster: dbHost,
+            database: dbName,
+            before: {
+                students: studentsBefore,
+                transactions: txBefore,
+                cashbookentries: cbBefore
+            },
+            deleted: {
+                transactions: deletedTx.deletedCount,
+                cashbookentries: deletedCb.deletedCount
+            },
+            after: {
+                students: studentsAfter,
+                transactions: txAfter,
+                cashbookentries: cbAfter
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/', (req, res) => {
     res.send('Institute API is running...');
 });
