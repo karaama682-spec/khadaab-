@@ -96,9 +96,11 @@ userSchema.pre('save', async function (next) {
 
 userSchema.methods.matchPassword = async function (enteredPassword) {
     try {
-        if (!this.passwordHash || this.passwordHash === '123456') {
-            return enteredPassword === this.passwordHash; 
+        if (!this.passwordHash || !enteredPassword) {
+            return false;
         }
+        // Always verify against the bcrypt hash. No plaintext shortcuts — a
+        // hard-coded password match would be an authentication backdoor.
         return await bcrypt.compare(enteredPassword, this.passwordHash);
     } catch (error) {
         console.error('Bcrypt comparison error:', error.message);

@@ -3,10 +3,11 @@ const User = require('../models/User');
 const { generateTeacherCode, withRetry } = require('../utils/generateCode');
 const { normalizePermissions } = require('../utils/permissionUtils');
 const jwt = require('jsonwebtoken');
+const { getJwtSecret } = require('../config/jwt');
 
 // Generate JWT
 const generateToken = (id) => {
-    return jwt.sign({ id }, process.env.JWT_SECRET || 'secret123', {
+    return jwt.sign({ id }, getJwtSecret(), {
         expiresIn: '30d',
     });
 };
@@ -70,7 +71,10 @@ const registerUser = asyncHandler(async (req, res) => {
         fullName: nameToUse,
         phone: phone || '',
         email: cleanEmail,
-        passwordHash: password || '123456',
+        // Admin-created accounts (e.g. teachers) get a default password the admin
+        // can share, then the user changes it. Configurable via env; the hash hook
+        // bcrypts it on save.
+        passwordHash: password || process.env.DEFAULT_USER_PASSWORD || 'ChangeMe123',
         gender: gender || 'Male',
         role: roleToUse,
         roles: Array.isArray(roles) ? roles : [],

@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('./asyncHandler');
 const User = require('../models/User');
+const { getJwtSecret } = require('../config/jwt');
 
 const protect = asyncHandler(async (req, res, next) => {
     let token;
@@ -14,7 +15,7 @@ const protect = asyncHandler(async (req, res, next) => {
             token = req.headers.authorization.split(' ')[1];
 
             // Verify token
-            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret123');
+            const decoded = jwt.verify(token, getJwtSecret());
 
             // Get user from the token
             const userId = decoded.id || decoded._id || decoded.userId;

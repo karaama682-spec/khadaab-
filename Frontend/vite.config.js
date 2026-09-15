@@ -1,20 +1,18 @@
 import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '');
+export default defineConfig(() => {
   return {
     server: {
       port: 3005,
       host: '0.0.0.0',
     },
     plugins: [react()],
-    define: {
-      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_MODEL': JSON.stringify(env.GEMINI_MODEL || 'gemini-3.5-pro')
-    },
+    // NOTE: Never inject secrets (API keys) into the client bundle via `define`.
+    // Anything defined here is embedded in the shipped JavaScript and readable by
+    // every visitor. AI/Gemini calls must go through the backend (/api/ai,
+    // /api/analytics), which holds the key server-side.
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

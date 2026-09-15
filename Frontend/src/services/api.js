@@ -1,9 +1,16 @@
 import axios from 'axios';
 
-// VITE_API_URL should be the API host (no trailing slash, no /api path).
-// Example: https://mach-backend-695y.onrender.com
-const defaultHost = import.meta.env.DEV ? 'http://localhost:5005' : 'https://mach-backend-695y.onrender.com';
-const host = import.meta.env.VITE_API_URL || defaultHost;
+// VITE_API_URL is the backend API host (no trailing slash, no /api path),
+// e.g. https://your-backend.onrender.com. Set it in your Vercel project's
+// Environment Variables for production. In local dev it falls back to localhost.
+// No production backend URL is hard-coded here on purpose — the deployment
+// controls it via env, so a backend URL change never requires a code change.
+const host = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5005' : '');
+
+if (!host) {
+    console.error('[config] VITE_API_URL is not set. The app cannot reach the backend. Set VITE_API_URL in your production (Vercel) environment.');
+}
+
 const apiBaseUrl = String(host).replace(/\/$/, '') + '/api';
 
 const api = axios.create({

@@ -1,0 +1,35 @@
+# Render Blueprint for the Machad backend (Express API).
+# In Render: New + -> Blueprint -> pick this repo. Render reads this file.
+# Secrets (sync:false) are NOT stored here — you set them in the Render dashboard.
+services:
+  - type: web
+    name: mach-backend
+    runtime: node
+    rootDir: Backend
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Render provides PORT automatically; the app already reads process.env.PORT.
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NAME
+        value: System Administrator
+      - key: DEFAULT_USER_PASSWORD
+        sync: false
+      # Your deployed frontend origin(s), comma-separated, no trailing slash.
+      - key: FRONTEND_URL
+        sync: false
+      # Optional: server-side Gemini key for /api/ai and /api/analytics.
+      - key: GEMINI_API_KEY
+        sync: false
