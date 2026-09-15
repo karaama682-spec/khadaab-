@@ -59,8 +59,28 @@ const studentSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Active', 'Inactive', 'Graduated'],
+        enum: ['Active', 'Inactive', 'Graduated', 'Exited'],
         default: 'Active'
+    },
+    // Exit / Archive metadata. Set only when a student is exited; the student
+    // record itself (id, fees, history) is never deleted or altered by an exit.
+    exitReason: {
+        type: String,
+        default: '',
+        trim: true
+    },
+    exitDate: {
+        type: Date,
+        default: null
+    },
+    exitedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    },
+    exitedAt: {
+        type: Date,
+        default: null
     }
 }, { timestamps: true });
 

@@ -113,7 +113,7 @@ const buildResultSheet = (exam, students, resultDocs) => {
 };
 
 const classStudents = (classId) =>
-    Student.find({ classId, status: { $ne: 'Graduated' } })
+    Student.find({ classId, status: { $nin: ['Graduated', 'Exited'] } })
         .select('fullName rollNumber studentCode classId')
         .sort({ fullName: 1 })
         .lean();

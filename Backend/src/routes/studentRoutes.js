@@ -5,7 +5,9 @@ const {
     getStudentById,
     createStudent,
     updateStudent,
-    deleteStudent
+    deleteStudent,
+    exitStudent,
+    getStudentArchive
 } = require('../controllers/studentController');
 const { protect } = require('../middleware/authMiddleware');
 const { checkPermission, checkAnyPermissionSet } = require('../middleware/roleMiddleware');
@@ -20,6 +22,11 @@ const canReadStudents = checkAnyPermissionSet([
 router.route('/')
     .get(protect, canReadStudents, getStudents)
     .post(protect, checkPermission('Academic Management', 'Add', 'Students'), createStudent);
+
+// Exit / archive a student. Editing a student is what an exit is (a status change),
+// so it uses the Students Edit grant. Reading the archive uses the read grant.
+router.get('/:id/archive', protect, canReadStudents, getStudentArchive);
+router.post('/:id/exit', protect, checkPermission('Academic Management', 'Edit', 'Students'), exitStudent);
 
 router.route('/:id')
     .get(protect, canReadStudents, getStudentById)
