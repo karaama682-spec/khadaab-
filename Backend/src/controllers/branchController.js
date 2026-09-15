@@ -2,6 +2,7 @@ const asyncHandler = require('../middleware/asyncHandler');
 const Branch = require('../models/Branch');
 const Class = require('../models/Class');
 const Student = require('../models/Student');
+const { ensureBranchSessions } = require('./branchSessionController');
 
 // Branch names identify a campus across classes and reports, so they are matched
 // case-insensitively on trimmed text: "FR1" and " fr1 " are the same branch, not
@@ -43,6 +44,17 @@ const createBranch = asyncHandler(async (req, res) => {
     }
 
     const data = await Branch.create({ ...req.body, name });
+
+    // A new branch automatically gets the three sessions at their default times,
+    // which the admin can then adjust independently. Non-fatal: a session-seeding
+    // hiccup must never fail branch creation (the times are lazily backfilled on
+    // first read anyway).
+    try {
+        await ensureBranchSessions(data._id);
+    } catch (err) {
+        console.error('Failed to seed default sessions for new branch:', err.message);
+    }
+
     res.status(201).json(data);
 });
 

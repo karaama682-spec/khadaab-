@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, BookOpen, Calendar, CalendarCheck, CheckCircle2, Clock, Save, Users } from 'lucide-react';
+import { AlertCircle, BookOpen, Building2, Calendar, CalendarCheck, CheckCircle2, Clock, Save, Search, Users } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { classLabel } from '../utils/classLabel';
@@ -39,12 +39,72 @@ const StudentAttendanceManagement = () => {
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
   const [roster, setRoster] = useState({});
+  const [selectedBranchId, setSelectedBranchId] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedDate, setSelectedDate] = useState(today());
   const [selectedSession, setSelectedSession] = useState('Morning');
+  const [branchSessionTimes, setBranchSessionTimes] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Student quick-search (by code or partial name) over the already-loaded
+  // student list. Selecting a result jumps to that student's branch + class.
+  const [studentSearch, setStudentSearch] = useState('');
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [highlightStudentId, setHighlightStudentId] = useState('');
+
+  // Branches are derived from the classes already loaded (each class is populated
+  // with its branch), so no extra request is needed for the branch filter.
+  const branches = useMemo(() => {
+    const map = new Map();
+    classes.forEach(item => {
+      const branch = item.branchId;
+      if (branch && branch._id) map.set(String(branch._id), branch.name || 'Branch');
+    });
+    return [...map.entries()].map(([_id, name]) => ({ _id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [classes]);
+
+  // Class dropdown honours the branch filter: "All Branches" shows every class.
+  const visibleClasses = useMemo(
+    () => selectedBranchId
+      ? classes.filter(item => String(item.branchId?._id || item.branchId) === String(selectedBranchId))
+      : classes,
+    [classes, selectedBranchId]
+  );
+
+  // Search the existing students by code or (partial) name — no new data source.
+  const searchResults = useMemo(() => {
+    const q = studentSearch.trim().toLowerCase();
+    if (!q) return [];
+    return students
+      .filter(s =>
+        (s.fullName || '').toLowerCase().includes(q) ||
+        String(s.studentCode || '').toLowerCase().includes(q) ||
+        String(s.rollNumber || '').toLowerCase().includes(q)
+      )
+      .slice(0, 8);
+  }, [students, studentSearch]);
+
+  // Selecting a found student jumps the existing form to that student's branch and
+  // class (so the roster loads them) and highlights their row. The rest of the
+  // attendance flow — Session, Arrived, Status — is unchanged.
+  const handleSelectSearchedStudent = (student) => {
+    const cls = classes.find(c => String(c._id) === String(student.classId?._id || student.classId));
+    const branchId = cls?.branchId?._id || cls?.branchId || student.branchId?._id || student.branchId || '';
+    if (branchId) setSelectedBranchId(String(branchId));
+    if (student.classId) setSelectedClassId(String(student.classId?._id || student.classId));
+    setHighlightStudentId(String(student._id));
+    setStudentSearch(`${student.fullName} — ${student.studentCode || student.rollNumber || 'No code'}`);
+    setShowSearchResults(false);
+  };
+
+  const selectedClass = classes.find(item => String(item._id) === String(selectedClassId));
+  // The branch that owns the selected class — this is the branch whose session
+  // times attendance for this class must use (requirement: use the student's
+  // existing branch, never a global time).
+  const currentBranchId = selectedClass?.branchId?._id || selectedClass?.branchId || '';
+  const currentBranchName = selectedClass?.branchId?.name || branches.find(b => String(b._id) === String(currentBranchId))?.name || '';
+  const currentSessionTime = branchSessionTimes[selectedSession] || '';
 
   const classStudents = useMemo(
     () => students
@@ -112,6 +172,39 @@ const StudentAttendanceManagement = () => {
     return () => { cancelled = true; };
   }, [selectedClassId, selectedDate, selectedSession, classStudents, showAlert]);
 
+  // If the branch filter changes and the chosen class no longer belongs to it,
+  // clear the class selection so the register never shows another branch's class.
+  useEffect(() => {
+    if (selectedBranchId && selectedClass && String(selectedClass.branchId?._id || selectedClass.branchId) !== String(selectedBranchId)) {
+      setSelectedClassId('');
+    }
+  }, [selectedBranchId, selectedClass]);
+
+  // Load the branch-specific session times for the selected class's branch, so
+  // the register shows this branch's configured time (e.g. Branch B Morning
+  // 07:15), not a global one. Different branches load their own times.
+  useEffect(() => {
+    if (!currentBranchId) {
+      setBranchSessionTimes({});
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get(`/branch-sessions/${currentBranchId}`);
+        if (cancelled) return;
+        const map = {};
+        (data || []).forEach(s => { map[s.name] = s.time; });
+        setBranchSessionTimes(map);
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Failed to load branch session times', error);
+        setBranchSessionTimes({});
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [currentBranchId]);
+
   const setStatus = useCallback((studentId, status) => {
     setRoster(previous => {
       const current = previous[studentId] || defaultRow();
@@ -119,13 +212,15 @@ const StudentAttendanceManagement = () => {
         ...previous,
         [studentId]: {
           status,
-          // Returning a student to Present drops the reason and the arrival time.
-          arrivalTime: status === 'Late' ? (current.arrivalTime || '08:30') : '',
+          // Marking a student Late pre-fills Arrived with the selected branch/
+          // session's scheduled time (e.g. Morning 06:30); the user can then edit
+          // it to the actual arrival. Returning to Present clears it.
+          arrivalTime: status === 'Late' ? (current.arrivalTime || currentSessionTime) : '',
           description: status === 'Present' ? '' : current.description
         }
       };
     });
-  }, []);
+  }, [currentSessionTime]);
 
   const setField = useCallback((studentId, field, value) => {
     setRoster(previous => ({
@@ -145,7 +240,7 @@ const StudentAttendanceManagement = () => {
         date: selectedDate,
         session: selectedSession,
         status: row.status,
-        arrivalTime: row.status === 'Late' ? (row.arrivalTime || '08:30') : '',
+        arrivalTime: row.status === 'Late' ? (row.arrivalTime || currentSessionTime) : '',
         description: row.status === 'Present' ? '' : (row.description || '').trim()
       };
     });
@@ -185,8 +280,49 @@ const StudentAttendanceManagement = () => {
         </div>
       </div>
 
-      <section className="grid grid-cols-1 gap-5 rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:grid-cols-3">
-        <div><label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500"><BookOpen size={14} className="text-brand-500" /> Class</label><select value={selectedClassId} onChange={event => setSelectedClassId(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-bold text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"><option value="">Select class...</option>{classes.map(item => <option key={item._id} value={item._id}>{classLabel(item)}</option>)}</select></div>
+      {/* Quick student search — find by Student ID/Code or (partial) name, then
+          jump straight to that student's branch + class to take attendance. */}
+      <section className="rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500"><Search size={14} className="text-brand-500" /> Search Student (ID / Code or Name)</label>
+        <div className="relative">
+          <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={studentSearch}
+            onChange={event => { setStudentSearch(event.target.value); setShowSearchResults(true); setHighlightStudentId(''); }}
+            onFocus={() => setShowSearchResults(true)}
+            placeholder="e.g. 1001 or Mustaf"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3.5 pl-11 pr-4 text-sm font-bold text-slate-900 outline-none focus:border-brand-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
+          {showSearchResults && searchResults.length > 0 && (
+            <div
+              onMouseDown={event => event.preventDefault()}
+              className="absolute left-0 right-0 top-full z-20 mt-2 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
+            >
+              {searchResults.map(student => (
+                <button
+                  key={student._id}
+                  type="button"
+                  onClick={() => handleSelectSearchedStudent(student)}
+                  className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-5 py-3 text-left last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
+                >
+                  <span className="text-sm font-bold text-slate-900 dark:text-white">{student.fullName}</span>
+                  <span className="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-400">Code: {student.studentCode || student.rollNumber || '—'}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {showSearchResults && studentSearch.trim() && searchResults.length === 0 && (
+            <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-semibold text-slate-400 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+              No student found matching "{studentSearch.trim()}".
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-5 rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:grid-cols-2 xl:grid-cols-4">
+        <div><label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500"><Building2 size={14} className="text-indigo-500" /> Branch</label><select value={selectedBranchId} onChange={event => setSelectedBranchId(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-bold text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"><option value="">All Branches</option>{branches.map(item => <option key={item._id} value={item._id}>{item.name}</option>)}</select></div>
+        <div><label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500"><BookOpen size={14} className="text-brand-500" /> Class</label><select value={selectedClassId} onChange={event => setSelectedClassId(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-bold text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"><option value="">Select class...</option>{visibleClasses.map(item => <option key={item._id} value={item._id}>{classLabel(item)}</option>)}</select></div>
         <div><label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500"><Calendar size={14} className="text-emerald-500" /> Date</label><input type="date" value={selectedDate} onChange={event => setSelectedDate(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-bold text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white" /></div>
         <div><label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500"><Clock size={14} className="text-amber-500" /> Session</label><select value={selectedSession} onChange={event => setSelectedSession(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-bold text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"><option value="Morning">Morning</option><option value="Breakfast">Breakfast</option><option value="Evening">Evening</option></select></div>
       </section>
@@ -205,7 +341,7 @@ const StudentAttendanceManagement = () => {
               <AlertCircle className="text-brand-500" size={20} />
               <div>
                 <h2 className="font-black text-slate-900 dark:text-white">Class register{selectedClassName ? ` — ${selectedClassName}` : ''}</h2>
-                <p className="mt-1 text-xs font-semibold text-slate-500">{classStudents.length} student{classStudents.length === 1 ? '' : 's'} · {selectedDate} · {selectedSession}</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500">{classStudents.length} student{classStudents.length === 1 ? '' : 's'} · {selectedDate} · {selectedSession}{currentSessionTime ? ` @ ${currentSessionTime}` : ''}{currentBranchName ? ` · ${currentBranchName}` : ''}</p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -234,7 +370,7 @@ const StudentAttendanceManagement = () => {
                     const row = roster[student._id] || defaultRow();
                     const needsReason = row.status === 'Late' || row.status === 'Absent';
                     return (
-                      <tr key={student._id} className="align-top hover:bg-slate-50/60 dark:hover:bg-slate-800/20">
+                      <tr key={student._id} className={`align-top hover:bg-slate-50/60 dark:hover:bg-slate-800/20 ${String(student._id) === String(highlightStudentId) ? 'bg-brand-50/70 dark:bg-brand-500/10 ring-2 ring-inset ring-brand-400/40' : ''}`}>
                         <td className="px-7 py-5">
                           <p className="font-bold text-slate-900 dark:text-white">{student.fullName}</p>
                           <p className="mt-0.5 text-xs font-semibold text-slate-400">{student.rollNumber || student.studentCode || 'No ID'}</p>
@@ -268,7 +404,7 @@ const StudentAttendanceManagement = () => {
                                   <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Arrived</span>
                                   <input
                                     type="time"
-                                    value={row.arrivalTime || '08:30'}
+                                    value={row.arrivalTime || currentSessionTime}
                                     onChange={event => setField(student._id, 'arrivalTime', event.target.value)}
                                     className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 outline-none dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
                                   />

@@ -36,6 +36,26 @@ import {
 import { jsPDF } from 'jspdf';
 import { classLabel } from '../utils/classLabel';
 
+// Current month as 'YYYY-MM' for the Daily View month picker.
+const currentMonth = () => new Date().toISOString().slice(0, 7);
+
+// Attendance dates are stored as 'YYYY-MM-DD'. Show them as one dd/mm/yyyy column.
+const formatDMY = (iso) => {
+  if (!iso || typeof iso !== 'string') return '-';
+  const [y, m, d] = iso.split('-');
+  return (y && m && d) ? `${d}/${m}/${y}` : iso;
+};
+
+// 'YYYY-MM' -> 'September 2026' for headings.
+const monthLabel = (ym) => {
+  if (!ym) return '';
+  const [y, m] = ym.split('-');
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+};
+
+// Keep multiple sessions on the same date in a natural order.
+const SESSION_ORDER = { Morning: 0, Breakfast: 1, Evening: 2 };
+
 const StudentAttendanceReport = () => {
   const { showAlert } = useAlert();
 
@@ -54,9 +74,13 @@ const StudentAttendanceReport = () => {
   const [dashEndDate, setDashEndDate] = useState('');
 
   // 2. Daily Report State
-  const [dailyDate, setDailyDate] = useState(new Date().toISOString().split('T')[0]);
+  // Daily View now works as: Student Code + Month -> all of that student's
+  // attendance records for the month (no single-date selection required).
+  const [dailyStudentCode, setDailyStudentCode] = useState('');
+  const [dailyMonth, setDailyMonth] = useState(currentMonth()); // 'YYYY-MM'
   const [dailyStatusFilter, setDailyStatusFilter] = useState('All'); // All | Present | Late | Absent
-  const [dailySearchQuery, setDailySearchQuery] = useState('');
+  // Kept for the inline quick-edit handlers used elsewhere in this page.
+  const [dailyDate] = useState(new Date().toISOString().split('T')[0]);
 
   // 3. Class Report State
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -269,40 +293,47 @@ const StudentAttendanceReport = () => {
   // ==========================================
   // 2. DAILY REPORT CALCULATIONS
   // ==========================================
+  // Resolve the typed Student ID/Code to a student. Prefer an exact code match,
+  // then fall back to a partial match so typing part of a code still finds them.
+  const dailyMatchedStudent = useMemo(() => {
+    const q = dailyStudentCode.trim().toLowerCase();
+    if (!q) return null;
+    const codeOf = (s) => String(s.studentCode || s.rollNumber || '').toLowerCase();
+    return students.find(s => codeOf(s) === q)
+      || students.find(s => codeOf(s).includes(q))
+      || null;
+  }, [students, dailyStudentCode]);
+
+  // All attendance records for the matched student within the selected month.
+  // Dates are stored as 'YYYY-MM-DD', so a 'YYYY-MM' prefix match cleanly covers
+  // every month length (28/29/30/31) and leap years. One row per date+session —
+  // multiple sessions on the same day appear as separate rows. The records are
+  // shown exactly as recorded (no recalculation against current session times).
   const dailyReportData = useMemo(() => {
-    // Get all students
-    return students.map(student => {
-      // Find latest attendance for this student on the selected dailyDate
-      const records = allAttendance.filter(r => {
-        const sId = r.studentId?._id || r.studentId;
-        return String(sId) === String(student._id) && r.date === dailyDate;
-      });
+    if (!dailyMatchedStudent || !dailyMonth) return [];
+    const sid = dailyMatchedStudent._id;
 
-      // Sort newest first to fetch latest recorded status
-      const latestRecord = records.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+    const rows = allAttendance
+      .filter(r => {
+        const rId = r.studentId?._id || r.studentId;
+        return String(rId) === String(sid) && typeof r.date === 'string' && r.date.startsWith(dailyMonth);
+      })
+      .map(r => ({
+        date: r.date,
+        student: dailyMatchedStudent,
+        code: dailyMatchedStudent.studentCode || dailyMatchedStudent.rollNumber || '-',
+        session: r.session || 'Morning',
+        status: r.status || '-',
+        arrivalTime: r.arrivalTime || '',
+        description: r.description || ''
+      }))
+      .sort((a, b) =>
+        a.date.localeCompare(b.date) ||
+        ((SESSION_ORDER[a.session] ?? 9) - (SESSION_ORDER[b.session] ?? 9))
+      );
 
-      return {
-        student,
-        record: latestRecord || null,
-        status: latestRecord?.status || 'Unmarked',
-        session: latestRecord?.session || '-',
-        arrivalTime: latestRecord?.arrivalTime || '-',
-        description: latestRecord?.description || ''
-      };
-    }).filter(item => {
-      // Search text filter
-      const matchesSearch = 
-        item.student.fullName.toLowerCase().includes(dailySearchQuery.toLowerCase()) ||
-        (item.student.studentCode || '').toLowerCase().includes(dailySearchQuery.toLowerCase());
-
-      // Status dropdown filter
-      const matchesStatus = 
-        dailyStatusFilter === 'All' || 
-        item.status === dailyStatusFilter;
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [students, allAttendance, dailyDate, dailyStatusFilter, dailySearchQuery]);
+    return dailyStatusFilter === 'All' ? rows : rows.filter(r => r.status === dailyStatusFilter);
+  }, [dailyMatchedStudent, dailyMonth, allAttendance, dailyStatusFilter]);
 
   // ==========================================
   // 3. CLASS REPORT CALCULATIONS
@@ -479,22 +510,27 @@ const StudentAttendanceReport = () => {
     return capped.map(line => fitPdfText(doc, line, width));
   };
 
-  // 1. Export Daily CSV
+  // 1. Export Daily CSV (monthly ledger for one student)
   const exportDailyCSV = () => {
-    const headers = ['Student Name', 'Student Code', 'Class', 'Session', 'Status', 'Arrival Time', 'Description', 'Guardian Name', 'Phone'];
+    if (!dailyMatchedStudent || dailyReportData.length === 0) {
+      showAlert({ type: 'warning', title: 'Nothing to export', message: 'Search a Student ID/Code and month with records first.' });
+      return;
+    }
+    const headers = ['Date', 'Student Name', 'Code', 'Session', 'Status', 'Arrival', 'Description'];
     const rows = dailyReportData.map(item => [
+      formatDMY(item.date),
       item.student.fullName,
-      item.student.studentCode || item.student.rollNumber || '-',
-      classes.find(c => String(c._id) === String(item.student.classId?._id || item.student.classId))?.name || '-',
+      item.code,
       item.session,
       item.status,
-      item.arrivalTime,
-      item.description || '',
-      item.student.guardianId?.fullName || item.student.fatherName || '-',
-      item.student.guardianId?.phone || item.student.fatherPhone || '-'
+      item.arrivalTime || '-',
+      item.description || '-'
     ]);
-    handleExportCSV(headers, rows, `Daily_Attendance_${dailyDate}.csv`);
+    handleExportCSV(headers, rows, `Attendance_${item0Code()}_${dailyMonth}.csv`);
   };
+
+  // Small helper so the export filename carries the student code safely.
+  const item0Code = () => String(dailyMatchedStudent?.studentCode || dailyMatchedStudent?.rollNumber || 'student').replace(/\s+/g, '_');
 
   // 2. Export Class CSV
   const exportClassCSV = () => {
@@ -527,32 +563,64 @@ const StudentAttendanceReport = () => {
     handleExportCSV(headers, rows, `Student_Attendance_${selectedStudent.fullName.replace(/\s+/g, '_')}.csv`);
   };
 
-  // 1. Export Daily PDF
+  // 1. Export Daily PDF (monthly ledger for one student)
   const exportDailyPDF = () => {
+    // PRINT filter: "All" prints every recorded status EXCEPT Present
+    // (Present is treated as the normal case and omitted from the printed ledger).
+    // A specific status filter prints only that status (dailyReportData already
+    // holds just that status in that case).
+    const printRows = dailyStatusFilter === 'All'
+      ? dailyReportData.filter(r => r.status !== 'Present')
+      : dailyReportData;
+
+    if (!dailyMatchedStudent || printRows.length === 0) {
+      showAlert({
+        type: 'warning',
+        title: 'Nothing to print',
+        message: dailyStatusFilter === 'All'
+          ? 'No Late/Absent records to print for this student and month.'
+          : 'No matching records to print for this student and month.'
+      });
+      return;
+    }
+
+    // Class comes from the existing student/class data — no new class system.
+    const studentClass = dailyMatchedStudent.classId;
+    const studentClassName =
+      classes.find(c => String(c._id) === String(studentClass?._id || studentClass))?.name
+      || (studentClass && typeof studentClass === 'object' ? classLabel(studentClass, '') : '')
+      || '-';
+
     const doc = new jsPDF();
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
-    doc.text('DAILY ATTENDANCE REPORT', 14, 20);
+    doc.text('MONTHLY ATTENDANCE LEDGER', 14, 20);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Date: ${dailyDate}`, 14, 26);
-    doc.text(`Generated At: ${new Date().toLocaleString()}`, 14, 31);
-    
-    doc.line(14, 35, 196, 35);
-    
-    let y = 45;
+    // Stacked header: Student / Code / Class / Month / Generated At.
+    doc.text(`Student: ${dailyMatchedStudent.fullName}`, 14, 30);
+    doc.text(`Code: ${dailyMatchedStudent.studentCode || dailyMatchedStudent.rollNumber || '-'}`, 14, 36);
+    doc.text(`Class: ${studentClassName}`, 14, 42);
+    doc.text(`Month: ${monthLabel(dailyMonth)}`, 14, 48);
+    doc.text(`Generated At: ${new Date().toLocaleString()}`, 14, 54);
+
+    doc.line(14, 59, 196, 59);
+
+    let y = 68;
     doc.setFont('helvetica', 'bold');
-    // Column starts and widths. Session/Status/Arrival hold short fixed values, so
-    // the space they do not need funds the name and description columns.
+    // One Date column plus the recorded fields. Session/Status/Arrival hold short
+    // fixed values; the reclaimed space funds the description column.
     const col = {
-      name: { x: 14, w: 58 },
-      code: { x: 72, w: 30 },
-      session: { x: 102, w: 19 },
-      status: { x: 121, w: 18 },
-      arrival: { x: 139, w: 15 },
-      description: { x: 154, w: 42 }
+      date: { x: 14, w: 24 },
+      name: { x: 38, w: 42 },
+      code: { x: 80, w: 18 },
+      session: { x: 98, w: 20 },
+      status: { x: 118, w: 18 },
+      arrival: { x: 136, w: 15 },
+      description: { x: 151, w: 45 }
     };
 
+    doc.text('Date', col.date.x, y);
     doc.text('Student Name', col.name.x, y);
     doc.text('Code', col.code.x, y);
     doc.text('Session', col.session.x, y);
@@ -564,22 +632,23 @@ const StudentAttendanceReport = () => {
     doc.setFont('helvetica', 'normal');
 
     y += 10;
-    dailyReportData.forEach(item => {
+    printRows.forEach(item => {
       if (y > 275) {
         doc.addPage();
         y = 20;
       }
       const descriptionLines = pdfDescriptionLines(doc, item.description, col.description.w);
+      doc.text(fitPdfText(doc, formatDMY(item.date), col.date.w), col.date.x, y);
       doc.text(fitPdfText(doc, item.student.fullName, col.name.w), col.name.x, y);
-      doc.text(fitPdfText(doc, item.student.studentCode || item.student.rollNumber, col.code.w), col.code.x, y);
+      doc.text(fitPdfText(doc, item.code, col.code.w), col.code.x, y);
       doc.text(fitPdfText(doc, item.session, col.session.w), col.session.x, y);
       doc.text(fitPdfText(doc, item.status, col.status.w), col.status.x, y);
-      doc.text(fitPdfText(doc, item.arrivalTime, col.arrival.w), col.arrival.x, y);
+      doc.text(fitPdfText(doc, item.arrivalTime || '-', col.arrival.w), col.arrival.x, y);
       doc.text(descriptionLines, col.description.x, y);
       y += Math.max(8, descriptionLines.length * 5);
     });
 
-    doc.save(`Daily_Attendance_${dailyDate}.pdf`);
+    doc.save(`Attendance_${item0Code()}_${dailyMonth}.pdf`);
   };
 
   // 2. Export Class PDF
@@ -820,58 +889,56 @@ const StudentAttendanceReport = () => {
       {/* ========================================== */}
       {activeTab === 'daily' && (
         <div className="space-y-8 animate-in fade-in duration-500">
-          
-          {/* Controls */}
-          <div className="bg-white dark:bg-slate-900 rounded-[32px] p-6 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-6">
-            
-            {/* Date select, search & status filters */}
-            <div className="flex flex-wrap items-center gap-6 flex-1">
-              
-              {/* Date selection */}
+
+          {/* Controls: Student ID/Code + Month (no single-date selection needed) */}
+          <div className="bg-white dark:bg-slate-900 rounded-[32px] p-6 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col xl:flex-row xl:items-end justify-between gap-6">
+
+            <div className="flex flex-wrap items-end gap-6 flex-1">
+
+              {/* Student ID / Code */}
+              <div className="min-w-[220px]">
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Student ID / Code</label>
+                <div className="relative">
+                  <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="e.g. 1001"
+                    value={dailyStudentCode}
+                    onChange={(e) => setDailyStudentCode(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Month selection */}
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Reporting Date</label>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Month</label>
                 <input
-                  type="date"
-                  value={dailyDate}
-                  onChange={(e) => setDailyDate(e.target.value)}
-                  className="px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white"
+                  type="month"
+                  value={dailyMonth}
+                  onChange={(e) => setDailyMonth(e.target.value)}
+                  className="px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white outline-none"
                 />
               </div>
 
-              {/* Status Selector */}
+              {/* Optional status filter (defaults to All) */}
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Attendance Status</label>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Status</label>
                 <select
                   value={dailyStatusFilter}
                   onChange={(e) => setDailyStatusFilter(e.target.value)}
                   className="px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white"
                 >
-                  <option value="All">All Students</option>
+                  <option value="All">All Statuses</option>
                   <option value="Present">Present Only</option>
                   <option value="Late">Late Only</option>
                   <option value="Absent">Absent Only</option>
-                  <option value="Unmarked">Unmarked Only</option>
                 </select>
-              </div>
-
-              {/* Live search input */}
-              <div className="flex-1 min-w-[200px]">
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Search Name / Code</label>
-                <div className="relative">
-                  <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search daily list..."
-                    value={dailySearchQuery}
-                    onChange={(e) => setDailySearchQuery(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-900 dark:text-white"
-                  />
-                </div>
               </div>
 
             </div>
 
-            {/* Export Buttons */}
+            {/* Export Buttons (print the monthly ledger for this student) */}
             <div className="flex items-center gap-3 shrink-0">
               <button
                 onClick={exportDailyCSV}
@@ -889,92 +956,89 @@ const StudentAttendanceReport = () => {
 
           </div>
 
-          {/* Table */}
+          {/* Student + month summary header (paper ledger style) */}
+          {dailyMatchedStudent && (
+            <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm px-8 py-5 flex flex-wrap items-center gap-x-10 gap-y-2">
+              <div>
+                <span className="text-[10px] font-black uppercase text-slate-400">Student</span>
+                <p className="text-base font-bold text-slate-900 dark:text-white">{dailyMatchedStudent.fullName}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase text-slate-400">Code</span>
+                <p className="text-sm font-bold text-slate-600 dark:text-slate-300 font-mono">{dailyMatchedStudent.studentCode || dailyMatchedStudent.rollNumber || '-'}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase text-slate-400">Month</span>
+                <p className="text-sm font-bold text-slate-600 dark:text-slate-300">{monthLabel(dailyMonth)}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-black uppercase text-slate-400">Records</span>
+                <p className="text-sm font-bold text-slate-600 dark:text-slate-300">{dailyReportData.length}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Table — one Date column; shows every session record for the month */}
           <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
+                    <th className="px-8 py-5">Date</th>
                     <th className="px-8 py-5">Student Name</th>
-                    <th className="px-8 py-5">Student Code</th>
-                    <th className="px-8 py-5">Class</th>
+                    <th className="px-8 py-5">Code</th>
                     <th className="px-8 py-5">Session</th>
                     <th className="px-8 py-5">Status</th>
-                    <th className="px-8 py-5">Arrival Time</th>
+                    <th className="px-8 py-5">Arrival</th>
                     <th className="px-8 py-5">Description</th>
-                    <th className="px-8 py-5">Guardian Name</th>
-                    <th className="px-8 py-5">Phone Number</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {dailyReportData.map((item) => {
-                    const isSaving = savingStudentId === item.student._id;
-                    return (
-                      <tr key={item.student._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
-                        <td className="px-8 py-6 text-sm font-bold text-slate-900 dark:text-slate-100">
-                          {item.student.fullName}
-                        </td>
-                        <td className="px-8 py-6 text-sm font-bold text-slate-500 dark:text-slate-400 font-mono">
-                          {item.student.studentCode || item.student.rollNumber || '-'}
-                        </td>
-                        <td className="px-8 py-6 text-sm font-semibold text-slate-700 dark:text-slate-300">
-                          {classes.find(c => String(c._id) === String(item.student.classId?._id || item.student.classId))?.name || '-'}
-                        </td>
-                        <td className="px-8 py-6 text-xs font-bold text-slate-500">
-                          {item.session}
-                        </td>
-                        <td className="px-8 py-6">
-                          <select
-                            disabled={isSaving}
-                            value={item.status}
-                            onChange={(e) => handleQuickStatusChange(item.student, e.target.value, item.arrivalTime)}
-                            className={`px-3 py-1.5 rounded-xl font-bold text-[11px] uppercase border cursor-pointer outline-none transition-all ${
-                              item.status === 'Present'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800'
-                                : item.status === 'Late'
-                                ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-400 dark:border-amber-800'
-                                : item.status === 'Absent'
-                                ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-400 dark:border-rose-800'
-                                : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-                            }`}
-                          >
-                            <option value="Unmarked">Unmarked</option>
-                            <option value="Present">✓ Present</option>
-                            <option value="Late">⏰ Late</option>
-                            <option value="Absent">✖ Absent</option>
-                          </select>
-                        </td>
-                        <td className="px-8 py-6 text-xs font-bold text-slate-750 dark:text-slate-300 font-mono">
-                          {item.status === 'Late' ? (
-                            <input
-                              type="text"
-                              placeholder="e.g. 08:30"
-                              defaultValue={item.arrivalTime !== '-' ? item.arrivalTime : '08:30'}
-                              onBlur={(e) => handleArrivalTimeChange(item.student, item.status, e.target.value)}
-                              className="w-24 px-2.5 py-1 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 font-mono text-xs font-bold outline-none"
-                            />
-                          ) : (
-                            item.arrivalTime || '-'
-                          )}
-                        </td>
-                        <td className="px-8 py-6 text-sm font-semibold text-slate-700 dark:text-slate-300 max-w-xs">
-                          {item.description
-                            ? <span className="whitespace-pre-wrap break-words">{item.description}</span>
-                            : <span className="text-slate-400">—</span>}
-                        </td>
-                        <td className="px-8 py-6 text-sm font-semibold text-slate-650 dark:text-slate-400">
-                          {item.student.guardianId?.fullName || item.student.fatherName || '-'}
-                        </td>
-                        <td className="px-8 py-6 text-sm font-semibold text-slate-500 dark:text-slate-400 font-mono">
-                          {item.student.guardianId?.phone || item.student.fatherPhone || '-'}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {dailyReportData.map((item, idx) => (
+                    <tr key={`${item.date}-${item.session}-${idx}`} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
+                      <td className="px-8 py-6 text-sm font-bold text-slate-900 dark:text-slate-100 font-mono">
+                        {formatDMY(item.date)}
+                      </td>
+                      <td className="px-8 py-6 text-sm font-bold text-slate-900 dark:text-slate-100">
+                        {item.student.fullName}
+                      </td>
+                      <td className="px-8 py-6 text-sm font-bold text-slate-500 dark:text-slate-400 font-mono">
+                        {item.code}
+                      </td>
+                      <td className="px-8 py-6 text-xs font-bold text-slate-500">
+                        {item.session}
+                      </td>
+                      <td className="px-8 py-6">
+                        <span className={`px-3 py-1.5 rounded-xl font-bold text-[11px] uppercase border ${
+                          item.status === 'Present'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800'
+                            : item.status === 'Late'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-400 dark:border-amber-800'
+                            : item.status === 'Absent'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-400 dark:border-rose-800'
+                            : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                        }`}>
+                          {item.status}
+                        </span>
+                      </td>
+                      <td className="px-8 py-6 text-xs font-bold text-slate-750 dark:text-slate-300 font-mono">
+                        {item.arrivalTime ? item.arrivalTime : <span className="text-slate-400">—</span>}
+                      </td>
+                      <td className="px-8 py-6 text-sm font-semibold text-slate-700 dark:text-slate-300 max-w-xs">
+                        {item.description
+                          ? <span className="whitespace-pre-wrap break-words">{item.description}</span>
+                          : <span className="text-slate-400">—</span>}
+                      </td>
+                    </tr>
+                  ))}
                   {dailyReportData.length === 0 && (
                     <tr>
-                      <td colSpan="9" className="px-8 py-12 text-center text-slate-400 text-sm font-semibold">
-                        No students found matching current selectors.
+                      <td colSpan="7" className="px-8 py-12 text-center text-slate-400 text-sm font-semibold">
+                        {!dailyStudentCode.trim()
+                          ? 'Enter a Student ID / Code and choose a month to view attendance.'
+                          : !dailyMatchedStudent
+                          ? `No student found with code "${dailyStudentCode.trim()}".`
+                          : `No attendance records for ${dailyMatchedStudent.fullName} in ${monthLabel(dailyMonth)}.`}
                       </td>
                     </tr>
                   )}

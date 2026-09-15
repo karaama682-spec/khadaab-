@@ -42,6 +42,7 @@ export const NAV_CONFIG = [
       { label: 'Classes', translationKey: 'classes', path: '/academic/classes', icon: BookOpen },
       { label: 'Teachers', translationKey: 'teachers', path: '/academic/teachers', icon: GraduationCap },
       { label: 'Students', translationKey: 'students', path: '/academic/students', icon: Users },
+      { label: 'Exit Students', translationKey: 'exitStudents', path: '/academic/exit-students', icon: UserCheck },
       { label: 'Class Promotion', translationKey: 'classPromotion', path: '/academic/promotion', icon: UserCheck },
     ]
   },
@@ -54,6 +55,7 @@ export const NAV_CONFIG = [
     subItems: [
       { label: 'Student Attendance', translationKey: 'studentAttendance', path: '/attendance/students', icon: CalendarCheck },
       { label: 'Teacher Attendance', translationKey: 'teacherAttendance', path: '/attendance/teachers', icon: CalendarCheck },
+      { label: 'Session Settings', translationKey: 'sessionSettings', path: '/attendance/session-settings', icon: Settings },
     ]
   },
   {

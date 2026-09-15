@@ -10,8 +10,10 @@ import DashboardOverview from './pages/DashboardOverview.jsx';
 import ClassesManagement from './pages/ClassesManagement.jsx';
 import TeachersManagement from './pages/TeachersManagement.jsx';
 import StudentsManagement from './pages/StudentsManagement.jsx';
+import ExitStudents from './pages/ExitStudents.jsx';
 import StudentAttendanceManagement from './pages/StudentAttendanceManagement.jsx';
 import TeacherAttendanceManagement from './pages/TeacherAttendanceManagement.jsx';
+import SessionSettings from './pages/SessionSettings.jsx';
 import ExamsManagement from './pages/ExamsManagement.jsx';
 import ExamMarks from './pages/ExamMarks.jsx';
 import ExamResults from './pages/ExamResults.jsx';
@@ -269,6 +271,7 @@ const App = () => {
                   <Route path="/academic/classes" element={<ClassesManagement />} />
                   <Route path="/academic/teachers" element={<TeachersManagement />} />
                   <Route path="/academic/students" element={<StudentsManagement />} />
+                  <Route path="/academic/exit-students" element={<ExitStudents />} />
                   <Route path="/academic/promotion" element={<ClassPromotion />} />
 
                   {/* Attendance & Reports Management */}
@@ -279,6 +282,7 @@ const App = () => {
                   <Route path="/reports/category-summary" element={<CashbookCategoryReport />} />
                   <Route path="/reports/payment-report" element={<CashbookPaymentReport />} />
                   <Route path="/attendance/teachers" element={<TeacherAttendanceManagement />} />
+                  <Route path="/attendance/session-settings" element={<SessionSettings />} />
 
                   {/* Examinations */}
                   <Route path="/exams" element={<ExamsManagement />} />

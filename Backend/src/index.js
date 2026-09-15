@@ -6,6 +6,11 @@ const express = require('express');
 const cors = require('cors');
 const connectDB = require('./db');
 const { errorHandler } = require('./middleware/errorMiddleware');
+const { assertJwtSecret } = require('./config/jwt');
+
+// Fail fast in production if critical secrets are missing, rather than booting
+// with insecure defaults.
+assertJwtSecret();
 
 // Connect to Database and auto-seed admin
 const seedAdminUser = async () => {
@@ -26,7 +31,7 @@ const seedAdminUser = async () => {
         }
 
         let adminUser = await User.findOne({ email: adminEmail });
-        
+
         if (!adminUser) {
             adminUser = await User.create({
                 fullName: adminName,
@@ -36,19 +41,15 @@ const seedAdminUser = async () => {
                 roles: [ownerRole._id],
                 status: 'active'
             });
-            console.log('✓ Admin user seeded (admin@institute.com / 123456)');
+            console.log(`✓ Admin user seeded (${adminEmail}). Password taken from ADMIN_PASSWORD env.`);
         } else {
+            // Keep the admin's role/status correct but never touch an existing
+            // password here — that is managed by the user, not overwritten on boot.
             adminUser.fullName = adminUser.fullName || adminName;
             adminUser.role = 'Super Admin';
             adminUser.roles = [ownerRole._id];
             adminUser.status = 'active';
             await adminUser.save();
-            // Force hash update if it's currently plain text '123456'
-            if (adminUser.passwordHash === '123456') {
-                adminUser.passwordHash = '123456';
-                await adminUser.save();
-                console.log('✓ Admin password hash repaired.');
-            }
         }
     } catch (error) {
         console.error('Auto-seed error:', error.message);
@@ -69,16 +70,24 @@ connectDB().then(async () => {
 
 const app = express();
 
-// Middleware. Set FRONTEND_URL to your deployed frontend URL in production.
+// CORS. Set FRONTEND_URL to your deployed frontend origin(s) in production
+// (comma-separated for multiple, e.g. "https://your-app.vercel.app").
 const allowedOrigins = (process.env.FRONTEND_URL || '')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+
+if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
+    console.warn('[WARN] FRONTEND_URL is not set in production — CORS is reflecting ALL origins. Set FRONTEND_URL to lock this down to your frontend.');
+}
+
 app.use(cors({
+    // When FRONTEND_URL is configured, only those origins are allowed.
+    // Otherwise (local/dev) reflect the request origin so tooling works.
     origin: allowedOrigins.length ? allowedOrigins : true,
     credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 
 // Routes
 app.use('/api/users', require('./routes/userRoutes'));
@@ -90,6 +99,7 @@ app.use('/api/students', require('./routes/studentRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/student-attendance', require('./routes/studentAttendanceRoutes'));
 app.use('/api/teacher-attendance', require('./routes/teacherAttendanceRoutes'));
+app.use('/api/branch-sessions', require('./routes/branchSessionRoutes'));
 app.use('/api/promotions', require('./routes/promotionRoutes'));
 app.use('/api/salaries', require('./routes/salaryRoutes'));
 app.use('/api/wallets', require('./routes/walletRoutes'));
@@ -109,99 +119,17 @@ app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/tenants', require('./routes/tenantRoutes'));
 app.use('/api/exams', require('./routes/examRoutes'));
 
+// Health check. Deliberately minimal: reports liveness and DB connection state
+// only — never credentials, connection strings, hostnames, or record counts.
 app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date() });
-});
-
-app.get('/api/diagnostic-db', async (req, res) => {
-    try {
-        const mongoose = require('mongoose');
-        const Student = require('./models/Student');
-        const Transaction = require('./models/Transaction');
-        const CashbookEntry = require('./models/CashbookEntry');
-
-        const uri = process.env.MONGO_URI || '';
-        // Safely mask password: mongodb+srv://user:****@cluster/db
-        const maskedUri = uri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@');
-        const cluster = mongoose.connection.host || 'unknown';
-        const databaseName = mongoose.connection.name || 'unknown';
-        const students = await Student.countDocuments();
-        const transactions = await Transaction.countDocuments();
-        const cashbookentries = await CashbookEntry.countDocuments();
-
-        res.json({
-            maskedUri,
-            cluster,
-            databaseName,
-            counts: {
-                students,
-                transactions,
-                cashbookentries
-            }
-        });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.get('/api/clean-prod-transactions', async (req, res) => {
-    try {
-        const mongoose = require('mongoose');
-        const Student = require('./models/Student');
-        const Transaction = require('./models/Transaction');
-        const CashbookEntry = require('./models/CashbookEntry');
-
-        const dbHost = mongoose.connection.host || '';
-        const dbName = mongoose.connection.name || '';
-
-        // Strict assertion 1: Must be connected to cluster0.hybxg2k.mongodb.net and database machad
-        if (!dbHost.includes('hybxg2k') || dbName !== 'machad') {
-            return res.status(400).json({ error: 'Safety abort: not connected to production database machad on hybxg2k' });
-        }
-
-        // Strict assertion 2: Must have 403 students, 4 transactions, 4 cashbookentries before deletion
-        const studentsBefore = await Student.countDocuments();
-        const txBefore = await Transaction.countDocuments();
-        const cbBefore = await CashbookEntry.countDocuments();
-
-        if (studentsBefore !== 403) {
-            return res.status(400).json({ error: `Safety abort: students count is ${studentsBefore}, expected 403` });
-        }
-        if (txBefore !== 4 || cbBefore !== 4) {
-            return res.status(400).json({ error: `Safety abort: expected 4 tx and 4 cb, found ${txBefore} and ${cbBefore}` });
-        }
-
-        // Delete ONLY transactions and cashbookentries collections
-        const deletedTx = await Transaction.deleteMany({});
-        const deletedCb = await CashbookEntry.deleteMany({});
-
-        // After counts
-        const studentsAfter = await Student.countDocuments();
-        const txAfter = await Transaction.countDocuments();
-        const cbAfter = await CashbookEntry.countDocuments();
-
-        res.json({
-            status: 'success',
-            cluster: dbHost,
-            database: dbName,
-            before: {
-                students: studentsBefore,
-                transactions: txBefore,
-                cashbookentries: cbBefore
-            },
-            deleted: {
-                transactions: deletedTx.deletedCount,
-                cashbookentries: deletedCb.deletedCount
-            },
-            after: {
-                students: studentsAfter,
-                transactions: txAfter,
-                cashbookentries: cbAfter
-            }
-        });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    const mongoose = require('mongoose');
+    const dbStates = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+    res.status(200).json({
+        status: 'ok',
+        uptime: process.uptime(),
+        database: dbStates[mongoose.connection.readyState] || 'unknown',
+        timestamp: new Date()
+    });
 });
 
 app.get('/', (req, res) => {
@@ -216,10 +144,12 @@ const PORT = process.env.PORT || 5005; // Was 5005 in .env
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
 
-    // Render Keep-Alive: Ping server every 10 minutes so Render never sleeps
-    const targetUrl = process.env.RENDER_EXTERNAL_URL || 'https://mach-backend-695y.onrender.com';
+    // Render Keep-Alive: Ping server every 10 minutes so Render's free tier
+    // does not spin the service down. Uses the URL Render injects at runtime;
+    // if it is not present we skip keep-alive rather than pinging a stale host.
+    const targetUrl = process.env.RENDER_EXTERNAL_URL;
     const isProduction = process.env.NODE_ENV === 'production' || Boolean(process.env.RENDER);
-    if (isProduction) {
+    if (isProduction && targetUrl) {
         const axios = require('axios');
         const PING_INTERVAL = 10 * 60 * 1000; // 10 minutes
         setInterval(async () => {
