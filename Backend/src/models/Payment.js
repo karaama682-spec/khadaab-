@@ -36,7 +36,14 @@ const paymentSchema = new mongoose.Schema({
     },
     month: {
         type: String,
-        default: () => new Date().toISOString().slice(0, 7) // e.g. "YYYY-MM"
+        default: () => new Date().toISOString().slice(0, 7) // legacy calendar "YYYY-MM"
+    },
+    // Billing-cycle key (25th→24th) this payment is FOR. Set on new records; null
+    // on historical rows (which are attributed by paymentDate instead). Backward
+    // compatible — no migration of existing data.
+    billingCycle: {
+        type: String,
+        default: null
     },
     paymentDate: {
         type: Date,

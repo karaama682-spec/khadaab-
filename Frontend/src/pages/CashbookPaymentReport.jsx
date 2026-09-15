@@ -14,6 +14,7 @@ import { jsPDF } from 'jspdf';
 import api from '../services/api';
 import { walletNameOf, walletIdOf } from '../utils/wallet';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { currentCycle, cycleRangeISO } from '../utils/billingCycle';
 
 const fmtMoney = (n) =>
   Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -21,17 +22,8 @@ const fmtMoney = (n) =>
 // Credit = Income (money in), Debit = Expense (money out).
 const typeToLabel = (type) => (type === 'Income' ? 'Credit' : 'Debit');
 
-// Current billing period: 25th of one month → 24th of the next.
-const currentPeriod = () => {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
-  const start = d >= 25 ? new Date(y, m, 25) : new Date(y, m - 1, 25);
-  const end = new Date(start.getFullYear(), start.getMonth() + 1, 24);
-  const iso = (dt) => dt.toISOString().split('T')[0];
-  return { from: iso(start), to: iso(end) };
-};
+// Current billing period (25th → 24th) from the shared single-source util.
+const currentPeriod = () => cycleRangeISO(currentCycle());
 
 const partyText = (name, phone) => {
   if (name && phone) return `${name} (${phone})`;
@@ -89,8 +81,9 @@ const CashbookPaymentReport = () => {
   // 'All' | 'Credit' | 'Debit'
   const [typeFilter, setTypeFilter] = useState('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  // Default to the current billing cycle (25th→24th) so labels match the numbers.
+  const [dateFrom, setDateFrom] = useState(() => currentPeriod().from);
+  const [dateTo, setDateTo] = useState(() => currentPeriod().to);
   const [walletFilter, setWalletFilter] = useState('All');
   const [wallets, setWallets] = useState([]);
 

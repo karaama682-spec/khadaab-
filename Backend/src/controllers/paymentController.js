@@ -1,5 +1,6 @@
 const asyncHandler = require('../middleware/asyncHandler');
 const Payment = require('../models/Payment');
+const { cycleKeyForDate } = require('../utils/billingCycle');
 
 const getPayments = asyncHandler(async (req, res) => {
     const data = await Payment.find()
@@ -36,10 +37,23 @@ const createPayment = asyncHandler(async (req, res) => {
 
     const body = { ...req.body };
 
-    // Auto-generate month if not provided (YYYY-MM format)
-    if (!body.month) {
-        body.month = new Date().toISOString().slice(0, 7);
+    // An exited (archived) student cannot receive new payments. Their existing
+    // payment history is untouched — only new registration is blocked.
+    if (body.studentId) {
+        const target = await Student.findById(body.studentId).select('status fullName');
+        if (target && target.status === 'Exited') {
+            res.status(400);
+            throw new Error(`${target.fullName || 'This student'} has exited and cannot receive new payments.`);
+        }
     }
+
+    // Attribute the payment to a BILLING CYCLE (25th→24th) derived from its real
+    // payment date. Both `month` (legacy display) and `billingCycle` carry the
+    // cycle key for new records; historical records are unaffected.
+    const pDate = body.paymentDate ? new Date(body.paymentDate) : new Date();
+    const cycle = cycleKeyForDate(pDate);
+    body.billingCycle = cycle;
+    body.month = cycle;
 
     // Auto-resolve guardianId from the student if not provided
     if (!body.guardianId && body.studentId) {

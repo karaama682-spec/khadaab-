@@ -1,23 +1,14 @@
 
 import React from 'react';
 import { TrendingUp, TrendingDown } from 'lucide-react';
-
-// Current billing period: 25th of one month → 24th of the next.
-const currentPeriodLabel = () => {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
-  const start = d >= 25 ? new Date(y, m, 25) : new Date(y, m - 1, 25);
-  const end = new Date(start.getFullYear(), start.getMonth() + 1, 24);
-  const fmt = (dt) => dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-  return `${fmt(start)} – ${fmt(end)}`;
-};
+import { currentCycle, cycleLabel } from '../utils/billingCycle';
 
 const KPICard = ({ label, value, trend, icon, color, description, progress }) => {
   const isPositive = trend >= 0;
   const hasTrend = Number.isFinite(trend);
-  const desc = description || currentPeriodLabel();
+  // Default label = the current billing cycle (25th→24th), from the shared util
+  // so it always matches the backend's cycle numbers.
+  const desc = description || cycleLabel(currentCycle());
   const sparkline = [24, 34, 28, 46, 38, 56, 50];
 
   return (

@@ -12,38 +12,24 @@ import {
 import { jsPDF } from 'jspdf';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { currentCycle, cycleRangeISO } from '../utils/billingCycle';
 
 const fmtMoney = (n) =>
   Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// Build the current billing period: 25th of one month → 24th of the next.
-const currentPeriod = () => {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  const d = now.getDate();
-  // On/after the 25th the period starts this month; before, it started last month.
-  const start = d >= 25 ? new Date(y, m, 25) : new Date(y, m - 1, 25);
-  const end = new Date(start.getFullYear(), start.getMonth() + 1, 24);
-  const iso = (dt) => dt.toISOString().split('T')[0];
-  return { from: iso(start), to: iso(end) };
-};
-
-const thisMonth = () => {
-  const now = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const iso = (dt) => dt.toISOString().split('T')[0];
-  return { from: iso(first), to: iso(last) };
-};
+// Current billing period (25th → 24th) from the shared single-source util, so
+// the label and the numbers always describe the same range.
+const currentPeriod = () => cycleRangeISO(currentCycle());
 
 const CashbookCategoryReport = () => {
   const { showAlert } = useAlert();
 
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  // Default to the current billing cycle (25th→24th) so the report opens on the
+  // same period its labels describe.
+  const [dateFrom, setDateFrom] = useState(() => currentPeriod().from);
+  const [dateTo, setDateTo] = useState(() => currentPeriod().to);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -381,13 +367,6 @@ const CashbookCategoryReport = () => {
               className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800"
             >
               Current Period (25→24)
-            </button>
-            <button
-              type="button"
-              onClick={() => applyPeriod(thisMonth())}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800"
-            >
-              This Month
             </button>
             <button
               type="button"

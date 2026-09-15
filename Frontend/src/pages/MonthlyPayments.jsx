@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { CalendarRange, Search, Phone, ChevronDown, ChevronRight, Wallet, X } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { cycleShortLabel, cycleLabel, currentCycle } from '../utils/billingCycle';
 
 const fmtMoney = (n) =>
   Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -29,9 +30,11 @@ const MonthlyPayments = () => {
   const [search, setSearch] = useState('');
   const [expandedKey, setExpandedKey] = useState(null);
 
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth()); // 0-11
+  // Open on the CURRENT 25→24 billing cycle (from the centralized util), not the
+  // calendar month. e.g. Sep 24 → Aug cycle (2026-08); Sep 25 → Sep cycle.
+  const [initYear, initMonth] = currentCycle().split('-').map(Number);
+  const [year, setYear] = useState(initYear);
+  const [month, setMonth] = useState(initMonth - 1); // 0-11
 
   const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
@@ -89,9 +92,11 @@ const MonthlyPayments = () => {
     const opts = [];
     for (const y of [...years].sort((a, b) => b - a)) {
       for (let m = 11; m >= 0; m -= 1) {
+        const value = `${y}-${String(m + 1).padStart(2, '0')}`;
+        // The value is a BILLING CYCLE key (25th→24th); label shows its date range.
         opts.push({
-          value: `${y}-${String(m + 1).padStart(2, '0')}`,
-          label: `${MONTH_NAMES[m]} ${y}`
+          value,
+          label: `${MONTH_NAMES[m]} ${y} cycle (${cycleShortLabel(value)})`
         });
       }
     }
@@ -115,7 +120,7 @@ const MonthlyPayments = () => {
               Monthly Payments
             </h1>
             <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">
-              Registered students by month · who pays · total fee
+              Registered students by billing cycle (25th → 24th) · who pays · total fee
             </p>
           </div>
         </div>
@@ -322,7 +327,7 @@ const MonthlyPayments = () => {
           </div>
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-              {MONTH_NAMES[month]} {year}
+              {MONTH_NAMES[month]} {year} cycle · {cycleLabel(monthKey)}
             </p>
             <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
               {totals.students} student{totals.students === 1 ? '' : 's'} across {payers.length} payer{payers.length === 1 ? '' : 's'}

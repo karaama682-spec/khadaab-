@@ -15,8 +15,12 @@ import {
 import { jsPDF } from 'jspdf';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { currentCycle, cycleKeyForDate, cycleLabel } from '../utils/billingCycle';
 
-const currentMonth = () => new Date().toISOString().substring(0, 7);
+// A payment belongs to the current billing cycle if it carries this cycle key
+// (new records) or its real paymentDate falls in the cycle (historical records).
+const paymentInCycle = (p, cycle) =>
+  (p.billingCycle || cycleKeyForDate(p.paymentDate)) === cycle;
 
 const GuardianPaymentReport = () => {
   const { showAlert, showConfirm } = useAlert();
@@ -31,7 +35,7 @@ const GuardianPaymentReport = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState(null);
 
-  const thisMonth = currentMonth();
+  const thisMonth = currentCycle(); // current billing cycle key
 
   // ─── Fetch ───────────────────────────────────────────────────────
   const fetchAll = async () => {
@@ -78,7 +82,7 @@ const GuardianPaymentReport = () => {
         payments
           .filter(p => {
             const gId = String(p.guardianId?._id || p.guardianId || '');
-            return gId === String(g._id) && p.month === thisMonth && p.status === 'Completed';
+            return gId === String(g._id) && paymentInCycle(p, thisMonth) && p.status === 'Completed';
           })
           .map(p => String(p.studentId?._id || p.studentId || ''))
       );

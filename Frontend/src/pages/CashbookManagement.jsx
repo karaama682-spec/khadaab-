@@ -14,6 +14,7 @@ import {
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { digitsOnly } from '../utils/somaliPhone';
+import { currentCycle, addCycles, cycleShortLabel, cycleKeyForDate } from '../utils/billingCycle';
 
 const PAYMENT_METHODS = ['Mobile Money', 'Bank'];
 
@@ -45,43 +46,35 @@ const emptyCategoryForm = () => ({
   description: ''
 });
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+// Advance options are BILLING CYCLES (25th→24th): the current cycle plus the next
+// six. Each value is a cycle key; the label shows the cycle's date range.
 const getMonthOptions = () => {
   const options = [];
-  const now = new Date();
-  const currentY = now.getFullYear();
-  const currentM = now.getMonth();
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
+  const base = currentCycle();
   for (let i = 0; i <= 6; i++) {
-    const d = new Date(Date.UTC(currentY, currentM + i, 1));
-    const ym = d.toISOString().slice(0, 7);
-    const mName = monthNames[d.getUTCMonth()];
-    const yr = d.getUTCFullYear();
-    let label = `${mName} ${yr}`;
-    if (i === 0) {
-      label += ' (Bisha Hadda)';
-    } else {
-      label += ' (Hormarin / Advance)';
-    }
-    options.push({ value: ym, label, monthName: mName, year: yr, isAdvance: i > 0 });
+    const key = addCycles(base, i);
+    const [y, m] = key.split('-').map(Number);
+    const mName = MONTH_NAMES[m - 1];
+    let label = `${mName} ${y} cycle · ${cycleShortLabel(key)}`;
+    label += i === 0 ? ' (Bisha Hadda)' : ' (Hormarin / Advance)';
+    options.push({ value: key, label, monthName: mName, year: y, isAdvance: i > 0 });
   }
   return options;
 };
 
-const getPayerMonthLabel = (baseYm, offset = 0) => {
-  const [y, m] = (baseYm || new Date().toISOString().slice(0, 7)).split('-').map(Number);
-  const d = new Date(Date.UTC(y, (m - 1) + offset, 1));
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
+// Label for a cycle key offset by `offset` cycles.
+const getPayerMonthLabel = (baseKey, offset = 0) => {
+  const key = addCycles(baseKey || currentCycle(), offset);
+  const [y, m] = key.split('-').map(Number);
   return {
-    name: monthNames[d.getUTCMonth()],
-    year: d.getUTCFullYear(),
-    ym: d.toISOString().slice(0, 7)
+    name: MONTH_NAMES[m - 1],
+    year: y,
+    ym: key
   };
 };
 
@@ -100,7 +93,7 @@ const emptyTransactionForm = () => ({
   receiverEntityType: '',
   receiverEntityId: '',
   date: new Date().toISOString().split('T')[0],
-  targetMonth: new Date().toISOString().slice(0, 7),
+  targetMonth: currentCycle(),
   description: ''
 });
 
@@ -138,7 +131,7 @@ const CashbookManagement = () => {
         : Number(payerInfo.totalMonthlyFee || 0) * (monthsToPay - 1))
     : null;
 
-  const currentMonthStr = new Date().toISOString().slice(0, 7);
+  const currentMonthStr = currentCycle();
   const monthOptions = getMonthOptions();
 
   // When the number of pre-paid months changes, re-fill the amount with the target month(s) amount.
@@ -294,7 +287,7 @@ const CashbookManagement = () => {
       return;
     }
 
-    const monthToUse = overrideMonth || transactionForm.targetMonth || (transactionForm.date || new Date().toISOString().split('T')[0]).slice(0, 7);
+    const monthToUse = overrideMonth || transactionForm.targetMonth || cycleKeyForDate(transactionForm.date || new Date());
 
     try {
       const res = await api.get('/cashbook/lookup', {
@@ -558,7 +551,7 @@ const CashbookManagement = () => {
       receiverEntityType: item.receiverEntityType || '',
       receiverEntityId: item.receiverEntityId || '',
       date: item.date || new Date().toISOString().split('T')[0],
-      targetMonth: item.targetMonth || (item.date || new Date().toISOString().split('T')[0]).slice(0, 7),
+      targetMonth: item.targetMonth || cycleKeyForDate(item.date || new Date()),
       description: item.description || ''
     });
     setSenderLocked(!!item.senderEntityType && item.senderEntityType !== 'manual' && detectedDirection !== 'sender');

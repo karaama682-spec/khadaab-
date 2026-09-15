@@ -11,8 +11,14 @@ const salarySchema = new mongoose.Schema({
         ref: 'Wallet'
     },
     month: {
-        type: String, // YYYY-MM
+        type: String, // legacy calendar "YYYY-MM"
         required: true
+    },
+    // Billing-cycle key (25th→24th) this salary is FOR. Set on new records; null
+    // on historical rows (attributed by paymentDate). Backward compatible.
+    billingCycle: {
+        type: String,
+        default: null
     },
     amount: {
         type: Number,

@@ -9,6 +9,10 @@ const Transaction = require('../models/Transaction');
 const Payment = require('../models/Payment');
 const Salary = require('../models/Salary');
 const { phoneVariants, isValidSomaliMobile, digitsOnly } = require('../utils/somaliPhone');
+const {
+    cycleKeyForDate, cycleRange, isValidCycleKey, addCycles,
+    currentCycle, nextCycle, cycleMatch
+} = require('../utils/billingCycle');
 
 // The wallet is populated alongside the category so reports can name the
 // institute side of a transaction: it is the sender on an expense and the
@@ -56,36 +60,36 @@ const syncFeePayments = async (entry, category, createdBy) => {
     }
     if (!orConds.length) return null;
 
-    const students = await Student.find({ $or: orConds })
+    // Exited (archived) students never receive new fee allocations.
+    const students = await Student.find({ $or: orConds, status: { $ne: 'Exited' } })
         .select('fullName monthlyFee fee guardianId branchId');
     if (!students.length) return null;
 
-    const startMonth = (entry.date || new Date().toISOString().split('T')[0]).slice(0, 7); // YYYY-MM
+    // The starting billing cycle: the entry's target cycle if set, else derived
+    // from the entry's actual date (25th→24th rule).
+    const startCycle = isValidCycleKey(entry.targetMonth) ? entry.targetMonth : cycleKeyForDate(entry.date);
 
-    // Add n months to a "YYYY-MM" string.
-    const addMonths = (ym, n) => {
-        const [y, m] = ym.split('-').map(Number);
-        const d = new Date(Date.UTC(y, (m - 1) + n, 1));
-        return d.toISOString().slice(0, 7);
-    };
-
-    // Current-month owed (for the ledger snapshot below).
+    // Owed in the STARTING cycle (for the ledger snapshot below).
     let totalOwedBefore = 0;
     for (const s of students) {
-        const paidDocs = await Payment.find({ studentId: s._id, status: 'Completed', month: startMonth }).select('amount');
+        const paidDocs = await Payment.find({
+            studentId: s._id, status: 'Completed', ...cycleMatch('billingCycle', 'paymentDate', startCycle)
+        }).select('amount');
         const paid = paidDocs.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         totalOwedBefore += Math.max(0, Number(s.monthlyFee || s.fee || 0) - paid);
     }
 
-    // Allocate the entry amount across the current month first, then roll any
-    // leftover into upcoming months (pre-payment). Capped at 12 months ahead.
+    // Allocate to the starting cycle first, then roll leftover into upcoming
+    // billing cycles (pre-payment). Capped at 12 cycles ahead.
     let leftover = Number(entry.amount) || 0;
     const toCreate = [];
-    for (let mOffset = 0; mOffset < 12 && leftover > 0; mOffset++) {
-        const month = addMonths(startMonth, mOffset);
+    for (let cOffset = 0; cOffset < 12 && leftover > 0; cOffset++) {
+        const cycle = addCycles(startCycle, cOffset);
         for (const s of students) {
             if (leftover <= 0) break;
-            const paidDocs = await Payment.find({ studentId: s._id, status: 'Completed', month }).select('amount');
+            const paidDocs = await Payment.find({
+                studentId: s._id, status: 'Completed', ...cycleMatch('billingCycle', 'paymentDate', cycle)
+            }).select('amount');
             const paid = paidDocs.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
             const monthlyFee = Number(s.monthlyFee || s.fee || 0);
             const remaining = Math.max(0, monthlyFee - paid);
@@ -96,11 +100,12 @@ const syncFeePayments = async (entry, category, createdBy) => {
                 guardianId: s.guardianId || undefined,
                 walletId: entry.walletId,
                 amount: alloc,
-                month,
+                month: cycle,
+                billingCycle: cycle,
                 paymentDate: entry.date || new Date(),
                 paymentMethod: ['Bank', 'Mobile Money', 'Card'].includes(entry.method) ? 'Bank Transfer' : 'Cash',
                 status: 'Completed',
-                description: `Cashbook fee payment (${category.title})${mOffset > 0 ? ` · ${month}` : ''}`,
+                description: `Cashbook fee payment (${category.title})${cOffset > 0 ? ` · ${cycle}` : ''}`,
                 sourceEntryId: entry._id
             });
             leftover -= alloc;
@@ -112,9 +117,9 @@ const syncFeePayments = async (entry, category, createdBy) => {
         await Payment.insertMany(toCreate.map((p) => ({ ...p, createdBy })));
     }
 
-    // Remaining still owed for the CURRENT month after this entry was applied.
+    // Remaining still owed for the STARTING cycle after this entry was applied.
     const allocatedThisMonth = toCreate
-        .filter((p) => p.month === startMonth)
+        .filter((p) => p.billingCycle === startCycle)
         .reduce((sum, p) => sum + p.amount, 0);
     return Math.max(0, totalOwedBefore - allocatedThisMonth);
 };
@@ -298,7 +303,9 @@ const createEntry = asyncHandler(async (req, res) => {
         receiverEntityType: receiverEntityType || '',
         receiverEntityId: receiverEntityId || undefined,
         date: date || new Date().toISOString().split('T')[0],
-        targetMonth: req.body.targetMonth || (date || new Date().toISOString().split('T')[0]).slice(0, 7),
+        // targetMonth now holds a BILLING CYCLE key (25th→24th): the client's
+        // chosen cycle for an advance, else the cycle of the entry's own date.
+        targetMonth: req.body.targetMonth || cycleKeyForDate(date || new Date()),
         description: description || '',
         branchId,
         walletId: wallet?._id,
@@ -327,9 +334,9 @@ const createEntry = asyncHandler(async (req, res) => {
     // If not a student fee payment, snapshot remaining balance for Expense (Teacher / Rent / Account / Contact)
     if (feeRemaining === null || feeRemaining === undefined) {
         if (category.type === 'Expense') {
-            const selectedMonth = req.body.targetMonth || (data.date || new Date().toISOString().split('T')[0]).slice(0, 7);
-            const currentCalendarMonth = new Date().toISOString().slice(0, 7);
-            const isAdvance = selectedMonth > currentCalendarMonth;
+            // selectedMonth is a BILLING CYCLE key (the entry's targetMonth).
+            const selectedMonth = data.targetMonth || cycleKeyForDate(data.date);
+            const isAdvance = selectedMonth > currentCycle();
 
             // If receiver is a Teacher / User with salary:
             if (data.receiverEntityId && ['teacher', 'user'].includes(data.receiverEntityType)) {
@@ -341,6 +348,7 @@ const createEntry = asyncHandler(async (req, res) => {
                             teacherId: data.receiverEntityId,
                             walletId: wallet?._id,
                             month: selectedMonth,
+                            billingCycle: selectedMonth,
                             amount: data.amount,
                             paymentMethod: data.method || 'Cash',
                             paymentDate: new Date(data.date || Date.now()),
@@ -352,11 +360,11 @@ const createEntry = asyncHandler(async (req, res) => {
                         console.error('Salary sync note:', e.message);
                     }
 
-                    // Calculate remaining balance for this selected month after this payment
+                    // Remaining balance for this billing cycle after this payment.
                     const salaryDocs = await Salary.find({
                         teacherId: data.receiverEntityId,
-                        month: selectedMonth,
-                        status: { $ne: 'Cancelled' }
+                        status: { $ne: 'Cancelled' },
+                        ...cycleMatch('billingCycle', 'paymentDate', selectedMonth)
                     }).select('amount notes');
                     const externalSalaryPaid = salaryDocs
                         .filter((s) => !s.notes || !s.notes.startsWith('Cashbook:'))
@@ -371,12 +379,7 @@ const createEntry = asyncHandler(async (req, res) => {
                                     phoneOrQuery('receiverPhone', phoneVariants(data.receiverPhone || ''))
                                 ]
                             },
-                            {
-                                $or: [
-                                    { targetMonth: selectedMonth },
-                                    { date: { $regex: `^${selectedMonth}` } }
-                                ]
-                            }
+                            entryInCycle(selectedMonth)
                         ]
                     }).populate('categoryId');
                     const cashbookPaid = entryDocs
@@ -400,11 +403,8 @@ const createEntry = asyncHandler(async (req, res) => {
                 const prevEntry = await CashbookEntry.findOne({
                     _id: { $ne: data._id },
                     receiverPhone: data.receiverPhone,
-                    $or: [
-                        { targetMonth: selectedMonth },
-                        { date: { $regex: `^${selectedMonth}` } }
-                    ],
-                    feeRemaining: { $ne: null }
+                    feeRemaining: { $ne: null },
+                    ...entryInCycle(selectedMonth)
                 }).sort({ date: -1, createdAt: -1 });
 
                 let remainingBefore = null;
@@ -618,10 +618,60 @@ const lookupPreviousEntry = async (variants, purpose) => {
     };
 };
 
-// Summarize the students a responsible person pays for: fees, amount paid this month,
-// and the remaining balance still owed for the current month.
-const summarizeStudents = async (students) => {
-    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+// Match CashbookEntry documents belonging to a billing cycle (25th→24th),
+// migration-safe for historical rows.
+//
+// The tricky part is `targetMonth`: NEW entries store a billing-CYCLE key there,
+// while HISTORICAL entries stored a CALENDAR month (always equal to their date's
+// own "YYYY-MM"). We must attribute historical entries by their REAL DATE, and
+// only honour `targetMonth` when it is a deliberate cross-cycle (advance)
+// assignment — detected as targetMonth differing from the date's calendar month.
+//
+//   (a) "plain" entries — no targetMonth, or targetMonth == the date's own
+//       calendar month (this is every historical row, and same-cycle new rows) —
+//       are matched purely by their real date falling in the cycle range.
+//   (b) genuine ADVANCE entries — targetMonth deliberately set to a DIFFERENT
+//       cycle than the payment date's month — are matched to that target cycle
+//       (and, thanks to (a)'s guard, are NOT double-counted in their pay-date
+//       cycle).
+//
+// `date` is a "YYYY-MM-DD" string, so its month is $substr(date,0,7) and range
+// comparisons are lexicographic (correct because that format sorts by time).
+const entryInCycle = (cycle) => {
+    const { start, end } = cycleRange(cycle);
+    const startISO = start.toISOString().slice(0, 10);
+    const endISO = end.toISOString().slice(0, 10);
+    const dateMonth = { $substr: [{ $ifNull: ['$date', ''] }, 0, 7] };
+    return {
+        $or: [
+            // (a) plain / historical / same-cycle entries → attribute by real date
+            {
+                $and: [
+                    { date: { $gte: startISO, $lte: endISO } },
+                    {
+                        $or: [
+                            { targetMonth: null },
+                            { targetMonth: '' },
+                            { targetMonth: { $exists: false } },
+                            { $expr: { $eq: ['$targetMonth', dateMonth] } }
+                        ]
+                    }
+                ]
+            },
+            // (b) genuine advance entries deliberately targeted to THIS cycle
+            {
+                $and: [
+                    { targetMonth: cycle },
+                    { $expr: { $ne: ['$targetMonth', dateMonth] } }
+                ]
+            }
+        ]
+    };
+};
+
+// Summarize the students a responsible person pays for: fees, amount paid in the
+// given billing cycle, and the remaining balance still owed for that cycle.
+const summarizeStudents = async (students, cycle = currentCycle()) => {
     const list = [];
     let totalMonthlyFee = 0;
     let totalPaid = 0;
@@ -630,7 +680,7 @@ const summarizeStudents = async (students) => {
         const paidThisMonthAgg = await Payment.find({
             studentId: s._id,
             status: 'Completed',
-            month: currentMonth
+            ...cycleMatch('billingCycle', 'paymentDate', cycle)
         }).select('amount');
         const paidThisMonth = paidThisMonthAgg.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         const monthlyFee = Number(s.monthlyFee || s.fee || 0);
@@ -647,7 +697,7 @@ const summarizeStudents = async (students) => {
             balance
         });
     }
-    return { students: list, totalMonthlyFee, totalPaid, totalBalance, month: currentMonth, count: list.length };
+    return { students: list, totalMonthlyFee, totalPaid, totalBalance, month: cycle, count: list.length };
 };
 
 // Attach financial context to a matched payer/receiver:
@@ -657,18 +707,21 @@ const summarizeStudents = async (students) => {
 // - Rent / Kiro or other registered accounts / contacts
 const buildPayerInfo = async (match, variants, purpose = 'sender', reqDate = null) => {
     if (!match) return null;
-    const currentMonth = (reqDate || new Date().toISOString().split('T')[0]).slice(0, 7); // YYYY-MM
+    // The billing cycle in focus: an explicit cycle key if provided, else derived
+    // from the supplied date (or now) using the 25th→24th rule.
+    const currentMonth = isValidCycleKey(reqDate) ? reqDate : cycleKeyForDate(reqDate || new Date());
 
     // 1. Guardian / responsible / student's father → gather all students under them.
     if (match.entityType === 'guardian' || match.entityType === 'student') {
         const orConds = [{ fatherPhone: { $in: variants } }];
         if (match.entityType === 'guardian') orConds.push({ guardianId: match.entityId });
-        const students = await Student.find({ $or: orConds })
+        // Exited (archived) students are not active payers.
+        const students = await Student.find({ $or: orConds, status: { $ne: 'Exited' } })
             .select('fullName classId monthlyFee fee fatherPhone guardianId')
             .populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } });
 
         if (!students.length) return { kind: 'responsible', students: [], totalMonthlyFee: 0, totalPaid: 0, totalBalance: 0, remainingBalance: 0, count: 0 };
-        const summary = await summarizeStudents(students);
+        const summary = await summarizeStudents(students, currentMonth);
         return {
             kind: 'responsible',
             ...summary,
@@ -681,30 +734,26 @@ const buildPayerInfo = async (match, variants, purpose = 'sender', reqDate = nul
         const user = await User.findById(match.entityId).select('fullName role salary');
         const totalSalary = Number(user?.salary || 0);
 
-        // Find payments this month from Salary model (excluding any Cashbook mirrors to prevent double counting)
+        // Salary payments for this billing cycle (excluding Cashbook mirrors to
+        // prevent double counting). New salaries carry billingCycle; historical
+        // ones are attributed by paymentDate.
         const salaryDocs = await Salary.find({
             teacherId: match.entityId,
-            month: currentMonth,
-            status: { $ne: 'Cancelled' }
+            status: { $ne: 'Cancelled' },
+            ...cycleMatch('billingCycle', 'paymentDate', currentMonth)
         }).select('amount month status notes');
         const externalSalaryPaid = salaryDocs
             .filter((s) => !s.notes || !s.notes.startsWith('Cashbook:'))
             .reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
 
-        // Find payments this month from CashbookEntry (where teacher is receiver)
+        // Cashbook expense entries to THIS receiver within this billing cycle.
         const entryDocs = await CashbookEntry.find({
-            $or: [
-                { receiverEntityId: match.entityId },
-                phoneOrQuery('receiverPhone', variants)
-            ],
-            $or: [
-                { targetMonth: currentMonth },
-                {
-                    $and: [
-                        { $or: [{ targetMonth: null }, { targetMonth: '' }, { targetMonth: { $exists: false } }] },
-                        { date: { $regex: `^${currentMonth}` } }
-                    ]
-                }
+            $and: [
+                { $or: [
+                    { receiverEntityId: match.entityId },
+                    phoneOrQuery('receiverPhone', variants)
+                ] },
+                entryInCycle(currentMonth)
             ]
         }).populate('categoryId');
         const cashbookPaid = entryDocs
@@ -725,7 +774,7 @@ const buildPayerInfo = async (match, variants, purpose = 'sender', reqDate = nul
                 totalBalance: remaining,
                 remainingBalance: remaining,
                 month: currentMonth,
-                isAdvance: currentMonth > new Date().toISOString().slice(0, 7),
+                isAdvance: currentMonth > currentCycle(),
                 lastSalary: lastSalary ? { amount: Number(lastSalary.amount || 0), month: lastSalary.month, status: lastSalary.status } : null
             };
         }
@@ -766,22 +815,7 @@ const buildPayerInfo = async (match, variants, purpose = 'sender', reqDate = nul
             ? phoneOrQuery('receiverPhone', variants)
             : phoneOrQuery('senderPhone', variants);
 
-        const monthQuery = {
-            $and: [
-                phoneQuery,
-                {
-                    $or: [
-                        { targetMonth: currentMonth },
-                        {
-                            $and: [
-                                { $or: [{ targetMonth: null }, { targetMonth: '' }, { targetMonth: { $exists: false } }] },
-                                { date: { $regex: `^${currentMonth}` } }
-                            ]
-                        }
-                    ]
-                }
-            ]
-        };
+        const monthQuery = { $and: [phoneQuery, entryInCycle(currentMonth)] };
         const monthEntries = await CashbookEntry.find(monthQuery).populate('categoryId');
         const paidThisMonth = monthEntries
             .filter((e) => !e.categoryId || (purpose === 'receiver' ? e.categoryId.type === 'Expense' : e.categoryId.type === 'Income'))
@@ -814,22 +848,7 @@ const buildPayerInfo = async (match, variants, purpose = 'sender', reqDate = nul
         ? phoneOrQuery('receiverPhone', variants)
         : phoneOrQuery('senderPhone', variants);
 
-    const monthQuery = {
-        $and: [
-            phoneQuery,
-            {
-                $or: [
-                    { targetMonth: currentMonth },
-                    {
-                        $and: [
-                            { $or: [{ targetMonth: null }, { targetMonth: '' }, { targetMonth: { $exists: false } }] },
-                            { date: { $regex: `^${currentMonth}` } }
-                        ]
-                    }
-                ]
-            }
-        ]
-    };
+    const monthQuery = { $and: [phoneQuery, entryInCycle(currentMonth)] };
     const monthEntries = await CashbookEntry.find(monthQuery).populate('categoryId');
     const paidThisMonth = monthEntries
         .filter((e) => !e.categoryId || (purpose === 'receiver' ? e.categoryId.type === 'Expense' : e.categoryId.type === 'Income'))
@@ -901,22 +920,24 @@ const lookupPhone = asyncHandler(async (req, res) => {
 // One row per responsible payer (father / guardian): name, number, how many
 // students they cover, the total monthly fee, and whether it's fully paid this month.
 const getPayers = asyncHandler(async (req, res) => {
-    // A month may be requested as YYYY-MM. Without it the behaviour is unchanged:
-    // the current month, every student, exactly as the Payers page has always
-    // loaded it.
-    const requestedMonth = /^\d{4}-\d{2}$/.test(req.query.month || '') ? req.query.month : null;
-    const month = requestedMonth || new Date().toISOString().slice(0, 7); // YYYY-MM
+    // The `month` param is now a BILLING CYCLE key (25th→24th), not a calendar
+    // month. Without it: the current cycle, every active student (Payers page).
+    const requestedCycle = isValidCycleKey(req.query.month || '') ? req.query.month : null;
+    const cycle = requestedCycle || currentCycle();
+    const { end } = cycleRange(cycle);
 
-    const studentQuery = {};
-    if (requestedMonth) {
-        // A student belongs to a month once they have been registered by the end of
-        // it, so past months do not list students who had not yet joined.
-        const [year, mon] = requestedMonth.split('-').map(Number);
-        const endOfMonth = new Date(Date.UTC(year, mon, 0, 23, 59, 59, 999));
-        studentQuery.registrationDate = { $lte: endOfMonth };
-        studentQuery.status = { $ne: 'Inactive' };
-    } else {
-        studentQuery.status = { $ne: 'Inactive' };
+    const studentQuery = { status: { $nin: ['Inactive', 'Exited'] } };
+    if (requestedCycle) {
+        // A student is a valid payer for a billing cycle once they have joined by
+        // the time that cycle ENDS (its 24th). So the filter is an upper bound on
+        // registrationDate — the cycle end — not an exact-cycle window:
+        //   • older active students keep appearing in later cycles;
+        //   • a newly registered student appears from their registration cycle
+        //     onward and never in earlier cycles (e.g. registered Oct 24 → shows
+        //     from the September cycle [ends Oct 24]; Oct 25 → from the October
+        //     cycle, not September).
+        // Inactive/Exited students remain excluded (Exit behaviour preserved).
+        studentQuery.registrationDate = { $lte: end };
     }
 
     const students = await Student.find(studentQuery)
@@ -925,12 +946,13 @@ const getPayers = asyncHandler(async (req, res) => {
         .populate('guardianId', 'fullName phone alternatePhone relationship')
         .lean();
 
-    // Batch fetch payments for all students in one query to eliminate N+1 latency
+    // Payments counted for this cycle: new records by their billingCycle key,
+    // historical records (no key) by their real paymentDate falling in the range.
     const studentIds = students.map((s) => s._id);
     const payments = await Payment.find({
         studentId: { $in: studentIds },
         status: 'Completed',
-        month
+        ...cycleMatch('billingCycle', 'paymentDate', cycle)
     }).select('studentId amount').lean();
 
     const paidByStudent = new Map();
@@ -1001,7 +1023,8 @@ const getPayers = asyncHandler(async (req, res) => {
             totalFee: g.totalFee,
             paidAmount,
             paid: g.totalFee > 0 && paidAmount >= g.totalFee,
-            month
+            month: cycle,
+            cycle
         });
     }
     result.sort((a, b) => a.name.localeCompare(b.name));
@@ -1018,8 +1041,11 @@ const togglePayer = asyncHandler(async (req, res) => {
         throw new Error('No students provided for this payer');
     }
 
-    const month = new Date().toISOString().slice(0, 7);
-    const students = await Student.find({ _id: { $in: studentIds } })
+    // Quick-pay applies to the CURRENT billing cycle (25th→24th).
+    const cycle = currentCycle();
+    // Exited students are excluded from quick-pay so no new money can be attached
+    // to an archived student.
+    const students = await Student.find({ _id: { $in: studentIds }, status: { $ne: 'Exited' } })
         .select('fullName monthlyFee fee guardianId branchId');
 
     if (paid) {
@@ -1030,7 +1056,9 @@ const togglePayer = asyncHandler(async (req, res) => {
             throw new Error('No wallet found in the system. Create a wallet before recording payments.');
         }
         for (const s of students) {
-            const existing = await Payment.find({ studentId: s._id, status: 'Completed', month }).select('amount');
+            const existing = await Payment.find({
+                studentId: s._id, status: 'Completed', ...cycleMatch('billingCycle', 'paymentDate', cycle)
+            }).select('amount');
             const already = existing.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
             const fee = Number(s.monthlyFee || s.fee || 0);
             const remaining = Math.max(0, fee - already);
@@ -1041,7 +1069,8 @@ const togglePayer = asyncHandler(async (req, res) => {
                 guardianId: s.guardianId || undefined,
                 walletId: wallet?._id,
                 amount: remaining,
-                month,
+                month: cycle,
+                billingCycle: cycle,
                 paymentDate: new Date(),
                 paymentMethod: 'Cash',
                 status: 'Completed',
@@ -1065,8 +1094,11 @@ const togglePayer = asyncHandler(async (req, res) => {
         }
         if (wallet) await wallet.save();
     } else {
-        // Remove only payments this toggle created, and reverse their wallet effect.
-        const pays = await Payment.find({ studentId: { $in: studentIds }, month, viaPayerToggle: true });
+        // Remove only payments this toggle created (this cycle), reversing their wallet effect.
+        const pays = await Payment.find({
+            studentId: { $in: studentIds }, viaPayerToggle: true,
+            ...cycleMatch('billingCycle', 'paymentDate', cycle)
+        });
         for (const p of pays) {
             if (p.walletId) {
                 const w = await Wallet.findById(p.walletId);

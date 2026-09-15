@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, X, Receipt, Edit2, Trash2, Search, CheckCircle2, Clock } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { currentCycle, cycleLabel } from '../utils/billingCycle';
 
 const PaymentsManagement = () => {
   const { showAlert, showConfirm } = useAlert();
@@ -17,7 +18,7 @@ const PaymentsManagement = () => {
     studentId: '',
     amount: 0,
     walletId: '',
-    month: new Date().toISOString().slice(0, 7),
+    month: currentCycle(), // current 25→24 billing cycle key
     paymentMethod: 'Cash',
     status: 'Completed',
     description: ''
@@ -92,7 +93,7 @@ const PaymentsManagement = () => {
       studentId: initialStudent?._id || '',
       amount: initialFee,
       walletId: initialWallet?._id || '',
-      month: new Date().toISOString().slice(0, 7),
+      month: currentCycle(),
       paymentMethod: initialMethod,
       status: 'Completed',
       description: ''
@@ -106,7 +107,7 @@ const PaymentsManagement = () => {
       studentId: item.studentId?._id || item.studentId || '',
       amount: item.amount || 0,
       walletId: item.walletId?._id || item.walletId || wallets[0]?._id || '',
-      month: item.month || new Date().toISOString().slice(0, 7),
+      month: item.month || currentCycle(),
       paymentMethod: item.paymentMethod || 'Cash',
       status: item.status || 'Completed',
       description: item.description || ''
@@ -221,7 +222,7 @@ const PaymentsManagement = () => {
                 <th className="px-6 py-5">#</th>
                 <th className="px-6 py-5">Student Name</th>
                 <th className="px-6 py-5">Student No. / Phone</th>
-                <th className="px-6 py-5">Month / Date</th>
+                <th className="px-6 py-5">Billing Cycle / Date</th>
                 <th className="px-6 py-5">Amount ($)</th>
                 <th className="px-6 py-5">Status</th>
                 <th className="px-6 py-5">Deposit Wallet</th>
@@ -345,13 +346,16 @@ const PaymentsManagement = () => {
                   </span>
                 </div>
                 <div>
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Payment Month</label>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Billing Cycle (25th → 24th)</label>
                   <input
                     type="month"
                     value={formData.month}
                     onChange={(e) => setFormData({ ...formData, month: e.target.value })}
                     className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
                   />
+                  <span className="block text-[10px] font-semibold text-slate-400 mt-1">
+                    Billing cycle, not a calendar month · {cycleLabel(formData.month)}
+                  </span>
                 </div>
               </div>
 

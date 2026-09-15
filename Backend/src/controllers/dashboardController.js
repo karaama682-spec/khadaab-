@@ -11,6 +11,7 @@ const Transaction = require('../models/Transaction');
 const StudentAttendance = require('../models/StudentAttendance');
 const TeacherAttendance = require('../models/TeacherAttendance');
 const Notification = require('../models/Notification');
+const { currentCycle, cycleRange } = require('../utils/billingCycle');
 
 // In-memory cache to prevent re-running 13 aggregations on every dashboard visit
 const dashboardCache = new Map();
@@ -39,9 +40,11 @@ const getDashboardData = asyncHandler(async (req, res) => {
     const endOfToday = new Date();
     endOfToday.setHours(23, 59, 59, 999);
 
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    const currentMonth = now.toISOString().slice(0, 7); // YYYY-MM
+    // Financial "this month" = the current BILLING CYCLE (25th→24th), not the
+    // calendar month. startOfMonth/endOfMonth below are the cycle's boundaries.
+    const cycle = currentCycle();
+    const { start: startOfMonth, end: endOfMonth } = cycleRange(cycle);
+    const currentMonth = cycle; // billing-cycle key
 
     const [
         totalStudents,
@@ -76,9 +79,17 @@ const getDashboardData = asyncHandler(async (req, res) => {
             { $match: { ...branchQuery, status: 'Active' } },
             { $group: { _id: null, total: { $sum: { $ifNull: ['$monthlyFee', { $ifNull: ['$fee', 0] }] } } } }
         ]),
-        // Fees actually collected for the current month.
+        // Fees actually collected for the current billing cycle: new payments by
+        // their billingCycle key, historical payments by their real paymentDate.
         Payment.aggregate([
-            { $match: { ...branchQuery, status: 'Completed', month: currentMonth } },
+            { $match: {
+                ...branchQuery,
+                status: 'Completed',
+                $or: [
+                    { billingCycle: cycle },
+                    { billingCycle: null, paymentDate: { $gte: startOfMonth, $lte: endOfMonth } }
+                ]
+            } },
             { $group: { _id: null, total: { $sum: '$amount' } } }
         ]),
         StudentAttendance.countDocuments({ ...branchQuery, date: { $gte: startOfToday, $lte: endOfToday }, status: 'Present' }),

@@ -3,6 +3,7 @@ const Salary = require('../models/Salary');
 const Transaction = require('../models/Transaction');
 const Wallet = require('../models/Wallet');
 const User = require('../models/User');
+const { cycleKeyForDate, isValidCycleKey } = require('../utils/billingCycle');
 
 const getSalarys = asyncHandler(async (req, res) => {
     const data = await Salary.find()
@@ -29,6 +30,12 @@ const getSalaryById = asyncHandler(async (req, res) => {
 const createSalary = asyncHandler(async (req, res) => {
     const body = { ...req.body };
     body.paidBy = req.user?._id;
+
+    // The picked `month` is now a BILLING CYCLE key (the cycle the salary is for);
+    // else derive the cycle from the payment date. Historical rows keep null.
+    body.billingCycle = isValidCycleKey(body.month)
+        ? body.month
+        : cycleKeyForDate(body.paymentDate || new Date());
 
     // Find specific wallet or fallback to active branch wallet
     let wallet = null;
