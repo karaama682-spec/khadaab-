@@ -598,26 +598,6 @@ const lookupAccount = async (variants) => {
     };
 };
 
-const lookupPreviousEntry = async (variants, purpose) => {
-    const query = purpose === 'receiver'
-        ? phoneOrQuery('receiverPhone', variants)
-        : phoneOrQuery('senderPhone', variants);
-    const lastEntry = await CashbookEntry.findOne(query).sort({ date: -1, createdAt: -1 });
-    if (!lastEntry) return null;
-    const name = purpose === 'receiver' ? (lastEntry.receiverName || lastEntry.payerName) : (lastEntry.senderName || lastEntry.payerName);
-    const entityType = purpose === 'receiver' ? (lastEntry.receiverEntityType || 'manual') : (lastEntry.senderEntityType || 'manual');
-    const entityId = purpose === 'receiver' ? lastEntry.receiverEntityId : lastEntry.senderEntityId;
-    return {
-        found: true,
-        name: name || '',
-        entityType: entityType || 'manual',
-        entityId: entityId || null,
-        role: 'Contact',
-        phone: purpose === 'receiver' ? lastEntry.receiverPhone : lastEntry.senderPhone,
-        lastEntry
-    };
-};
-
 // Match CashbookEntry documents belonging to a billing cycle (25th→24th),
 // migration-safe for historical rows.
 //
@@ -888,6 +868,10 @@ const lookupPhone = asyncHandler(async (req, res) => {
         return res.json({ found: false, name: '', entityType: '', entityId: null, role: '' });
     }
 
+    // Payer autocomplete resolves ONLY against current, active records — guardian,
+    // student, user/teacher, and account. The historical-cashbook name fallback
+    // was removed so an old counterparty name (e.g. from a past cashbook entry)
+    // is never suggested as a current payer. Unknown numbers return found:false.
     const tryOrder =
         purpose === 'receiver'
             ? [
@@ -895,15 +879,13 @@ const lookupPhone = asyncHandler(async (req, res) => {
                   () => lookupUser(variants, false),
                   () => lookupAccount(variants),
                   () => lookupGuardian(variants),
-                  () => lookupStudent(variants),
-                  () => lookupPreviousEntry(variants, 'receiver')
+                  () => lookupStudent(variants)
               ]
             : [
                   () => lookupGuardian(variants),
                   () => lookupStudent(variants),
                   () => lookupAccount(variants),
-                  () => lookupUser(variants, false),
-                  () => lookupPreviousEntry(variants, 'sender')
+                  () => lookupUser(variants, false)
               ];
 
     for (const lookup of tryOrder) {
