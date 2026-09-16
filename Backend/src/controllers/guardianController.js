@@ -137,11 +137,27 @@ const updateGuardian = asyncHandler(async (req, res) => {
         { new: true }
     );
     if (data) {
+        // Synchronize the CURRENT payer identity onto every student linked to this
+        // payer (their denormalized fatherName / fatherPhone). This updates ONLY
+        // the live student records — it deliberately does NOT touch any finance
+        // history: cashbook entries, payments, transactions and salaries keep the
+        // phone/name captured when each record was created. So changing the payer
+        // number to 616123456 updates the payer and all their students, while old
+        // payments (whose number lives on their CashbookEntry snapshot) still read
+        // 615998987.
+        const studentSync = {};
         const newName = (req.body.fullName || '').trim();
         if (newName && newName !== 'Fee Payer') {
+            studentSync.fatherName = newName;
+        }
+        if (normalizedPhone) {
+            // updateData.phone is the new current payer number, stored as digits.
+            studentSync.fatherPhone = updateData.phone;
+        }
+        if (Object.keys(studentSync).length > 0) {
             await Student.updateMany(
                 { guardianId: data._id },
-                { fatherName: newName }
+                { $set: studentSync }
             );
         }
         res.json(data);
