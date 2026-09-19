@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const asyncHandler = require('../middleware/asyncHandler');
 const CashbookCategory = require('../models/CashbookCategory');
 const CashbookEntry = require('../models/CashbookEntry');
@@ -655,17 +656,21 @@ const entryInCycle = (cycle) => {
 
 // Summarize the students a responsible person pays for: fees, amount paid in the
 // given billing cycle, and the remaining balance still owed for that cycle.
-const summarizeStudents = async (students, cycle = currentCycle()) => {
+const summarizeStudents = async (students, cycle = currentCycle(), excludeEntryId = null) => {
     const list = [];
     let totalMonthlyFee = 0;
     let totalPaid = 0;
     let totalBalance = 0;
     for (const s of students) {
-        const paidThisMonthAgg = await Payment.find({
+        const paymentFilter = {
             studentId: s._id,
             status: 'Completed',
             ...cycleMatch('billingCycle', 'paymentDate', cycle)
-        }).select('amount');
+        };
+        if (excludeEntryId && mongoose.Types.ObjectId.isValid(excludeEntryId)) {
+            paymentFilter.sourceEntryId = { $ne: new mongoose.Types.ObjectId(excludeEntryId) };
+        }
+        const paidThisMonthAgg = await Payment.find(paymentFilter).select('amount');
         const paidThisMonth = paidThisMonthAgg.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
         const monthlyFee = Number(s.monthlyFee || s.fee || 0);
         const balance = Math.max(0, monthlyFee - paidThisMonth);
@@ -689,7 +694,7 @@ const summarizeStudents = async (students, cycle = currentCycle()) => {
 // - Parent / Waalid (responsible student fees)
 // - Teacher / Macallin (salary minus payments this month)
 // - Rent / Kiro or other registered accounts / contacts
-const buildPayerInfo = async (match, variants, purpose = 'sender', reqDate = null) => {
+const buildPayerInfo = async (match, variants, purpose = 'sender', reqDate = null, excludeEntryId = null) => {
     if (!match) return null;
     // The billing cycle in focus: an explicit cycle key if provided, else derived
     // from the supplied date (or now) using the 25th→24th rule.
@@ -713,7 +718,7 @@ const buildPayerInfo = async (match, variants, purpose = 'sender', reqDate = nul
             .populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } });
 
         if (!students.length) return { kind: 'responsible', students: [], totalMonthlyFee: 0, totalPaid: 0, totalBalance: 0, remainingBalance: 0, count: 0 };
-        const summary = await summarizeStudents(students, currentMonth);
+        const summary = await summarizeStudents(students, currentMonth, excludeEntryId);
         return {
             kind: 'responsible',
             ...summary,
@@ -729,24 +734,32 @@ const buildPayerInfo = async (match, variants, purpose = 'sender', reqDate = nul
         // Salary payments for this billing cycle (excluding Cashbook mirrors to
         // prevent double counting). New salaries carry billingCycle; historical
         // ones are attributed by paymentDate.
-        const salaryDocs = await Salary.find({
+        const salaryFilter = {
             teacherId: match.entityId,
             status: { $ne: 'Cancelled' },
             ...cycleMatch('billingCycle', 'paymentDate', currentMonth)
-        }).select('amount month status notes');
+        };
+        if (excludeEntryId) {
+            salaryFilter.notes = { $not: new RegExp(`ref:${excludeEntryId}`) };
+        }
+        const salaryDocs = await Salary.find(salaryFilter).select('amount month status notes');
         const externalSalaryPaid = salaryDocs
             .filter((s) => !s.notes || !s.notes.startsWith('Cashbook:'))
             .reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
 
         // Cashbook expense entries to THIS receiver within this billing cycle.
+        const entryConditions = [
+            { $or: [
+                { receiverEntityId: match.entityId },
+                phoneOrQuery('receiverPhone', variants)
+            ] },
+            entryInCycle(currentMonth)
+        ];
+        if (excludeEntryId && mongoose.Types.ObjectId.isValid(excludeEntryId)) {
+            entryConditions.push({ _id: { $ne: new mongoose.Types.ObjectId(excludeEntryId) } });
+        }
         const entryDocs = await CashbookEntry.find({
-            $and: [
-                { $or: [
-                    { receiverEntityId: match.entityId },
-                    phoneOrQuery('receiverPhone', variants)
-                ] },
-                entryInCycle(currentMonth)
-            ]
+            $and: entryConditions
         }).populate('categoryId');
         const cashbookPaid = entryDocs
             .filter((e) => !e.categoryId || e.categoryId.type === 'Expense')
@@ -874,6 +887,7 @@ const lookupPhone = asyncHandler(async (req, res) => {
     const raw = (req.query.phone || '').trim();
     const purpose = (req.query.purpose || 'sender').toLowerCase();
     const reqDate = req.query.month || req.query.date || null;
+    const excludeEntryId = (req.query.excludeEntryId || '').trim() || null;
     const variants = phoneVariants(raw);
 
     if (!variants.length) {
@@ -903,7 +917,7 @@ const lookupPhone = asyncHandler(async (req, res) => {
     for (const lookup of tryOrder) {
         const match = await lookup();
         if (match) {
-            const payerInfo = await buildPayerInfo(match, variants, purpose, reqDate);
+            const payerInfo = await buildPayerInfo(match, variants, purpose, reqDate, excludeEntryId);
             return res.json({ ...match, payerInfo });
         }
     }

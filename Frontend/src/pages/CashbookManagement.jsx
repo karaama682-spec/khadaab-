@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Wallet,
   Edit2,
@@ -112,6 +112,7 @@ const CashbookManagement = () => {
 
   const [transactionForm, setTransactionForm] = useState(emptyTransactionForm());
   const [editingEntry, setEditingEntry] = useState(null);
+  const editingEntryRef = useRef(null);
   const [filterType, setFilterType] = useState('All');
   const [filterCategory, setFilterCategory] = useState('All');
   const [dateFrom, setDateFrom] = useState('');
@@ -123,10 +124,11 @@ const CashbookManagement = () => {
   const [monthsToPay, setMonthsToPay] = useState(1);
 
   // The most a responsible payer may pay: the current month's outstanding balance,
-  // or the advance fee for the selected advance month(s).
+  // or the advance fee for the selected advance month(s). In edit mode, it allows
+  // at least the entry's existing amount so editing an existing transaction is never blocked.
   const maxPayable = (payerInfo && payerInfo.kind === 'responsible')
     ? (monthsToPay === 1
-        ? Number(payerInfo.totalBalance || 0)
+        ? Math.max(Number(payerInfo.totalBalance || 0), editingEntry ? Number(editingEntry.amount || 0) : 0)
         : Number(payerInfo.totalMonthlyFee || 0) * (monthsToPay - 1))
     : null;
 
@@ -135,6 +137,7 @@ const CashbookManagement = () => {
 
   // When the number of pre-paid months changes, re-fill the amount with the target month(s) amount.
   useEffect(() => {
+    if (editingEntryRef.current) return;
     if (payerInfo && payerInfo.kind === 'responsible') {
       const targetAmount = monthsToPay === 1
         ? Number(payerInfo.totalBalance || 0)
@@ -290,13 +293,19 @@ const CashbookManagement = () => {
 
     try {
       const res = await api.get('/cashbook/lookup', {
-        params: { phone: cleaned, purpose: side, date: transactionForm.date, month: monthToUse }
+        params: {
+          phone: cleaned,
+          purpose: side,
+          date: transactionForm.date,
+          month: monthToUse,
+          excludeEntryId: editingEntryRef.current?._id || undefined
+        }
       });
       const { found, name, entityType, entityId, payerInfo: info } = res.data || {};
 
       if (side === 'sender') {
         if (found) {
-          // Auto-fill the amount with the current remaining balance owed/payable.
+          // Auto-fill the amount with the current remaining balance owed/payable only for new transactions.
           const rem = info?.remainingBalance !== undefined
             ? Number(info.remainingBalance)
             : info?.totalBalance !== undefined
@@ -307,18 +316,20 @@ const CashbookManagement = () => {
             senderName: name,
             senderEntityType: entityType === 'teacher' ? 'user' : entityType,
             senderEntityId: entityId || '',
-            amount: rem !== null && !isNaN(rem) ? rem : prev.amount
+            amount: editingEntryRef.current ? prev.amount : (rem !== null && !isNaN(rem) ? rem : prev.amount)
           }));
           setSenderLocked(true);
           setPayerInfo(info || null);
-          setMonthsToPay(1);
+          if (!editingEntryRef.current) {
+            setMonthsToPay(1);
+          }
         } else {
           setSenderLocked(false);
           setPayerInfo(null);
         }
       } else {
         if (found) {
-          // Auto-fill the amount with the current remaining balance owed/payable.
+          // Auto-fill the amount with the current remaining balance owed/payable only for new transactions.
           const rem = info?.remainingBalance !== undefined
             ? Number(info.remainingBalance)
             : info?.totalBalance !== undefined
@@ -329,7 +340,7 @@ const CashbookManagement = () => {
             receiverName: name,
             receiverEntityType: entityType === 'teacher' ? 'teacher' : entityType === 'user' ? 'user' : entityType,
             receiverEntityId: entityId || '',
-            amount: rem !== null && !isNaN(rem) ? rem : prev.amount
+            amount: editingEntryRef.current ? prev.amount : (rem !== null && !isNaN(rem) ? rem : prev.amount)
           }));
           setReceiverLocked(true);
           setPayerInfo(info || null);
@@ -383,10 +394,12 @@ const CashbookManagement = () => {
     const firstWallet = wallets.find((w) => w.status !== 'Disabled') || wallets[0];
     const initialForm = emptyTransactionForm();
     setEditingEntry(null);
+    editingEntryRef.current = null;
     setSenderLocked(false);
     setReceiverLocked(false);
     setWalletDirection('receiver');
     setPayerInfo(null);
+    setMonthsToPay(1);
     if (firstWallet) {
       initialForm.walletId = firstWallet._id;
       initialForm.receiverPhone = firstWallet.accountNumber || '';
@@ -526,6 +539,7 @@ const CashbookManagement = () => {
 
   const handleTransactionEdit = (item) => {
     setEditingEntry(item);
+    editingEntryRef.current = item;
     const itemWalletId = item.walletId?._id || item.walletId || '';
     const itemWallet = wallets.find((w) => w._id === itemWalletId);
 
@@ -1151,7 +1165,16 @@ const CashbookManagement = () => {
                   </div>
                   <select
                     value={monthsToPay}
-                    onChange={(e) => setMonthsToPay(Number(e.target.value))}
+                    onChange={(e) => {
+                      const m = Number(e.target.value);
+                      setMonthsToPay(m);
+                      if (payerInfo && payerInfo.kind === 'responsible') {
+                        const targetAmount = m === 1
+                          ? Number(payerInfo.totalBalance || 0)
+                          : Number(payerInfo.totalMonthlyFee || 0) * (m - 1);
+                        setTransactionForm((prev) => ({ ...prev, amount: targetAmount }));
+                      }
+                    }}
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
                   >
                     {[1, 2, 3, 4, 5, 6].map((m) => {

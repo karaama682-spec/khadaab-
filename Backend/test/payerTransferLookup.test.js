@@ -14,7 +14,7 @@ const invoke = (handler, { query = {}, body = {}, user = {} }) => new Promise((r
 });
 
 let mongod;
-let lookupPhone, createEntry, Guardian, Student, Class, CashbookCategory, Wallet, Payment;
+let lookupPhone, createEntry, Guardian, Student, Class, CashbookCategory, Wallet, Payment, CashbookEntry;
 
 const PHONE_PAYER1 = '614047121';
 const PHONE_PAYER2 = '615758443';
@@ -31,6 +31,7 @@ test.before(async () => {
   CashbookCategory = require('../src/models/CashbookCategory');
   Wallet = require('../src/models/Wallet');
   Payment = require('../src/models/Payment');
+  CashbookEntry = require('../src/models/CashbookEntry');
   ({ lookupPhone, createEntry } = require('../src/controllers/cashbookController'));
 
   cls = await Class.create({ name: 'Class 1' });
@@ -129,4 +130,23 @@ test('syncFeePayments for Payer 1 entry only allocates payment to Student 1, not
   assert.strictEqual(payments.length, 1, 'Only one payment must be created');
   assert.strictEqual(String(payments[0].studentId), String(student1._id), 'Payment must be allocated to Student 1 only');
   assert.strictEqual(payments[0].amount, 10);
+});
+
+test('lookupPhone with excludeEntryId restores unpaid balance during edit', async () => {
+  // 1. Without excludeEntryId, Payer 1 shows remaining = 0 (paid = 10)
+  const lookupWithoutExclude = await invoke(lookupPhone, { query: { phone: PHONE_PAYER1, purpose: 'sender' } });
+  assert.strictEqual(lookupWithoutExclude.body.payerInfo.totalPaid, 10);
+  assert.strictEqual(lookupWithoutExclude.body.payerInfo.totalBalance, 0);
+
+  // Find the entry that was created in the previous test
+  const entry = await CashbookEntry.findOne({ senderPhone: PHONE_PAYER1 });
+  assert.ok(entry, 'CashbookEntry must exist');
+
+  // 2. With excludeEntryId, Payer 1 excludes this entry\'s payment: shows remaining = 10 (paid = 0)
+  const lookupWithExclude = await invoke(lookupPhone, {
+    query: { phone: PHONE_PAYER1, purpose: 'sender', excludeEntryId: String(entry._id) }
+  });
+  assert.strictEqual(lookupWithExclude.body.payerInfo.totalPaid, 0);
+  assert.strictEqual(lookupWithExclude.body.payerInfo.totalBalance, 10);
+  assert.strictEqual(lookupWithExclude.body.payerInfo.remainingBalance, 10);
 });
