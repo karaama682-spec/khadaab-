@@ -22,10 +22,10 @@ const METHODS_WITH_PARTIES = ['Mobile Money', 'Bank'];
 
 // Per-method phone/account hints.
 //  • Bank account number: 6–7 digits.
-//  • Mobile Money: exactly 9 digits numeric value.
+//  • Mobile Money: 9 or 10 digits numeric value.
 const PHONE_RULES = {
   Bank: { label: 'Bank number must be 6 to 7 digits' },
-  'Mobile Money': { label: 'Number must be exactly 9 digits' }
+  'Mobile Money': { label: 'Number must be 9 or 10 digits' }
 };
 
 // Returns an error string if the value is present but does not match the
@@ -36,7 +36,7 @@ const phoneError = (method, value) => {
     const d = digitsOnly(value);
     return d.length >= 6 && d.length <= 7 ? '' : PHONE_RULES.Bank.label;
   }
-  return isValidSomaliMobile(value) ? '' : 'Number must be exactly 9 digits';
+  return isValidSomaliMobile(value) ? '' : 'Number must be 9 or 10 digits';
 };
 
 const emptyCategoryForm = () => ({
@@ -977,7 +977,7 @@ const CashbookManagement = () => {
                           senderEntityId: ''
                         });
                       }}
-                      placeholder={walletDirection === 'sender' ? '' : transactionForm.method === 'Bank' ? 'Select a payer or type a bank number' : 'Select a payer or type a 9-digit number'}
+                      placeholder={walletDirection === 'sender' ? '' : transactionForm.method === 'Bank' ? 'Select a payer or type a bank number' : 'Select a payer or type a 9 or 10-digit number'}
                       className={`w-full px-4 py-3 rounded-xl border text-slate-900 dark:text-white ${
                         walletDirection === 'sender'
                           ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800 font-mono'
@@ -1077,7 +1077,7 @@ const CashbookManagement = () => {
                           receiverEntityId: ''
                         });
                       }}
-                      placeholder={walletDirection === 'receiver' ? '' : transactionForm.method === 'Bank' ? 'Bank number (6–7 digits)' : '9-digit number'}
+                      placeholder={walletDirection === 'receiver' ? '' : transactionForm.method === 'Bank' ? 'Bank number (6–7 digits)' : '9 or 10-digit number'}
                       className={`w-full px-4 py-3 rounded-xl border text-slate-900 dark:text-white ${
                         walletDirection === 'receiver'
                           ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 font-mono'

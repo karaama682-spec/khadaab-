@@ -34,7 +34,7 @@ const phoneVariants = (value) => {
 const isValidSomaliMobile = (value) => {
     if (value === null || value === undefined) return false;
     const str = String(value).trim();
-    return /^\d{9}$/.test(str);
+    return /^\d{9,10}$/.test(str);
 };
 
 module.exports = {

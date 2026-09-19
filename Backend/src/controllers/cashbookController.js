@@ -227,10 +227,10 @@ const validateMobileFields = (method, senderPhone, receiverPhone) => {
 
     if (['EVC-Plus', 'E-Dahab', 'Mobile Money'].includes(method)) {
         if (senderPhone && !isValidSomaliMobile(senderPhone)) {
-            resStatus400('Sender phone must be exactly 9 digits');
+            resStatus400('Sender phone must be 9 or 10 digits');
         }
         if (receiverPhone && !isValidSomaliMobile(receiverPhone)) {
-            resStatus400('Receiver phone must be exactly 9 digits');
+            resStatus400('Receiver phone must be 9 or 10 digits');
         }
     }
 };
