@@ -35,7 +35,8 @@ router.route('/:id')
     .get(protect, canReadAttendance, getStudentAttendanceById)
     .put(protect, canWriteAttendance, updateStudentAttendance)
     .delete(protect, checkAnyPermissionSet([
-        { moduleName: 'Attendance', actions: ['Delete'], subModuleName: 'Student Attendance' }
+        { moduleName: 'Attendance', actions: ['Delete', 'Edit'], subModuleName: 'Student Attendance' },
+        { moduleName: 'Reports', actions: ['Delete', 'Edit'], subModuleName: 'Attendance Ledger' }
     ]), deleteStudentAttendance);
 
 module.exports = router;

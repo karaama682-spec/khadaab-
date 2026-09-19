@@ -17,13 +17,18 @@ const studentAttendanceSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Present', 'Late', 'Absent'],
+        enum: ['Present', 'Late', 'Absent', 'Partial'],
         default: 'Present'
+    },
+    attendanceType: {
+        type: String,
+        enum: ['Daily', 'Session'],
+        default: 'Daily'
     },
     session: {
         type: String,
-        enum: ['Morning', 'Breakfast', 'Evening'],
-        default: 'Morning'
+        enum: ['Morning', 'Breakfast', 'Evening', null],
+        default: null
     },
     arrivalTime: {
         type: String,
@@ -40,13 +45,24 @@ const studentAttendanceSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-// Allow separate Morning, Breakfast, and Evening entries on the same date.
-studentAttendanceSchema.index({ studentId: 1, date: -1, session: 1, createdAt: -1 });
+// Index for fast lookups by student, date, attendanceType, and session
+studentAttendanceSchema.index({ studentId: 1, date: -1, attendanceType: 1, session: 1, createdAt: -1 });
+studentAttendanceSchema.index({ classId: 1, date: -1, attendanceType: 1 });
+
+// Enforce that Daily attendance is unique per student per date
+studentAttendanceSchema.index(
+    { studentId: 1, date: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { attendanceType: 'Daily' },
+        name: 'unique_student_date_daily'
+    }
+);
 
 const StudentAttendance = mongoose.model('StudentAttendance', studentAttendanceSchema);
 
-// A previous version created a unique { studentId, date } index. That index
-// prevents additional sessions from being saved and causes E11000 errors.
+// A previous version created a non-partial unique { studentId, date } index that blocked sessions.
+// We remove that legacy index if present, while keeping the partial unique index for Daily attendance.
 StudentAttendance.removeLegacyDailyUniqueIndex = async () => {
     let indexes = [];
     try {
@@ -58,9 +74,11 @@ StudentAttendance.removeLegacyDailyUniqueIndex = async () => {
 
     const legacyIndex = indexes.find(index =>
         index.unique &&
+        index.name !== 'unique_student_date_daily' &&
         index.key?.studentId === 1 &&
         index.key?.date === 1 &&
-        Object.keys(index.key).length === 2
+        Object.keys(index.key).length === 2 &&
+        !index.partialFilterExpression
     );
 
     if (legacyIndex) {

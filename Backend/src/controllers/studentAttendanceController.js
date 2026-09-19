@@ -38,10 +38,11 @@ const checkAndTriggerWarnings = async (studentId) => {
 };
 
 const getStudentAttendances = asyncHandler(async (req, res) => {
-    const { classId, studentId, date, session, startDate, endDate } = req.query;
+    const { classId, studentId, date, session, attendanceType, startDate, endDate } = req.query;
     const query = {};
     if (classId) query.classId = classId;
     if (studentId) query.studentId = studentId;
+    if (attendanceType) query.attendanceType = attendanceType;
     if (session) query.session = session;
     
     if (date) {
@@ -59,13 +60,14 @@ const getStudentAttendances = asyncHandler(async (req, res) => {
         .populate('markedBy', 'fullName email')
         .sort({ date: -1, createdAt: -1 });
 
-    // Older versions allowed duplicate submissions for the same daily register.
-    // Return only the newest record for each student/date/session so every screen
-    // calculates the same, correct attendance totals while old data is retained.
+    // Deduplicate: Keep the newest record per (studentId + date + attendanceType + session)
+    // Daily Attendance (Present/Absent) and Session Attendance (Late/Partial) are separate and independent.
     const latestRecords = [];
     const seen = new Set();
     for (const record of data) {
-        const key = `${record.studentId?._id || record.studentId}:${record.date}:${record.session || 'Morning'}`;
+        const type = record.attendanceType || (record.session ? 'Session' : 'Daily');
+        const sess = type === 'Session' ? (record.session || 'Morning') : 'Daily';
+        const key = `${record.studentId?._id || record.studentId}:${record.date}:${type}:${sess}`;
         if (!seen.has(key)) {
             seen.add(key);
             latestRecords.push(record);
@@ -92,45 +94,116 @@ const createStudentAttendance = asyncHandler(async (req, res) => {
     const results = [];
 
     for (const item of records) {
-        const { studentId, classId, date, status, session, arrivalTime, description } = item;
+        const { studentId, classId, date, status, session, attendanceType, arrivalTime, description } = item;
         if (!studentId || !classId || !date) continue;
 
-        const attendanceSession = session || 'Morning';
-        const nextStatus = status || 'Present';
-        const existing = await StudentAttendance.findOne({ studentId, date, session: attendanceSession });
+        // Determine if this record is Daily Attendance (Present/Absent) or Session Attendance (Late/Partial)
+        const isSession = attendanceType === 'Session' || Boolean(session && ['Morning', 'Breakfast', 'Evening'].includes(session) && (status === 'Late' || status === 'Partial'));
+        const type = isSession ? 'Session' : 'Daily';
+        const nextStatus = status || (isSession ? 'Late' : 'Present');
 
-        const fields = {
-            classId,
-            status: nextStatus,
-            arrivalTime: nextStatus === 'Late' ? (arrivalTime || '08:30') : '',
-            markedBy: req.user?._id
-        };
+        if (type === 'Daily') {
+            // Daily Attendance: No session, once per student + date + attendanceType: 'Daily'
+            const fields = {
+                classId,
+                status: nextStatus,
+                attendanceType: 'Daily',
+                session: null,
+                arrivalTime: '',
+                description: nextStatus === 'Present' ? '' : (description || '').trim(),
+                markedBy: req.user?._id
+            };
 
-        // A reason only applies to late or absent students, so returning someone to
-        // Present clears it. Callers that omit the field entirely — the report screen
-        // only sends a status — keep whatever reason is already stored.
-        if (nextStatus === 'Present') {
-            fields.description = '';
-        } else if (description !== undefined) {
-            fields.description = description || '';
+            let existing = null;
+            if (item._id) {
+                existing = await StudentAttendance.findById(item._id);
+            }
+            if (!existing) {
+                existing = await StudentAttendance.findOne({
+                    studentId,
+                    date,
+                    $or: [
+                        { attendanceType: 'Daily' },
+                        { attendanceType: { $ne: 'Session' }, session: { $in: [null, undefined] } }
+                    ]
+                });
+            }
+
+            let created;
+            if (existing) {
+                created = await StudentAttendance.findByIdAndUpdate(
+                    existing._id,
+                    { $set: fields },
+                    { new: true }
+                );
+            } else {
+                created = await StudentAttendance.findOneAndUpdate(
+                    {
+                        studentId,
+                        date,
+                        attendanceType: 'Daily'
+                    },
+                    {
+                        $set: fields,
+                        $setOnInsert: { studentId, date }
+                    },
+                    { new: true, upsert: true, setDefaultsOnInsert: true }
+                );
+            }
+
+            if (!existing || existing.status !== nextStatus) {
+                await checkAndTriggerWarnings(studentId);
+            }
+            results.push(created);
+        } else {
+            // Session Attendance: Morning / Breakfast / Evening, for Late / Partial
+            // Daily Absent Lock: If student's Daily Attendance is saved as Absent, lock Session Attendance on this date.
+            const dailyAttendance = await StudentAttendance.findOne({
+                studentId,
+                date,
+                $or: [
+                    { attendanceType: 'Daily' },
+                    { attendanceType: { $ne: 'Session' }, session: { $in: [null, undefined] } }
+                ]
+            });
+
+            if (dailyAttendance && dailyAttendance.status === 'Absent') {
+                res.status(400);
+                throw new Error('Student is marked as Absent for Daily Attendance on this date. Session Attendance cannot be recorded unless Daily Attendance is changed to Present.');
+            }
+
+            const attendanceSession = session || 'Morning';
+            const existing = await StudentAttendance.findOne({
+                studentId,
+                date,
+                session: attendanceSession,
+                attendanceType: 'Session'
+            });
+
+            const fields = {
+                classId,
+                status: nextStatus,
+                attendanceType: 'Session',
+                session: attendanceSession,
+                arrivalTime: nextStatus === 'Late' ? (arrivalTime || '08:30') : '',
+                description: (description || '').trim(),
+                markedBy: req.user?._id
+            };
+
+            const created = await StudentAttendance.findOneAndUpdate(
+                { studentId, date, session: attendanceSession, attendanceType: 'Session' },
+                {
+                    $set: fields,
+                    $setOnInsert: { studentId, date }
+                },
+                { new: true, upsert: true, setDefaultsOnInsert: true }
+            );
+
+            if (!existing || existing.status !== nextStatus) {
+                await checkAndTriggerWarnings(studentId);
+            }
+            results.push(created);
         }
-
-        const created = await StudentAttendance.findOneAndUpdate(
-            { studentId, date, session: attendanceSession },
-            {
-                $set: fields,
-                $setOnInsert: { studentId, date, session: attendanceSession }
-            },
-            { new: true, upsert: true, setDefaultsOnInsert: true }
-        );
-
-        // A warning is meaningful only when a new daily record is created or its
-        // status changes, not every time a teacher re-saves the class register.
-        if (!existing || existing.status !== nextStatus) {
-            await checkAndTriggerWarnings(studentId);
-        }
-
-        results.push(created);
     }
 
     res.status(201).json(Array.isArray(req.body) ? results : (results[0] || {}));
@@ -164,6 +237,31 @@ const getStudentAttendanceHistory = asyncHandler(async (req, res) => {
 });
 
 const updateStudentAttendance = asyncHandler(async (req, res) => {
+    const targetRecord = await StudentAttendance.findById(req.params.id);
+    if (!targetRecord) {
+        res.status(404);
+        throw new Error('StudentAttendance not found');
+    }
+
+    // Daily Absent Lock: If updating a Session Attendance record, verify student's Daily Attendance is not Absent
+    if (targetRecord.attendanceType === 'Session' || req.body.attendanceType === 'Session') {
+        const studentId = targetRecord.studentId;
+        const date = targetRecord.date;
+        const dailyAttendance = await StudentAttendance.findOne({
+            studentId,
+            date,
+            $or: [
+                { attendanceType: 'Daily' },
+                { attendanceType: { $ne: 'Session' }, session: { $in: [null, undefined] } }
+            ]
+        });
+
+        if (dailyAttendance && dailyAttendance.status === 'Absent') {
+            res.status(400);
+            throw new Error('Student is marked as Absent for Daily Attendance on this date. Session Attendance cannot be updated unless Daily Attendance is changed to Present.');
+        }
+    }
+
     const updates = { ...req.body };
 
     // Same rule as the create path: a reason belongs only to a late or absent
@@ -174,12 +272,7 @@ const updateStudentAttendance = asyncHandler(async (req, res) => {
     }
 
     const data = await StudentAttendance.findByIdAndUpdate(req.params.id, updates, { new: true });
-    if (data) {
-        res.json(data);
-    } else {
-        res.status(404);
-        throw new Error('StudentAttendance not found');
-    }
+    res.json(data);
 });
 
 const deleteStudentAttendance = asyncHandler(async (req, res) => {
