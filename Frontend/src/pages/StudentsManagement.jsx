@@ -8,6 +8,7 @@ import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import IdCard from '../components/IdCard.jsx';
 import { classLabel, classSearchText } from '../utils/classLabel';
+import { isValidSomaliMobile } from '../utils/somaliPhone';
 
 // The workbook columns mirror the registration form exactly. Student ID is
 // exported for reference but never imported — the server issues it (1001, 1002…)
@@ -317,20 +318,24 @@ const StudentsManagement = () => {
     const phone = (formData.guardianPhone || '').trim();
     const altPhone = (formData.guardianAlternatePhone || '').trim();
     const searchPhone = phone || altPhone;
+    const cleanSearch = digitsOnly(searchPhone);
 
-    if (!searchPhone || searchPhone.length < 3) {
+    if (!cleanSearch || !isValidSomaliMobile(cleanSearch)) {
       setFoundGuardian(null);
       setFormData(prev => (prev.guardianId ? { ...prev, guardianId: '' } : prev));
       return;
     }
 
     // Skip redundant network call if the already found guardian matches either number
+    const cleanPhone = digitsOnly(phone);
+    const cleanAlt = digitsOnly(altPhone);
+    const foundPhone = digitsOnly(foundGuardian?.phone);
+    const foundAlt = digitsOnly(foundGuardian?.alternatePhone);
+
     if (
       foundGuardian &&
-      (phone === foundGuardian.phone ||
-        phone === foundGuardian.alternatePhone ||
-        altPhone === foundGuardian.phone ||
-        altPhone === foundGuardian.alternatePhone)
+      ((cleanPhone && (cleanPhone === foundPhone || cleanPhone === foundAlt)) ||
+        (cleanAlt && (cleanAlt === foundPhone || cleanAlt === foundAlt)))
     ) {
       return;
     }
@@ -338,7 +343,7 @@ const StudentsManagement = () => {
     const timer = setTimeout(async () => {
       try {
         setIsSearchingGuardian(true);
-        const res = await api.get(`/guardians?phone=${encodeURIComponent(searchPhone)}`);
+        const res = await api.get(`/guardians?phone=${encodeURIComponent(cleanSearch)}`);
         const existing = Array.isArray(res.data) && res.data.length > 0 ? res.data[0] : null;
 
         if (existing) {
@@ -1435,7 +1440,7 @@ const StudentsManagement = () => {
                   </div>
                 )}
 
-                {!foundGuardian && (formData.guardianPhone || formData.guardianAlternatePhone) && (formData.guardianPhone || formData.guardianAlternatePhone).trim().length >= 3 && !isSearchingGuardian && (
+                {!foundGuardian && isValidSomaliMobile(digitsOnly(formData.guardianPhone || formData.guardianAlternatePhone)) && !isSearchingGuardian && (
                   <div className="mt-3 p-3.5 rounded-2xl bg-brand-500/10 border border-brand-500/30 flex items-center gap-3 text-xs font-semibold text-brand-700 dark:text-brand-300">
                     <UserPlus size={18} className="shrink-0 text-brand-500" />
                     <div>
