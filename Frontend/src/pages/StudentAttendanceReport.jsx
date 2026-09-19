@@ -7,6 +7,7 @@ import {
   CheckCircle, 
   Clock, 
   AlertTriangle, 
+  AlertCircle,
   MessageSquare, 
   Filter, 
   History, 
@@ -14,6 +15,7 @@ import {
   ShieldAlert,
   Download,
   BookOpen,
+  Building2,
   Users,
   Briefcase,
   Layers,
@@ -72,6 +74,7 @@ const StudentAttendanceReport = () => {
   const [dashDateFilter, setDashDateFilter] = useState('This Month'); // Today | This Week | This Month | Custom
   const [dashStartDate, setDashStartDate] = useState('');
   const [dashEndDate, setDashEndDate] = useState('');
+  const [dashBranchId, setDashBranchId] = useState('');
 
   // 2. Daily Report State
   // Daily View now works as: Student Code + Month -> all of that student's
@@ -83,8 +86,11 @@ const StudentAttendanceReport = () => {
   const [dailyDate] = useState(new Date().toISOString().split('T')[0]);
 
   // 3. Class Report State
+  const [selectedBranchId, setSelectedBranchId] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
-  const [selectedLedgerStudentId, setSelectedLedgerStudentId] = useState('all');
+  const [selectedLedgerDate, setSelectedLedgerDate] = useState(new Date().toISOString().split('T')[0]);
+  const [branchesList, setBranchesList] = useState([]);
+  const [selectedKpiFilter, setSelectedKpiFilter] = useState(null); // null | 'present' | 'late' | 'absent' | 'partial'
 
   // 4. Individual Student Search State
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
@@ -95,17 +101,25 @@ const StudentAttendanceReport = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [resClasses, resStudents, resAttendance] = await Promise.all([
+      const [resClasses, resStudents, resAttendance, resBranches] = await Promise.all([
         api.get('/classes'),
         api.get('/students'),
-        api.get('/student-attendance') // loads all to process locally for dashboard/stats
+        api.get('/student-attendance'), // loads all to process locally for dashboard/stats
+        api.get('/branches').catch(() => ({ data: [] }))
       ]);
-      setClasses(resClasses.data || []);
+      const loadedClasses = resClasses.data || [];
+      setClasses(loadedClasses);
       setStudents(resStudents.data || []);
       setAllAttendance(resAttendance.data || []);
-      
-      if (resClasses.data?.length > 0) {
-        setSelectedClassId(resClasses.data[0]._id);
+      setBranchesList(resBranches?.data || []);
+
+      if (loadedClasses.length > 0) {
+        const firstClass = loadedClasses[0];
+        const bId = String(firstClass.branchId?._id || firstClass.branchId || '');
+        if (bId) {
+          setSelectedBranchId(bId);
+        }
+        setSelectedClassId(firstClass._id);
       }
     } catch (error) {
       console.error('Failed to load reports data', error);
@@ -238,22 +252,49 @@ const StudentAttendanceReport = () => {
   // ==========================================
   // 1. DASHBOARD CALCULATIONS
   // ==========================================
+  const dashFilteredStudents = useMemo(() => {
+    if (!dashBranchId) return students;
+    const branchClassIds = new Set(
+      classes
+        .filter(c => String(c.branchId?._id || c.branchId || '') === String(dashBranchId))
+        .map(c => String(c._id))
+    );
+    return students.filter(s => {
+      const sBranch = String(s.branchId?._id || s.branchId || s.classId?.branchId?._id || s.classId?.branchId || '');
+      if (sBranch) {
+        return sBranch === String(dashBranchId);
+      }
+      const sClassId = String(s.classId?._id || s.classId || '');
+      return branchClassIds.has(sClassId);
+    });
+  }, [students, classes, dashBranchId]);
+
   const dashboardStats = useMemo(() => {
     const { start, end } = resolveDateRange(dashDateFilter, dashStartDate, dashEndDate);
-    
-    // Filter records falling in the range
+    const branchStudentIdSet = dashBranchId ? new Set(dashFilteredStudents.map(s => String(s._id))) : null;
+
+    // Filter records falling in the range and matching branch (if selected)
     const filteredRecs = allAttendance.filter(rec => {
       if (!rec.date) return false;
       if (start && rec.date < start) return false;
       if (end && rec.date > end) return false;
+      if (dashBranchId && branchStudentIdSet) {
+        const sId = String(rec.studentId?._id || rec.studentId || '');
+        if (!branchStudentIdSet.has(sId)) return false;
+        const recBranchId = String(rec.classId?.branchId?._id || rec.classId?.branchId || '');
+        if (recBranchId && recBranchId !== String(dashBranchId)) return false;
+        const recStudentBranchId = String(rec.studentId?.branchId?._id || rec.studentId?.branchId || '');
+        if (recStudentBranchId && recStudentBranchId !== String(dashBranchId)) return false;
+      }
       return true;
     });
 
     const stats = {
-      totalStudents: students.length,
+      totalStudents: dashFilteredStudents.length,
       present: 0,
       late: 0,
       absent: 0,
+      partial: 0,
       percentage: 100
     };
 
@@ -261,6 +302,7 @@ const StudentAttendanceReport = () => {
       if (r.status === 'Present') stats.present++;
       else if (r.status === 'Late') stats.late++;
       else if (r.status === 'Absent') stats.absent++;
+      else if (r.status === 'Partial') stats.partial++;
     });
 
     const totalMarked = stats.present + stats.late + stats.absent;
@@ -269,7 +311,7 @@ const StudentAttendanceReport = () => {
     }
 
     return { stats, filteredRecs };
-  }, [allAttendance, students, dashDateFilter, dashStartDate, dashEndDate]);
+  }, [allAttendance, dashFilteredStudents, dashBranchId, dashDateFilter, dashStartDate, dashEndDate]);
 
   // Dashboard Chart Trend Data (grouped by date)
   const dashboardChartData = useMemo(() => {
@@ -278,11 +320,12 @@ const StudentAttendanceReport = () => {
     dashboardStats.filteredRecs.forEach(r => {
       if (!r.date) return;
       if (!dateMap[r.date]) {
-        dateMap[r.date] = { date: r.date, Present: 0, Late: 0, Absent: 0 };
+        dateMap[r.date] = { date: r.date, Present: 0, Late: 0, Absent: 0, Partial: 0 };
       }
       if (r.status === 'Present') dateMap[r.date].Present++;
       else if (r.status === 'Late') dateMap[r.date].Late++;
       else if (r.status === 'Absent') dateMap[r.date].Absent++;
+      else if (r.status === 'Partial') dateMap[r.date].Partial++;
     });
 
     return Object.values(dateMap)
@@ -338,39 +381,103 @@ const StudentAttendanceReport = () => {
   // ==========================================
   // 3. CLASS REPORT CALCULATIONS
   // ==========================================
-  // Keep the ledger student selector scoped to the academic class currently
-  // selected above it.
-  const ledgerStudents = useMemo(() => {
-    if (!selectedClassId) return [];
-
-    return students.filter(student => {
-      const classId = student.classId?._id || student.classId;
-      return String(classId) === String(selectedClassId);
+  // Branches derived from /branches or loaded classes
+  const branches = useMemo(() => {
+    const map = new Map();
+    if (branchesList.length > 0) {
+      branchesList.forEach(b => {
+        if (b && b._id) map.set(String(b._id), { _id: String(b._id), name: b.name || 'Branch' });
+      });
+    }
+    classes.forEach(item => {
+      const branch = item.branchId;
+      if (branch && (branch._id || typeof branch === 'string')) {
+        const id = String(branch._id || branch);
+        const name = branch.name || 'Branch';
+        if (!map.has(id)) map.set(id, { _id: id, name });
+      }
     });
-  }, [students, selectedClassId]);
+    return Array.from(map.values()).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [branchesList, classes]);
+
+  // Classes filtered by selected branch
+  const visibleClasses = useMemo(() => {
+    if (!selectedBranchId) return classes;
+    return classes.filter(item => {
+      const bId = item.branchId?._id || item.branchId;
+      return String(bId) === String(selectedBranchId);
+    });
+  }, [classes, selectedBranchId]);
+
+  // Handle branch filter change
+  const handleBranchChange = (branchId) => {
+    setSelectedBranchId(branchId);
+    setSelectedKpiFilter(null);
+    if (!branchId) {
+      setSelectedClassId('');
+      return;
+    }
+    const branchClasses = classes.filter(c => String(c.branchId?._id || c.branchId) === String(branchId));
+    const isStillValid = branchClasses.some(c => String(c._id) === String(selectedClassId));
+    if (!isStillValid) {
+      setSelectedClassId(branchClasses.length > 0 ? branchClasses[0]._id : '');
+    }
+  };
 
   const classReportData = useMemo(() => {
-    if (!selectedClassId) return { studentsList: [], stats: { present: 0, late: 0, absent: 0, percentage: 100 } };
+    if (!selectedClassId) return { studentsList: [], stats: { present: 0, late: 0, absent: 0, partial: 0, percentage: 100 } };
 
-    // Get students in this class
+    // Resolve target class and its branch
+    const targetClass = classes.find(c => String(c._id) === String(selectedClassId));
+    const targetBranchId = String(targetClass?.branchId?._id || targetClass?.branchId || selectedBranchId || '');
+
+    // Get students belonging specifically to this selected Branch + Class (no mixing)
     const classStudents = students.filter(s => {
-      const cId = s.classId?._id || s.classId;
-      return String(cId) === String(selectedClassId);
-    }).filter(s => selectedLedgerStudentId === 'all' || String(s._id) === String(selectedLedgerStudentId));
+      const studentClassId = String(s.classId?._id || s.classId || '');
+      if (studentClassId !== String(selectedClassId)) return false;
 
-    const stats = { present: 0, late: 0, absent: 0, percentage: 100 };
+      // Verify branch isolation if branch info exists on student
+      if (targetBranchId) {
+        const studentBranchId = String(s.branchId?._id || s.branchId || s.classId?.branchId?._id || s.classId?.branchId || '');
+        if (studentBranchId && studentBranchId !== targetBranchId) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    const stats = { present: 0, late: 0, absent: 0, partial: 0, percentage: 100 };
 
     const studentsList = classStudents.map(student => {
       const studentRecs = allAttendance.filter(r => {
         const sId = r.studentId?._id || r.studentId;
-        return String(sId) === String(student._id);
+        if (String(sId) !== String(student._id)) return false;
+        if (selectedLedgerDate) {
+          const recDate = String(r.date || '').slice(0, 10);
+          if (recDate !== selectedLedgerDate) return false;
+        }
+        return true;
       });
 
-      const counts = { present: 0, late: 0, absent: 0 };
+      const counts = { present: 0, late: 0, absent: 0, partial: 0 };
+      const descriptions = { present: [], late: [], absent: [], partial: [] };
       studentRecs.forEach(r => {
-        if (r.status === 'Present') { counts.present++; stats.present++; }
-        else if (r.status === 'Late') { counts.late++; stats.late++; }
-        else if (r.status === 'Absent') { counts.absent++; stats.absent++; }
+        if (r.status === 'Present') { 
+          counts.present++; stats.present++; 
+          if (r.description) descriptions.present.push(r.description);
+        }
+        else if (r.status === 'Late') { 
+          counts.late++; stats.late++; 
+          if (r.description) descriptions.late.push(r.description);
+        }
+        else if (r.status === 'Absent') { 
+          counts.absent++; stats.absent++; 
+          if (r.description) descriptions.absent.push(r.description);
+        }
+        else if (r.status === 'Partial') { 
+          counts.partial++; stats.partial++; 
+          if (r.description) descriptions.partial.push(r.description);
+        }
       });
 
       const total = counts.present + counts.late + counts.absent;
@@ -381,6 +488,9 @@ const StudentAttendanceReport = () => {
       return {
         student,
         counts,
+        descriptions,
+        studentRecs,
+        className: classLabel(targetClass || student.classId) || targetClass?.name || 'Class',
         percentage: rate
       };
     });
@@ -391,7 +501,25 @@ const StudentAttendanceReport = () => {
     }
 
     return { studentsList, stats };
-  }, [selectedClassId, selectedLedgerStudentId, students, allAttendance]);
+  }, [selectedClassId, selectedBranchId, selectedLedgerDate, classes, students, allAttendance]);
+
+  // Filter students based on clicked KPI card (Present, Late, Absent, Partial)
+  const displayedClassStudents = useMemo(() => {
+    if (!selectedKpiFilter) return [];
+    if (selectedKpiFilter === 'present') {
+      return classReportData.studentsList.filter(item => (item.counts.present || 0) > 0);
+    }
+    if (selectedKpiFilter === 'late') {
+      return classReportData.studentsList.filter(item => (item.counts.late || 0) > 0);
+    }
+    if (selectedKpiFilter === 'absent') {
+      return classReportData.studentsList.filter(item => (item.counts.absent || 0) > 0);
+    }
+    if (selectedKpiFilter === 'partial') {
+      return classReportData.studentsList.filter(item => (item.counts.partial || 0) > 0);
+    }
+    return [];
+  }, [classReportData.studentsList, selectedKpiFilter]);
 
   // ==========================================
   // 4. INDIVIDUAL REPORT CALCULATIONS
@@ -805,55 +933,78 @@ const StudentAttendanceReport = () => {
       {activeTab === 'dashboard' && (
         <div className="space-y-8 animate-in fade-in duration-500">
           
-          {/* Dashboard Controls: Date Range */}
-          <div className="bg-white dark:bg-slate-900 rounded-[32px] p-6 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="flex items-center gap-2 text-xs font-black uppercase text-slate-500">
-              <Filter size={14} className="text-brand-500" /> Reporting Cycle Range
+          {/* Dashboard Controls: Branch & Date Range */}
+          <div className="bg-white dark:bg-slate-900 rounded-[32px] p-6 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+            <div className="flex flex-wrap items-center gap-6">
+              {/* Filter Branch */}
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-black uppercase text-slate-500 flex items-center gap-1.5 whitespace-nowrap">
+                  <Building2 size={14} className="text-indigo-500" /> Filter Branch
+                </label>
+                <select
+                  value={dashBranchId}
+                  onChange={(e) => setDashBranchId(e.target.value)}
+                  className="min-w-[180px] px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white font-bold text-xs"
+                >
+                  <option value="">All Branches</option>
+                  {branches.map(b => (
+                    <option key={b._id} value={b._id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Reporting Cycle Range */}
+              <div className="flex items-center gap-2 text-xs font-black uppercase text-slate-500 border-l border-slate-200 dark:border-slate-700 pl-6">
+                <Filter size={14} className="text-brand-500" /> Reporting Cycle Range
+              </div>
             </div>
             
             {/* Quick Filters */}
-            <div className="flex flex-wrap gap-2">
-              {['Today', 'This Week', 'This Month', 'Custom'].map(f => (
-                <button
-                  key={f}
-                  onClick={() => setDashDateFilter(f)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                    dashDateFilter === f
-                      ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950'
-                      : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                  }`}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-
-            {/* Custom Range Inputs */}
-            {dashDateFilter === 'Custom' && (
-              <div className="flex gap-4 items-center">
-                <input
-                  type="date"
-                  value={dashStartDate}
-                  onChange={(e) => setDashStartDate(e.target.value)}
-                  className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white"
-                />
-                <span className="text-slate-400 font-bold text-xs">to</span>
-                <input
-                  type="date"
-                  value={dashEndDate}
-                  onChange={(e) => setDashEndDate(e.target.value)}
-                  className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white"
-                />
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap gap-2">
+                {['Today', 'This Week', 'This Month', 'Custom'].map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setDashDateFilter(f)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                      dashDateFilter === f
+                        ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950'
+                        : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
               </div>
-            )}
+
+              {/* Custom Range Inputs */}
+              {dashDateFilter === 'Custom' && (
+                <div className="flex gap-4 items-center">
+                  <input
+                    type="date"
+                    value={dashStartDate}
+                    onChange={(e) => setDashStartDate(e.target.value)}
+                    className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white"
+                  />
+                  <span className="text-slate-400 font-bold text-xs">to</span>
+                  <input
+                    type="date"
+                    value={dashEndDate}
+                    onChange={(e) => setDashEndDate(e.target.value)}
+                    className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white"
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* KPICards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
             <KPICard label="Total Students" value={dashboardStats.stats.totalStudents} icon={<Users size={20} />} color="bg-brand-600" trend={0} description="Active enrollment roster" />
             <KPICard label="Present Today" value={dashboardStats.stats.present} icon={<CheckCircle size={20} />} color="bg-emerald-500" trend={2} description="Explicitly present logs" />
             <KPICard label="Late Today" value={dashboardStats.stats.late} icon={<Clock size={20} />} color="bg-amber-500" trend={-5} description="Tardiness records" />
             <KPICard label="Absent Today" value={dashboardStats.stats.absent} icon={<AlertTriangle size={20} />} color="bg-rose-500" trend={1} description="Explicit absence logs" />
+            <KPICard label="Partial Today" value={dashboardStats.stats.partial} icon={<AlertCircle size={20} />} color="bg-indigo-600" trend={0} description="Partial session logs" />
             <KPICard label="Attendance Rate" value={`${dashboardStats.stats.percentage}%`} icon={<TrendingUp size={20} />} color="bg-teal-500" trend={0} description="Present/Late vs Absent" />
           </div>
 
@@ -872,6 +1023,7 @@ const StudentAttendanceReport = () => {
                     <Bar dataKey="Present" fill="#10b981" radius={[8, 8, 0, 0]} />
                     <Bar dataKey="Late" fill="#f59e0b" radius={[8, 8, 0, 0]} />
                     <Bar dataKey="Absent" fill="#f43f5e" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="Partial" fill="#6366f1" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -1057,45 +1209,55 @@ const StudentAttendanceReport = () => {
           
           {/* Class selector control panel */}
           <div className="bg-white dark:bg-slate-900 rounded-[32px] p-6 border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-end justify-between gap-6">
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-5">
-              <div>
-              <label className="block text-xs font-black uppercase text-slate-500 mb-2 flex items-center gap-2">
-                <BookOpen size={14} className="text-brand-500" /> Select Academic Class
-              </label>
-              <select
-                value={selectedClassId}
-                onChange={(e) => {
-                  setSelectedClassId(e.target.value);
-                  setSelectedLedgerStudentId('all');
-                }}
-                className="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white font-bold text-sm"
-              >
-                <option value="">Select class to audit...</option>
-                {classes.map(c => (
-                  <option key={c._id} value={c._id}>{classLabel(c)}</option>
-                ))}
-              </select>
-              </div>
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-5">
               <div>
                 <label className="block text-xs font-black uppercase text-slate-500 mb-2 flex items-center gap-2">
-                  <User size={14} className="text-brand-500" /> Student in Attendance Ledger
+                  <Building2 size={14} className="text-indigo-500" /> Filter Branch
                 </label>
                 <select
-                  value={selectedLedgerStudentId}
-                  onChange={(e) => {
-                    const studentId = e.target.value;
-                    setSelectedLedgerStudentId(studentId);
-                  }}
-                  disabled={!selectedClassId}
+                  value={selectedBranchId}
+                  onChange={(e) => handleBranchChange(e.target.value)}
                   className="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white font-bold text-sm"
                 >
-                  <option value="all">All Students in Selected Class</option>
-                  {ledgerStudents.map(student => (
-                    <option key={student._id} value={student._id}>
-                      {student.fullName} — {student.studentCode || student.rollNumber || 'No code'}
-                    </option>
+                  <option value="">All Branches</option>
+                  {branches.map(b => (
+                    <option key={b._id} value={b._id}>{b.name}</option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-2 flex items-center gap-2">
+                  <BookOpen size={14} className="text-brand-500" /> Filter Class
+                </label>
+                <select
+                  value={selectedClassId}
+                  onChange={(e) => {
+                    setSelectedClassId(e.target.value);
+                    setSelectedKpiFilter(null);
+                  }}
+                  className="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white font-bold text-sm"
+                >
+                  <option value="">Select class to audit...</option>
+                  {visibleClasses.map(c => (
+                    <option key={c._id} value={c._id}>{classLabel(c)}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-2 flex items-center gap-2">
+                  <Calendar size={14} className="text-emerald-500" /> Date
+                </label>
+                <input
+                  type="date"
+                  value={selectedLedgerDate}
+                  onChange={(e) => {
+                    setSelectedLedgerDate(e.target.value);
+                    setSelectedKpiFilter(null);
+                  }}
+                  className="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white font-bold text-sm"
+                />
               </div>
             </div>
 
@@ -1121,8 +1283,16 @@ const StudentAttendanceReport = () => {
           {selectedClassId && (
             <>
               {/* Class summary stats */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+                <div 
+                  onClick={() => setSelectedKpiFilter(prev => prev === 'present' ? null : 'present')}
+                  title="Click to view students with Present attendance"
+                  className={`bg-white dark:bg-slate-900 p-6 rounded-[32px] border transition-all cursor-pointer select-none ${
+                    selectedKpiFilter === 'present'
+                      ? 'border-emerald-500 ring-2 ring-emerald-500/30 shadow-md bg-emerald-50/20 dark:bg-emerald-950/20'
+                      : 'border-slate-100 dark:border-slate-800 shadow-sm hover:border-emerald-300 dark:hover:border-emerald-700/50 hover:shadow'
+                  } flex items-center justify-between`}
+                >
                   <div>
                     <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Class Present Days</p>
                     <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{classReportData.stats.present} Days</h3>
@@ -1132,7 +1302,15 @@ const StudentAttendanceReport = () => {
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between">
+                <div 
+                  onClick={() => setSelectedKpiFilter(prev => prev === 'late' ? null : 'late')}
+                  title="Click to view students with Late attendance"
+                  className={`bg-white dark:bg-slate-900 p-6 rounded-[32px] border transition-all cursor-pointer select-none ${
+                    selectedKpiFilter === 'late'
+                      ? 'border-amber-500 ring-2 ring-amber-500/30 shadow-md bg-amber-50/20 dark:bg-amber-950/20'
+                      : 'border-slate-100 dark:border-slate-800 shadow-sm hover:border-amber-300 dark:hover:border-amber-700/50 hover:shadow'
+                  } flex items-center justify-between`}
+                >
                   <div>
                     <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Class Late Days</p>
                     <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{classReportData.stats.late} Days</h3>
@@ -1142,13 +1320,39 @@ const StudentAttendanceReport = () => {
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between">
+                <div 
+                  onClick={() => setSelectedKpiFilter(prev => prev === 'absent' ? null : 'absent')}
+                  title="Click to view students with Absent attendance"
+                  className={`bg-white dark:bg-slate-900 p-6 rounded-[32px] border transition-all cursor-pointer select-none ${
+                    selectedKpiFilter === 'absent'
+                      ? 'border-rose-500 ring-2 ring-rose-500/30 shadow-md bg-rose-50/20 dark:bg-rose-950/20'
+                      : 'border-slate-100 dark:border-slate-800 shadow-sm hover:border-rose-300 dark:hover:border-rose-700/50 hover:shadow'
+                  } flex items-center justify-between`}
+                >
                   <div>
                     <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Class Absent Days</p>
                     <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{classReportData.stats.absent} Days</h3>
                   </div>
                   <div className="w-10 h-10 bg-rose-50 dark:bg-rose-950/40 text-rose-600 rounded-xl flex items-center justify-center">
                     <AlertTriangle size={18} />
+                  </div>
+                </div>
+
+                <div 
+                  onClick={() => setSelectedKpiFilter(prev => prev === 'partial' ? null : 'partial')}
+                  title="Click to view students with Partial attendance"
+                  className={`bg-white dark:bg-slate-900 p-6 rounded-[32px] border transition-all cursor-pointer select-none ${
+                    selectedKpiFilter === 'partial'
+                      ? 'border-indigo-500 ring-2 ring-indigo-500/30 shadow-md bg-indigo-50/20 dark:bg-indigo-950/20'
+                      : 'border-slate-100 dark:border-slate-800 shadow-sm hover:border-indigo-300 dark:hover:border-indigo-700/50 hover:shadow'
+                  } flex items-center justify-between`}
+                >
+                  <div>
+                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Class Partial Days</p>
+                    <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{classReportData.stats.partial || 0} Days</h3>
+                  </div>
+                  <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 rounded-xl flex items-center justify-center">
+                    <AlertCircle size={18} />
                   </div>
                 </div>
 
@@ -1163,65 +1367,105 @@ const StudentAttendanceReport = () => {
                 </div>
               </div>
 
-              {/* Class students list table */}
-              <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
-                <div className="px-8 py-4 border-b border-slate-100 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  Performance Rate = Present ÷ (Present + Late + Absent). Late and absent records are included in the database totals.
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                        <th className="px-8 py-5">Student Name</th>
-                        <th className="px-8 py-5">Student Code</th>
-                        <th className="px-8 py-5">Total Present Count</th>
-                        <th className="px-8 py-5">Total Late Count</th>
-                        <th className="px-8 py-5">Total Absent Count</th>
-                        <th className="px-8 py-5 text-right font-black">Performance Rate</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {classReportData.studentsList.map((item) => (
-                        <tr key={item.student._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
-                          <td className="px-8 py-6 text-sm font-bold text-slate-900 dark:text-slate-100">
-                            {item.student.fullName}
-                          </td>
-                          <td className="px-8 py-6 text-sm font-semibold text-slate-500 dark:text-slate-400 font-mono">
-                            {item.student.studentCode || item.student.rollNumber || '-'}
-                          </td>
-                          <td className="px-8 py-6 text-sm font-bold text-emerald-600 dark:text-emerald-450">
-                            {item.counts.present} Days
-                          </td>
-                          <td className="px-8 py-6 text-sm font-bold text-amber-600 dark:text-amber-450">
-                            {item.counts.late} Days
-                          </td>
-                          <td className="px-8 py-6 text-sm font-bold text-rose-600 dark:text-rose-450">
-                            {item.counts.absent} Days
-                          </td>
-                          <td className="px-8 py-6 text-right">
-                            <span className={`px-3 py-1.5 rounded-full font-bold text-xs border ${
-                              item.percentage >= 90
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400'
-                                : item.percentage >= 75
-                                ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400'
-                                : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400'
-                            }`}>
-                              {item.percentage}%
-                            </span>
-                          </td>
+              {/* Class students list table - displayed ONLY when an Attendance Summary Card is clicked */}
+              {selectedKpiFilter && (
+                <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden animate-in fade-in duration-300">
+                  <div className="px-8 py-4 border-b border-slate-100 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                        Class <span className="font-extrabold capitalize">{selectedKpiFilter}</span> Students ({displayedClassStudents.length})
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedKpiFilter(null)}
+                      className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      Hide List ✕
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
+                          <th className="px-8 py-5">Student Name</th>
+                          <th className="px-8 py-5">Class Name</th>
+                          <th className="px-8 py-5">Status</th>
+                          <th className="px-8 py-5">Session</th>
+                          <th className="px-8 py-5">Description</th>
                         </tr>
-                      ))}
-                      {classReportData.studentsList.length === 0 && (
-                        <tr>
-                          <td colSpan="6" className="px-8 py-12 text-center text-slate-400 text-sm font-semibold">
-                            No students registered in this class.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {displayedClassStudents.map((item) => {
+                          const matchingRecs = item.studentRecs?.filter(r => r.status?.toLowerCase() === selectedKpiFilter?.toLowerCase()) || [];
+                          const statusVal = matchingRecs[0]?.status || (selectedKpiFilter ? selectedKpiFilter.charAt(0).toUpperCase() + selectedKpiFilter.slice(1) : '-');
+                          const sessions = Array.from(new Set(matchingRecs.map(r => r.session).filter(Boolean)));
+                          const sessionText = sessions.length > 0 
+                            ? sessions.join(', ') 
+                            : (matchingRecs.some(r => r.attendanceType === 'Daily') ? 'Daily' : '-');
+                          
+                          const descArr = (item.descriptions?.[selectedKpiFilter] || []).concat(matchingRecs.map(r => r.description).filter(Boolean));
+                          const descText = Array.from(new Set(descArr)).filter(Boolean).join(', ');
+
+                          return (
+                            <tr key={item.student._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
+                              <td className="px-8 py-6 text-sm font-bold text-slate-900 dark:text-slate-100">
+                                <div>{item.student.fullName}</div>
+                                {(item.student.studentCode || item.student.rollNumber) && (
+                                  <div className="text-xs font-mono text-slate-400 font-normal mt-0.5">
+                                    {item.student.studentCode || item.student.rollNumber}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-8 py-6 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                {item.className}
+                              </td>
+                              <td className="px-8 py-6 text-sm">
+                                <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold border ${
+                                  statusVal === 'Present'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60'
+                                    : statusVal === 'Late'
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60'
+                                    : statusVal === 'Absent'
+                                    ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60'
+                                    : 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800/60'
+                                }`}>
+                                  {statusVal}
+                                </span>
+                              </td>
+                              <td className="px-8 py-6 text-sm text-slate-700 dark:text-slate-300 font-medium">
+                                {sessionText !== '-' ? (
+                                  <span className="inline-block px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50">
+                                    {sessionText}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 text-xs italic">-</span>
+                                )}
+                              </td>
+                              <td className="px-8 py-6 text-sm text-slate-600 dark:text-slate-300">
+                                {descText ? (
+                                  <span className="inline-block px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium text-xs">
+                                    {descText}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 text-xs italic">-</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {displayedClassStudents.length === 0 && (
+                          <tr>
+                            <td colSpan="5" className="px-8 py-12 text-center text-slate-400 text-sm font-semibold">
+                              No students found with {selectedKpiFilter} attendance for this date.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              )}
             </>
           )}
         </div>
