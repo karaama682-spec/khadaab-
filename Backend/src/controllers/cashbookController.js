@@ -54,9 +54,13 @@ const syncFeePayments = async (entry, category, createdBy) => {
 
     const variants = phoneVariants(entry.senderPhone);
     const orConds = [];
-    if (variants.length) orConds.push({ fatherPhone: { $in: variants } });
     if (entry.senderEntityType === 'guardian' && entry.senderEntityId) {
         orConds.push({ guardianId: entry.senderEntityId });
+        if (variants.length) {
+            orConds.push({ fatherPhone: { $in: variants }, guardianId: { $in: [null, undefined] } });
+        }
+    } else if (variants.length) {
+        orConds.push({ fatherPhone: { $in: variants }, guardianId: { $in: [null, undefined] } });
     }
     if (!orConds.length) return null;
 
@@ -693,8 +697,16 @@ const buildPayerInfo = async (match, variants, purpose = 'sender', reqDate = nul
 
     // 1. Guardian / responsible / student's father → gather all students under them.
     if (match.entityType === 'guardian' || match.entityType === 'student') {
-        const orConds = [{ fatherPhone: { $in: variants } }];
-        if (match.entityType === 'guardian') orConds.push({ guardianId: match.entityId });
+        const orConds = [];
+        if (match.entityType === 'guardian' && match.entityId) {
+            orConds.push({ guardianId: match.entityId });
+            if (variants.length) {
+                orConds.push({ fatherPhone: { $in: variants }, guardianId: { $in: [null, undefined] } });
+            }
+        } else if (variants.length) {
+            orConds.push({ fatherPhone: { $in: variants }, guardianId: { $in: [null, undefined] } });
+        }
+        if (!orConds.length) return { kind: 'responsible', students: [], totalMonthlyFee: 0, totalPaid: 0, totalBalance: 0, remainingBalance: 0, count: 0 };
         // Exited (archived) students are not active payers.
         const students = await Student.find({ $or: orConds, status: { $ne: 'Exited' } })
             .select('fullName classId monthlyFee fee fatherPhone guardianId')
