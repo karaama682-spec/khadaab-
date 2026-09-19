@@ -8,7 +8,8 @@ import {
   Scale,
   Filter,
   RotateCcw,
-  CalendarRange
+  CalendarRange,
+  Search
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import api from '../services/api';
@@ -78,6 +79,7 @@ const CashbookPaymentReport = () => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [searchQuery, setSearchQuery] = useState('');
   // 'All' | 'Credit' | 'Debit'
   const [typeFilter, setTypeFilter] = useState('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
@@ -112,6 +114,24 @@ const CashbookPaymentReport = () => {
   const filtered = useMemo(() => {
     return entries
       .filter((e) => {
+        if (searchQuery && searchQuery.trim()) {
+          const q = searchQuery.toLowerCase().trim();
+          const qDigits = q.replace(/\D/g, '');
+
+          const parties = entryParties(e);
+          const sName = (e.senderName || parties.sender.name || '').toLowerCase();
+          const rName = (e.receiverName || parties.receiver.name || '').toLowerCase();
+          const pName = (e.payerName || '').toLowerCase();
+
+          const sPhone = (e.senderPhone || parties.sender.phone || '').replace(/\D/g, '');
+          const rPhone = (e.receiverPhone || parties.receiver.phone || '').replace(/\D/g, '');
+
+          const matchesName = sName.includes(q) || rName.includes(q) || pName.includes(q);
+          const matchesPhone = qDigits ? (sPhone.includes(qDigits) || rPhone.includes(qDigits)) : false;
+
+          if (!matchesName && !matchesPhone) return false;
+        }
+
         const cat = e.categoryId;
         const catId = cat?._id || cat;
         const type = cat?.type; // 'Income' | 'Expense'
@@ -131,7 +151,7 @@ const CashbookPaymentReport = () => {
         return true;
       })
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  }, [entries, typeFilter, categoryFilter, walletFilter, dateFrom, dateTo]);
+  }, [entries, searchQuery, typeFilter, categoryFilter, walletFilter, dateFrom, dateTo]);
 
   const { totalIncome, totalExpense } = useMemo(() => {
     let income = 0;
@@ -156,6 +176,7 @@ const CashbookPaymentReport = () => {
   const rangeLabel = dateFrom || dateTo ? `${dateFrom || '…'}  →  ${dateTo || '…'}` : 'All Time';
 
   const resetFilters = () => {
+    setSearchQuery('');
     setTypeFilter('All');
     setCategoryFilter('All');
     setWalletFilter('All');
@@ -178,8 +199,9 @@ const CashbookPaymentReport = () => {
     doc.text('MACHAD INSTITUTE - PAYMENT REPORT', 14, 11);
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
+    const searchPart = searchQuery.trim() ? `   |   Search: "${searchQuery.trim()}"` : '';
     doc.text(
-      `Generated: ${new Date().toLocaleString()}   |   Type: ${typeFilter}   |   Period: ${rangeLabel}   |   Entries: ${filtered.length}`,
+      `Generated: ${new Date().toLocaleString()}   |   Type: ${typeFilter}   |   Period: ${rangeLabel}${searchPart}   |   Entries: ${filtered.length}`,
       14,
       18
     );
@@ -327,6 +349,22 @@ const CashbookPaymentReport = () => {
           <div className="flex items-center gap-1.5 shrink-0 pb-2">
             <Filter size={14} className="text-slate-400" />
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filter payments</p>
+          </div>
+
+          <div className="flex-1 min-w-[190px]">
+            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">
+              Search by Name or Phone Number
+            </label>
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by Name or Phone Number..."
+                className="w-full pl-8 pr-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-[13px] outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400"
+              />
+            </div>
           </div>
 
           <div className="flex-1 min-w-[92px]">
