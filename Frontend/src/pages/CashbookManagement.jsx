@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
-import { digitsOnly } from '../utils/somaliPhone';
+import { digitsOnly, isValidSomaliMobile } from '../utils/somaliPhone';
 import { currentCycle, addCycles, cycleShortLabel, cycleKeyForDate } from '../utils/billingCycle';
 
 const PAYMENT_METHODS = ['Mobile Money', 'Bank'];
@@ -22,22 +22,21 @@ const METHODS_WITH_PARTIES = ['Mobile Money', 'Bank'];
 
 // Per-method phone/account hints.
 //  • Bank account number: 6–7 digits.
-//  • Mobile Money: any number is accepted (e.g. 2526172882, 61…, 061…).
+//  • Mobile Money: exactly 9 digits numeric value.
 const PHONE_RULES = {
   Bank: { label: 'Bank number must be 6 to 7 digits' },
-  'Mobile Money': { label: 'Enter the payer mobile number' }
+  'Mobile Money': { label: 'Number must be exactly 9 digits' }
 };
 
 // Returns an error string if the value is present but does not match the
 // method's rule; empty string means valid (or nothing to validate).
-// Mobile Money accepts any number — only Bank enforces a length.
 const phoneError = (method, value) => {
-  const d = digitsOnly(value);
-  if (!d) return '';
+  if (!value) return '';
   if (method === 'Bank') {
+    const d = digitsOnly(value);
     return d.length >= 6 && d.length <= 7 ? '' : PHONE_RULES.Bank.label;
   }
-  return '';
+  return isValidSomaliMobile(value) ? '' : 'Number must be exactly 9 digits';
 };
 
 const emptyCategoryForm = () => ({
@@ -978,7 +977,7 @@ const CashbookManagement = () => {
                           senderEntityId: ''
                         });
                       }}
-                      placeholder={walletDirection === 'sender' ? '' : transactionForm.method === 'Bank' ? 'Select a payer or type a bank number' : 'Select a payer or type a number'}
+                      placeholder={walletDirection === 'sender' ? '' : transactionForm.method === 'Bank' ? 'Select a payer or type a bank number' : 'Select a payer or type a 9-digit number'}
                       className={`w-full px-4 py-3 rounded-xl border text-slate-900 dark:text-white ${
                         walletDirection === 'sender'
                           ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800 font-mono'
@@ -1078,7 +1077,7 @@ const CashbookManagement = () => {
                           receiverEntityId: ''
                         });
                       }}
-                      placeholder={walletDirection === 'receiver' ? '' : transactionForm.method === 'Bank' ? 'Bank number (6–7 digits)' : '61…/62… or 061…/062…'}
+                      placeholder={walletDirection === 'receiver' ? '' : transactionForm.method === 'Bank' ? 'Bank number (6–7 digits)' : '9-digit number'}
                       className={`w-full px-4 py-3 rounded-xl border text-slate-900 dark:text-white ${
                         walletDirection === 'receiver'
                           ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 font-mono'
