@@ -119,7 +119,10 @@ const StudentAttendanceReport = () => {
         if (bId) {
           setSelectedBranchId(bId);
         }
-        setSelectedClassId(firstClass._id);
+        setSelectedClassId('');
+      } else if (resBranches?.data?.length > 0) {
+        setSelectedBranchId(String(resBranches.data[0]._id));
+        setSelectedClassId('');
       }
     } catch (error) {
       console.error('Failed to load reports data', error);
@@ -412,39 +415,51 @@ const StudentAttendanceReport = () => {
   // Handle branch filter change
   const handleBranchChange = (branchId) => {
     setSelectedBranchId(branchId);
+    setSelectedClassId('');
     setSelectedKpiFilter(null);
-    if (!branchId) {
-      setSelectedClassId('');
-      return;
-    }
-    const branchClasses = classes.filter(c => String(c.branchId?._id || c.branchId) === String(branchId));
-    const isStillValid = branchClasses.some(c => String(c._id) === String(selectedClassId));
-    if (!isStillValid) {
-      setSelectedClassId(branchClasses.length > 0 ? branchClasses[0]._id : '');
-    }
   };
 
   const classReportData = useMemo(() => {
-    if (!selectedClassId) return { studentsList: [], stats: { present: 0, late: 0, absent: 0, partial: 0, percentage: 100 } };
+    if (!selectedClassId && !selectedBranchId) {
+      return { studentsList: [], stats: { present: 0, late: 0, absent: 0, partial: 0, percentage: 100 } };
+    }
 
-    // Resolve target class and its branch
-    const targetClass = classes.find(c => String(c._id) === String(selectedClassId));
-    const targetBranchId = String(targetClass?.branchId?._id || targetClass?.branchId || selectedBranchId || '');
+    let classStudents = [];
+    let targetClass = null;
+    let targetBranchId = selectedBranchId || '';
 
-    // Get students belonging specifically to this selected Branch + Class (no mixing)
-    const classStudents = students.filter(s => {
-      const studentClassId = String(s.classId?._id || s.classId || '');
-      if (studentClassId !== String(selectedClassId)) return false;
+    if (selectedClassId) {
+      // User selected a specific Class: strictly isolate to this Branch + Class
+      targetClass = classes.find(c => String(c._id) === String(selectedClassId));
+      targetBranchId = String(targetClass?.branchId?._id || targetClass?.branchId || selectedBranchId || '');
 
-      // Verify branch isolation if branch info exists on student
-      if (targetBranchId) {
-        const studentBranchId = String(s.branchId?._id || s.branchId || s.classId?.branchId?._id || s.classId?.branchId || '');
-        if (studentBranchId && studentBranchId !== targetBranchId) {
-          return false;
+      classStudents = students.filter(s => {
+        const studentClassId = String(s.classId?._id || s.classId || '');
+        if (studentClassId !== String(selectedClassId)) return false;
+
+        // Verify branch isolation if branch info exists on student
+        if (targetBranchId) {
+          const studentBranchId = String(s.branchId?._id || s.branchId || s.classId?.branchId?._id || s.classId?.branchId || '');
+          if (studentBranchId && studentBranchId !== targetBranchId) {
+            return false;
+          }
         }
-      }
-      return true;
-    });
+        return true;
+      });
+    } else {
+      // User selected a Branch and NO specific class: include ALL classes in this Branch
+      const branchClasses = classes.filter(c => String(c.branchId?._id || c.branchId || '') === String(selectedBranchId));
+      const branchClassIds = new Set(branchClasses.map(c => String(c._id)));
+
+      classStudents = students.filter(s => {
+        const studentBranchId = String(s.branchId?._id || s.branchId || s.classId?.branchId?._id || s.classId?.branchId || '');
+        if (studentBranchId) {
+          return studentBranchId === String(selectedBranchId);
+        }
+        const studentClassId = String(s.classId?._id || s.classId || '');
+        return branchClassIds.has(studentClassId);
+      });
+    }
 
     const stats = { present: 0, late: 0, absent: 0, partial: 0, percentage: 100 };
 
@@ -455,6 +470,13 @@ const StudentAttendanceReport = () => {
         if (selectedLedgerDate) {
           const recDate = String(r.date || '').slice(0, 10);
           if (recDate !== selectedLedgerDate) return false;
+        }
+        if (selectedClassId) {
+          const rClassId = String(r.classId?._id || r.classId || '');
+          if (rClassId && rClassId !== String(selectedClassId)) return false;
+        } else if (selectedBranchId) {
+          const rBranchId = String(r.classId?.branchId?._id || r.classId?.branchId || '');
+          if (rBranchId && rBranchId !== String(selectedBranchId)) return false;
         }
         return true;
       });
@@ -481,16 +503,16 @@ const StudentAttendanceReport = () => {
       });
 
       const total = counts.present + counts.late + counts.absent;
-      // Late and absent records both affect performance. The rate is the
-      // percentage of all marked days that were recorded as Present.
       const rate = total > 0 ? Math.round((counts.present / total) * 100) : 0;
+
+      const studentClass = classes.find(c => String(c._id) === String(student.classId?._id || student.classId)) || targetClass;
 
       return {
         student,
         counts,
         descriptions,
         studentRecs,
-        className: classLabel(targetClass || student.classId) || targetClass?.name || 'Class',
+        className: classLabel(studentClass || student.classId) || studentClass?.name || 'Class',
         percentage: rate
       };
     });
@@ -662,17 +684,21 @@ const StudentAttendanceReport = () => {
 
   // 2. Export Class CSV
   const exportClassCSV = () => {
-    const className = classes.find(c => String(c._id) === String(selectedClassId))?.name || 'Class';
-    const headers = ['Student Name', 'Student Code', 'Total Present', 'Total Late', 'Total Absent', 'Attendance Rate'];
+    const targetName = selectedClassId 
+      ? (classes.find(c => String(c._id) === String(selectedClassId))?.name || 'Class')
+      : (branches.find(b => String(b._id) === String(selectedBranchId))?.name || 'All_Classes');
+    const headers = ['Student Name', 'Student Code', 'Class', 'Total Present', 'Total Late', 'Total Absent', 'Total Partial', 'Attendance Rate'];
     const rows = classReportData.studentsList.map(item => [
       item.student.fullName,
       item.student.studentCode || item.student.rollNumber || '-',
+      item.className,
       item.counts.present,
       item.counts.late,
       item.counts.absent,
+      item.counts.partial,
       `${item.percentage}%`
     ]);
-    handleExportCSV(headers, rows, `Class_Attendance_${className.replace(/\s+/g, '_')}.csv`);
+    handleExportCSV(headers, rows, `Attendance_${targetName.replace(/\s+/g, '_')}.csv`);
   };
 
   // 3. Export Student CSV
@@ -782,13 +808,15 @@ const StudentAttendanceReport = () => {
   // 2. Export Class PDF
   const exportClassPDF = () => {
     const doc = new jsPDF();
-    const className = classes.find(c => String(c._id) === String(selectedClassId))?.name || 'Class';
+    const targetName = selectedClassId 
+      ? (classes.find(c => String(c._id) === String(selectedClassId))?.name || 'Class')
+      : (branches.find(b => String(b._id) === String(selectedBranchId))?.name || 'Branch');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
-    doc.text(`CLASS ATTENDANCE REPORT: ${className.toUpperCase()}`, 14, 20);
+    doc.text(`ATTENDANCE REPORT: ${targetName.toUpperCase()}`, 14, 20);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Total Present: ${classReportData.stats.present} | Total Late: ${classReportData.stats.late} | Total Absent: ${classReportData.stats.absent}`, 14, 26);
+    doc.text(`Total Present: ${classReportData.stats.present} | Total Late: ${classReportData.stats.late} | Total Absent: ${classReportData.stats.absent} | Total Partial: ${classReportData.stats.partial}`, 14, 26);
     doc.text(`Overall Attendance Rate: ${classReportData.stats.percentage}%`, 14, 31);
     
     doc.line(14, 35, 196, 35);
@@ -820,7 +848,7 @@ const StudentAttendanceReport = () => {
       y += 8;
     });
 
-    doc.save(`Class_Attendance_${className.replace(/\s+/g, '_')}.pdf`);
+    doc.save(`Attendance_${targetName.replace(/\s+/g, '_')}.pdf`);
   };
 
   // 3. Export Student PDF
@@ -1238,7 +1266,7 @@ const StudentAttendanceReport = () => {
                   }}
                   className="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white font-bold text-sm"
                 >
-                  <option value="">Select class to audit...</option>
+                  <option value="">{selectedBranchId ? 'All Classes' : 'Select class to audit...'}</option>
                   {visibleClasses.map(c => (
                     <option key={c._id} value={c._id}>{classLabel(c)}</option>
                   ))}
@@ -1265,14 +1293,14 @@ const StudentAttendanceReport = () => {
             <div className="flex items-center gap-3">
               <button
                 onClick={exportClassCSV}
-                disabled={!selectedClassId}
+                disabled={!selectedClassId && !selectedBranchId}
                 className="flex items-center gap-2 px-5 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-sm transition-all disabled:opacity-50"
               >
                 <FileSpreadsheet size={16} /> Export Excel
               </button>
               <button
                 onClick={exportClassPDF}
-                disabled={!selectedClassId}
+                disabled={!selectedClassId && !selectedBranchId}
                 className="flex items-center gap-2 px-5 py-3.5 bg-slate-900 hover:bg-slate-850 dark:bg-brand-600 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-sm transition-all disabled:opacity-50"
               >
                 <FileText size={16} /> Export PDF
@@ -1280,9 +1308,9 @@ const StudentAttendanceReport = () => {
             </div>
           </div>
 
-          {selectedClassId && (
+          {(selectedClassId || selectedBranchId) && (
             <>
-              {/* Class summary stats */}
+              {/* Class / Branch summary stats */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
                 <div 
                   onClick={() => setSelectedKpiFilter(prev => prev === 'present' ? null : 'present')}
@@ -1294,7 +1322,9 @@ const StudentAttendanceReport = () => {
                   } flex items-center justify-between`}
                 >
                   <div>
-                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Class Present Days</p>
+                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                      {selectedClassId ? 'Class Present Days' : 'Branch Present Days'}
+                    </p>
                     <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{classReportData.stats.present} Days</h3>
                   </div>
                   <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 rounded-xl flex items-center justify-center">
@@ -1312,7 +1342,9 @@ const StudentAttendanceReport = () => {
                   } flex items-center justify-between`}
                 >
                   <div>
-                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Class Late Days</p>
+                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                      {selectedClassId ? 'Class Late Days' : 'Branch Late Days'}
+                    </p>
                     <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{classReportData.stats.late} Days</h3>
                   </div>
                   <div className="w-10 h-10 bg-amber-50 dark:bg-amber-950/40 text-amber-600 rounded-xl flex items-center justify-center">
@@ -1330,7 +1362,9 @@ const StudentAttendanceReport = () => {
                   } flex items-center justify-between`}
                 >
                   <div>
-                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Class Absent Days</p>
+                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                      {selectedClassId ? 'Class Absent Days' : 'Branch Absent Days'}
+                    </p>
                     <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{classReportData.stats.absent} Days</h3>
                   </div>
                   <div className="w-10 h-10 bg-rose-50 dark:bg-rose-950/40 text-rose-600 rounded-xl flex items-center justify-center">
@@ -1348,7 +1382,9 @@ const StudentAttendanceReport = () => {
                   } flex items-center justify-between`}
                 >
                   <div>
-                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Class Partial Days</p>
+                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                      {selectedClassId ? 'Class Partial Days' : 'Branch Partial Days'}
+                    </p>
                     <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{classReportData.stats.partial || 0} Days</h3>
                   </div>
                   <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 rounded-xl flex items-center justify-center">
@@ -1358,7 +1394,9 @@ const StudentAttendanceReport = () => {
 
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider">Performance Rate</p>
+                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                      {selectedClassId ? 'Class Attendance Rate' : 'Branch Attendance Rate'}
+                    </p>
                     <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{classReportData.stats.percentage}%</h3>
                   </div>
                   <div className="w-10 h-10 bg-brand-50 dark:bg-brand-950/40 text-brand-600 rounded-xl flex items-center justify-center">
@@ -1373,7 +1411,7 @@ const StudentAttendanceReport = () => {
                   <div className="px-8 py-4 border-b border-slate-100 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                        Class <span className="font-extrabold capitalize">{selectedKpiFilter}</span> Students ({displayedClassStudents.length})
+                        {selectedClassId ? 'Class' : 'Branch'} <span className="font-extrabold capitalize">{selectedKpiFilter}</span> Students ({displayedClassStudents.length})
                       </span>
                     </div>
                     <button
@@ -1468,7 +1506,11 @@ const StudentAttendanceReport = () => {
               )}
             </>
           )}
-        </div>
+          {!selectedClassId && !selectedBranchId && (
+            <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 text-slate-400 font-semibold">
+              Please select a Branch or Class to view attendance ledger records.
+            </div>
+          )}        </div>
       )}
 
       {/* ========================================== */}
