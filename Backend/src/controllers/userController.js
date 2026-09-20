@@ -1,5 +1,6 @@
 const asyncHandler = require('../middleware/asyncHandler');
 const User = require('../models/User');
+const Role = require('../models/Role');
 const { generateTeacherCode, withRetry } = require('../utils/generateCode');
 const { normalizePermissions } = require('../utils/permissionUtils');
 const jwt = require('jsonwebtoken');
