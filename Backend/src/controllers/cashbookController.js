@@ -538,22 +538,90 @@ const deleteEntry = asyncHandler(async (req, res) => {
     res.json({ message: 'Transaction removed' });
 });
 
-const lookupGuardian = async (variants) => {
-    const guardian = await Guardian.findOne(phoneOrQuery('phone', variants)).select('fullName phone type');
+// Build a MongoDB query matching any of the payer's registered phone numbers.
+// Searches primary phone, alternatePhone (Phone Number 2, Phone Number 3, etc.),
+// any phone array fields, and matches individual numbers inside delimited strings.
+const guardianPhoneQuery = (variants, raw = '') => {
+    const orList = [
+        phoneOrQuery('phone', variants),
+        phoneOrQuery('alternatePhone', variants),
+        { phones: { $in: variants } },
+        { phoneNumbers: { $in: variants } }
+    ];
+
+    const clean = digitsOnly(raw);
+    const minDigits = 7;
+    const candidates = new Set();
+    if (clean && clean.length >= minDigits) candidates.add(clean);
+    for (const v of variants) {
+        if (v && v.length >= minDigits) candidates.add(v);
+    }
+    for (const c of candidates) {
+        const regex = new RegExp(`(^|\\D)${c}(\\D|$)`);
+        orList.push({ phone: regex });
+        orList.push({ alternatePhone: regex });
+    }
+
+    return { $or: orList };
+};
+
+const studentPhoneQuery = (variants, raw = '') => {
+    const orList = [
+        phoneOrQuery('fatherPhone', variants)
+    ];
+    const clean = digitsOnly(raw);
+    const minDigits = 7;
+    const candidates = new Set();
+    if (clean && clean.length >= minDigits) candidates.add(clean);
+    for (const v of variants) {
+        if (v && v.length >= minDigits) candidates.add(v);
+    }
+    for (const c of candidates) {
+        orList.push({ fatherPhone: new RegExp(`(^|\\D)${c}(\\D|$)`) });
+    }
+    return { $or: orList };
+};
+
+const lookupGuardian = async (variants, raw = '') => {
+    const guardian = await Guardian.findOne(guardianPhoneQuery(variants, raw))
+        .select('fullName phone alternatePhone type');
     if (!guardian) return null;
+    const allPhones = [guardian.phone, guardian.alternatePhone].filter(Boolean);
     return {
         found: true,
         name: guardian.fullName,
         entityType: 'guardian',
         entityId: guardian._id,
         role: guardian.type === 'Responsible' ? 'Responsible' : guardian.type || 'Parent',
-        phone: guardian.phone
+        phone: guardian.phone,
+        alternatePhone: guardian.alternatePhone || '',
+        allPhones
     };
 };
 
-const lookupStudent = async (variants) => {
-    const student = await Student.findOne(phoneOrQuery('fatherPhone', variants)).select('fullName fatherPhone fatherName');
+const lookupStudent = async (variants, raw = '') => {
+    const student = await Student.findOne(studentPhoneQuery(variants, raw))
+        .select('fullName fatherPhone fatherName guardianId')
+        .populate('guardianId', 'fullName phone alternatePhone type');
     if (!student) return null;
+
+    // If the matched student is linked to a guardian, resolve the guardian record
+    // so that all registered phone numbers and all students under that guardian load together.
+    if (student.guardianId && typeof student.guardianId === 'object') {
+        const g = student.guardianId;
+        const allPhones = [g.phone, g.alternatePhone].filter(Boolean);
+        return {
+            found: true,
+            name: g.fullName,
+            entityType: 'guardian',
+            entityId: g._id,
+            role: g.type === 'Responsible' ? 'Responsible' : g.type || 'Parent',
+            phone: g.phone,
+            alternatePhone: g.alternatePhone || '',
+            allPhones
+        };
+    }
+
     return {
         found: true,
         name: student.fatherName || student.fullName,
@@ -562,7 +630,8 @@ const lookupStudent = async (variants) => {
         role: 'Responsible',
         phone: student.fatherPhone,
         responsibleName: student.fatherName,
-        studentName: student.fullName
+        studentName: student.fullName,
+        allPhones: [student.fatherPhone].filter(Boolean)
     };
 };
 
@@ -702,14 +771,18 @@ const buildPayerInfo = async (match, variants, purpose = 'sender', reqDate = nul
 
     // 1. Guardian / responsible / student's father → gather all students under them.
     if (match.entityType === 'guardian' || match.entityType === 'student') {
+        const allPayerVariants = Array.from(new Set([
+            ...variants,
+            ...(match.allPhones || []).flatMap((p) => phoneVariants(p))
+        ]));
         const orConds = [];
         if (match.entityType === 'guardian' && match.entityId) {
             orConds.push({ guardianId: match.entityId });
-            if (variants.length) {
-                orConds.push({ fatherPhone: { $in: variants }, guardianId: { $in: [null, undefined] } });
+            if (allPayerVariants.length) {
+                orConds.push({ fatherPhone: { $in: allPayerVariants }, guardianId: { $in: [null, undefined] } });
             }
-        } else if (variants.length) {
-            orConds.push({ fatherPhone: { $in: variants }, guardianId: { $in: [null, undefined] } });
+        } else if (allPayerVariants.length) {
+            orConds.push({ fatherPhone: { $in: allPayerVariants }, guardianId: { $in: [null, undefined] } });
         }
         if (!orConds.length) return { kind: 'responsible', students: [], totalMonthlyFee: 0, totalPaid: 0, totalBalance: 0, remainingBalance: 0, count: 0 };
         // Exited (archived) students are not active payers.
@@ -904,12 +977,12 @@ const lookupPhone = asyncHandler(async (req, res) => {
                   () => lookupUser(variants, true),
                   () => lookupUser(variants, false),
                   () => lookupAccount(variants),
-                  () => lookupGuardian(variants),
-                  () => lookupStudent(variants)
+                  () => lookupGuardian(variants, raw),
+                  () => lookupStudent(variants, raw)
               ]
             : [
-                  () => lookupGuardian(variants),
-                  () => lookupStudent(variants),
+                  () => lookupGuardian(variants, raw),
+                  () => lookupStudent(variants, raw),
                   () => lookupAccount(variants),
                   () => lookupUser(variants, false)
               ];
