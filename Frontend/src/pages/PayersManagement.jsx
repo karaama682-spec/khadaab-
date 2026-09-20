@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Users, Search, Phone, ChevronDown, ChevronRight, Printer, FileDown, Wallet, X } from 'lucide-react';
+import { Users, Search, Phone, ChevronDown, ChevronRight, Printer, FileDown, Wallet, X, Edit2, Save, UserCheck, AlertCircle } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
@@ -14,6 +14,15 @@ const PayersManagement = () => {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [expandedKey, setExpandedKey] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingPayer, setEditingPayer] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    fullName: '',
+    phone: '',
+    alternatePhone: '',
+    relationship: 'Father'
+  });
+  const [saving, setSaving] = useState(false);
 
   const fetchPayers = async () => {
     try {
@@ -28,6 +37,68 @@ const PayersManagement = () => {
       showAlert({ type: 'danger', title: 'Error', message: msg });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openEditModal = (p) => {
+    setEditingPayer(p);
+    setEditFormData({
+      fullName: p.name && p.name !== 'Unknown' ? p.name : '',
+      phone: p.phone || '',
+      alternatePhone: p.alternatePhone || '',
+      relationship: p.relationship || 'Father'
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const closeEditModal = () => {
+    if (saving) return;
+    setIsEditModalOpen(false);
+    setEditingPayer(null);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    const cleanPhone = (editFormData.phone || '').trim();
+    if (!cleanPhone) {
+      showAlert({ type: 'warning', title: 'Validation Error', message: 'Primary phone number is required.' });
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const payload = {
+        fullName: (editFormData.fullName || '').trim() || 'Fee Payer',
+        phone: cleanPhone,
+        alternatePhone: (editFormData.alternatePhone || '').trim(),
+        relationship: editFormData.relationship || 'Father',
+        studentIds: editingPayer?.studentIds || []
+      };
+
+      if (editingPayer?.guardianId) {
+        await api.put(`/guardians/${editingPayer.guardianId}`, payload);
+      } else {
+        await api.post('/guardians', payload);
+      }
+
+      const count = editingPayer?.studentCount || (editingPayer?.students || []).length;
+      showAlert({
+        type: 'success',
+        title: 'Success',
+        message: `Payer and ${count} linked student${count === 1 ? '' : 's'} updated successfully.`
+      });
+      setIsEditModalOpen(false);
+      setEditingPayer(null);
+      await fetchPayers();
+    } catch (err) {
+      console.error('Failed to update payer', err);
+      showAlert({
+        type: 'danger',
+        title: 'Update Error',
+        message: err.response?.data?.message || err.message || 'Failed to update payer.'
+      });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -212,6 +283,7 @@ const PayersManagement = () => {
                 <th className="px-5 py-4 text-center">Students</th>
                 <th className="px-5 py-4 text-right">Total Money</th>
                 <th className="px-5 py-4 text-center">Paid</th>
+                <th className="px-5 py-4 text-center print:hidden">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -276,11 +348,21 @@ const PayersManagement = () => {
                           <span className="inline-block w-6 h-6 rounded-md border-2 border-slate-900 dark:border-slate-300 print:border-black" />
                         </div>
                       </td>
+                      <td className="px-5 py-4 text-center print:hidden" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(p)}
+                          className="inline-flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:text-brand-400 dark:hover:bg-brand-950/50 transition-all active:scale-95 shadow-xs"
+                          title="Edit Payer / Wax ka beddel Payer"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                      </td>
                     </tr>
 
                     {isOpen && (
                       <tr className="bg-slate-50/70 dark:bg-slate-800/20 print:hidden">
-                        <td colSpan={6} className="px-6 pb-6 pt-0">
+                        <td colSpan={7} className="px-6 pb-6 pt-0">
                           <div className="rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900">
                             <table className="w-full text-left text-sm">
                               <thead>
@@ -315,7 +397,7 @@ const PayersManagement = () => {
               })}
               {loading && (
                 <tr>
-                  <td colSpan={6} className="px-8 py-16 text-center text-slate-400 text-sm font-medium">
+                  <td colSpan={7} className="px-8 py-16 text-center text-slate-400 text-sm font-medium">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
                       <span className="text-slate-500 font-semibold">Loading payers...</span>
@@ -325,7 +407,7 @@ const PayersManagement = () => {
               )}
               {!loading && error && (
                 <tr>
-                  <td colSpan={6} className="px-8 py-12 text-center">
+                  <td colSpan={7} className="px-8 py-12 text-center">
                     <div className="max-w-md mx-auto p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-rose-700 dark:text-rose-300 text-sm flex flex-col items-center gap-3">
                       <p className="font-semibold">{error}</p>
                       <button
@@ -340,7 +422,7 @@ const PayersManagement = () => {
               )}
               {!loading && !error && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-8 py-12 text-center text-slate-400 text-sm font-medium">
+                  <td colSpan={7} className="px-8 py-12 text-center text-slate-400 text-sm font-medium">
                     No payers found. They appear here once students with a responsible person's number are added.
                   </td>
                 </tr>
@@ -377,6 +459,172 @@ const PayersManagement = () => {
           )}
         </div>
       </div>
+
+      {/* Edit Payer Modal */}
+      {isEditModalOpen && editingPayer && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-brand-50 dark:bg-brand-950/50 flex items-center justify-center text-brand-600 dark:text-brand-400 border border-brand-500/20">
+                  <UserCheck size={20} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                    Edit Payer
+                  </h2>
+                  <p className="text-xs text-slate-400 font-semibold">
+                    Wax ka beddel Payer & Ardayda ku xiran
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeEditModal}
+                disabled={saving}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleEditSubmit} className="p-6 space-y-5">
+              {/* Linked Students Info Banner */}
+              <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-xs text-amber-800 dark:text-amber-200">
+                <div className="flex items-center gap-2 font-bold mb-1">
+                  <AlertCircle size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span>Default Student Sync / Isku-xirka Ardayda</span>
+                </div>
+                <p className="text-[11px] opacity-90 leading-relaxed">
+                  Markii aad badasho number-ka ama magaca, dhammaan <strong>{editingPayer.studentCount || (editingPayer.students || []).length}</strong> arday ee hoos ku xusan si toos ah (default) ayey taleefankooda iyo magaca waalidka ugu cusboonaanayaan.
+                </p>
+                {editingPayer.students?.length > 0 && (
+                  <div className="mt-2.5 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                    {editingPayer.students.map((s) => (
+                      <span
+                        key={s.studentId}
+                        className="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/50 rounded-lg font-bold text-[10px] text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800/60"
+                      >
+                        {s.name} {s.className ? `(${s.className})` : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Payer Name */}
+              <div>
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-2">
+                  Payer Name / Magaca Payer
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.fullName}
+                  onChange={(e) => setEditFormData({ ...editFormData, fullName: e.target.value })}
+                  placeholder="e.g. Maxamed Axmed Cali"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-semibold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
+                />
+              </div>
+
+              {/* Phone 1 (Primary) */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    Phone 1 (Primary / Number 1) <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded">
+                    Updates Students
+                  </span>
+                </div>
+                <div className="relative">
+                  <Phone size={15} className="absolute left-3.5 top-3.5 text-emerald-500" />
+                  <input
+                    type="tel"
+                    required
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                    placeholder="e.g. 615123456"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-mono font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
+                  />
+                </div>
+              </div>
+
+              {/* Phone 2 (Alternate / Second Number) */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    Phone 2 (Second Number / Alternate)
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    Optional
+                  </span>
+                </div>
+                <div className="relative">
+                  <Phone size={15} className="absolute left-3.5 top-3.5 text-blue-500" />
+                  <input
+                    type="tel"
+                    value={editFormData.alternatePhone}
+                    onChange={(e) => setEditFormData({ ...editFormData, alternatePhone: e.target.value })}
+                    placeholder="e.g. 615987654 (Optional second number)"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-mono font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                  />
+                </div>
+              </div>
+
+              {/* Relationship */}
+              <div>
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-2">
+                  Relationship / Xiriirka
+                </label>
+                <select
+                  value={editFormData.relationship}
+                  onChange={(e) => setEditFormData({ ...editFormData, relationship: e.target.value })}
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-semibold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
+                >
+                  <option value="Father">Father / Aabbe</option>
+                  <option value="Mother">Mother / Hooyo</option>
+                  <option value="Guardian">Guardian / Mas'uul</option>
+                  <option value="Sponsor">Sponsor / Kafil</option>
+                  <option value="Other">Other / Kale</option>
+                </select>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  disabled={saving}
+                  className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800 transition disabled:opacity-50"
+                >
+                  Cancel / Ka noqo
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition shadow-lg shadow-brand-600/30 active:scale-95 disabled:opacity-50"
+                >
+                  {saving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save size={15} />
+                      <span>Save Changes / Keydi</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

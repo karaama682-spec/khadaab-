@@ -103,8 +103,22 @@ test('active account still resolves', async () => {
   assert.strictEqual(r.body.entityType, 'account');
 });
 
+test('active guardian with alternatePhone resolves by both phone and alternatePhone', async () => {
+  await Guardian.create({ fullName: 'Multi Phone Payer', phone: '617111222', alternatePhone: '617333444', type: 'Responsible' });
+  const r1 = await invoke(lookupPhone, { phone: '617111222', purpose: 'sender' });
+  assert.strictEqual(r1.body.found, true);
+  assert.strictEqual(r1.body.name, 'Multi Phone Payer');
+  assert.strictEqual(r1.body.entityType, 'guardian');
+
+  const r2 = await invoke(lookupPhone, { phone: '617333444', purpose: 'sender' });
+  assert.strictEqual(r2.body.found, true);
+  assert.strictEqual(r2.body.name, 'Multi Phone Payer');
+  assert.strictEqual(r2.body.entityType, 'guardian');
+});
+
 test('the historical cashbook entry is left intact (lookup never mutates it)', async () => {
   const e = await CashbookEntry.findOne({ receiverPhone: '615319969' });
   assert.ok(e, 'entry still present');
   assert.strictEqual(e.receiverName, 'Cusmaan Barre', 'name unchanged');
 });
+

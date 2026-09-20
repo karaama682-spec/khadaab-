@@ -539,7 +539,12 @@ const deleteEntry = asyncHandler(async (req, res) => {
 });
 
 const lookupGuardian = async (variants) => {
-    const guardian = await Guardian.findOne(phoneOrQuery('phone', variants)).select('fullName phone type');
+    const guardian = await Guardian.findOne({
+        $or: [
+            phoneOrQuery('phone', variants),
+            phoneOrQuery('alternatePhone', variants)
+        ]
+    }).select('fullName phone alternatePhone type');
     if (!guardian) return null;
     return {
         found: true,
@@ -547,7 +552,8 @@ const lookupGuardian = async (variants) => {
         entityType: 'guardian',
         entityId: guardian._id,
         role: guardian.type === 'Responsible' ? 'Responsible' : guardian.type || 'Parent',
-        phone: guardian.phone
+        phone: guardian.phone,
+        alternatePhone: guardian.alternatePhone || ''
     };
 };
 

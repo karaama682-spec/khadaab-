@@ -86,12 +86,25 @@ const createGuardian = asyncHandler(async (req, res) => {
         }
         if (updated) {
             await existingGuardian.save();
-            if (newName && newName !== 'Fee Payer') {
-                await Student.updateMany(
-                    { guardianId: existingGuardian._id },
-                    { fatherName: newName }
-                );
-            }
+        }
+        const studentSync = {};
+        if (newName && newName !== 'Fee Payer') {
+            studentSync.fatherName = newName;
+        }
+        if (existingGuardian.phone) {
+            studentSync.fatherPhone = existingGuardian.phone;
+        }
+        if (Array.isArray(req.body.studentIds) && req.body.studentIds.length > 0) {
+            await Student.updateMany(
+                { _id: { $in: req.body.studentIds } },
+                { $set: { ...studentSync, guardianId: existingGuardian._id } }
+            );
+        }
+        if (Object.keys(studentSync).length > 0) {
+            await Student.updateMany(
+                { guardianId: existingGuardian._id },
+                { $set: studentSync }
+            );
         }
         res.status(200).json(existingGuardian);
         return;
@@ -104,6 +117,22 @@ const createGuardian = asyncHandler(async (req, res) => {
         phone: phoneDigits,
         alternatePhone: digitsOnly(normalizedAltPhone) || normalizedAltPhone || ''
     });
+
+    if (Array.isArray(req.body.studentIds) && req.body.studentIds.length > 0) {
+        const studentSync = {
+            guardianId: data._id,
+            fatherPhone: data.phone
+        };
+        const newName = (req.body.fullName || '').trim();
+        if (newName && newName !== 'Fee Payer') {
+            studentSync.fatherName = newName;
+        }
+        await Student.updateMany(
+            { _id: { $in: req.body.studentIds } },
+            { $set: studentSync }
+        );
+    }
+
     res.status(201).json(data);
 });
 
@@ -153,6 +182,12 @@ const updateGuardian = asyncHandler(async (req, res) => {
         if (normalizedPhone) {
             // updateData.phone is the new current payer number, stored as digits.
             studentSync.fatherPhone = updateData.phone;
+        }
+        if (Array.isArray(req.body.studentIds) && req.body.studentIds.length > 0) {
+            await Student.updateMany(
+                { _id: { $in: req.body.studentIds } },
+                { $set: { ...studentSync, guardianId: data._id } }
+            );
         }
         if (Object.keys(studentSync).length > 0) {
             await Student.updateMany(

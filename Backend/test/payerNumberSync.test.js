@@ -85,3 +85,35 @@ test('no extra guardians/students were created by the update', async () => {
   assert.strictEqual(await Student.countDocuments({}), 3);
   assert.strictEqual(await CashbookEntry.countDocuments({}), 2);
 });
+
+test('updating payer with studentIds links unlinked students and syncs phone and name', async () => {
+  const unlinkedStudent = await Student.create({
+    studentCode: 'PNS-UNLINKED',
+    fullName: 'Unlinked Kid',
+    fatherName: 'Old Name',
+    fatherPhone: '619999999',
+    classId: cls._id,
+    status: 'Active',
+    monthlyFee: 15
+  });
+
+  const r = await invoke(updateGuardian, {
+    params: { id: String(guardian._id) },
+    body: {
+      fullName: 'Updated Payer Name',
+      phone: '618888888',
+      alternatePhone: '618777777',
+      studentIds: [String(unlinkedStudent._id)]
+    }
+  });
+
+  assert.strictEqual(r.statusCode, 200);
+  const updatedStudent = await Student.findById(unlinkedStudent._id);
+  assert.strictEqual(String(updatedStudent.guardianId), String(guardian._id));
+  assert.strictEqual(updatedStudent.fatherPhone, '618888888');
+  assert.strictEqual(updatedStudent.fatherName, 'Updated Payer Name');
+
+  const g = await Guardian.findById(guardian._id);
+  assert.strictEqual(g.alternatePhone, '618777777');
+});
+
