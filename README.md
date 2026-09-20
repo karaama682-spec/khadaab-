@@ -81,8 +81,8 @@
 
 ### 1. Soo Degso Mashruuca (Clone Repository)
 ```bash
-git clone https://github.com/salaaxudaareyn81-tech/salaaxu-aldareyn.git
-cd salaaxu-aldareyn
+git clone https://github.com/karaama682-spec/khadaab-.git
+cd khadaab-
 ```
 
 ### 2. Kici Backend-ka (Server)

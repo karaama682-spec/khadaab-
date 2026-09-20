@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
-const uri = 'mongodb+srv://ccm:mire2022c@mire-hub.ylagdft.mongodb.net/FInventry-System?appName=mire-Hub';
+require('dotenv').config();
+const uri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/dugsi_local';
 
 mongoose.connect(uri)
   .then(() => {
