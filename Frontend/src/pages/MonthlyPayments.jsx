@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   CalendarRange, Search, Phone, ChevronDown, ChevronRight, Wallet, X,
-  CheckCircle2, Clock, AlertCircle, Users, ArrowUpRight, DollarSign, Filter
+  CheckCircle2, Clock, AlertCircle, Users, ArrowUpRight, DollarSign, Filter, Printer
 } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
@@ -172,10 +172,40 @@ const MonthlyPayments = () => {
     setSearchParams(nextParams);
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
-    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24 print:p-2 print:space-y-4 print:pb-0">
+      {/* Printable Header Banner (Only visible on paper / print preview) */}
+      <div className="hidden print:block mb-4 border-b-2 border-slate-900 pb-3">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-xl font-black uppercase tracking-tight text-slate-900">
+              CUMAR BINU KHADHAAB - INSTITUTE MANAGEMENT
+            </h1>
+            <h2 className="text-sm font-bold text-slate-800 uppercase mt-0.5">
+              {statusFilter === 'paid'
+                ? 'LIISKA ARDAYDA & WAALIDIINTA LACAGTA BIXIYEY (STUDENT FEES COLLECTED)'
+                : statusFilter === 'pending'
+                ? 'LIISKA ARDAYDA & WAALIDIINTA DEYNTA KU DHIMAN TAHAY (PENDING FEES REPORT)'
+                : 'WARBIXINTA GUUD EE BIXINTA LACAGAHA (MONTHLY TUITION PAYMENTS REPORT)'}
+            </h2>
+            <p className="text-xs text-slate-600 mt-1">
+              Wareegga: <span className="font-bold">{cycleLabel(monthKey)}</span> · La Daabacay: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+          <div className="text-right text-xs">
+            <p className="font-bold text-slate-700">Wadarta La Bixiyey: <span className="font-black text-slate-950">${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.paidAmount || 0), 0))}</span></p>
+            <p className="font-bold text-slate-700">Wadarta Guud: <span className="font-black text-slate-950">${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.totalFee || 0), 0))}</span></p>
+            <p className="font-bold text-slate-700">Tirada Lacag-bixiyeyaasha: <span className="font-black text-slate-950">{filtered.length}</span></p>
+          </div>
+        </div>
+      </div>
+
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2 print:hidden">
         <div className="flex items-center gap-6">
           <div className="w-16 h-16 bg-slate-900 dark:bg-slate-800 rounded-[24px] flex items-center justify-center text-brand-400 shadow-2xl border border-slate-700 ring-4 ring-brand-400/10 print:hidden">
             <CalendarRange size={32} strokeWidth={2.5} />
@@ -190,25 +220,39 @@ const MonthlyPayments = () => {
           </div>
         </div>
 
-        {/* Period selector */}
-        <div className="flex items-center gap-3 bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm w-full max-w-sm print:hidden">
-          <label htmlFor="month-select" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 shrink-0 leading-tight">
-            Wareegga
-          </label>
-          <select
-            id="month-select"
-            value={monthKey}
-            onChange={(e) => {
-              const [y, m] = e.target.value.split('-');
-              setYear(Number(y));
-              setMonth(Number(m) - 1);
-            }}
-            className="w-full min-w-0 bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+        {/* Action Controls: Period selector + Print Button */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Period selector */}
+          <div className="flex items-center gap-3 bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm w-full sm:w-auto print:hidden">
+            <label htmlFor="month-select" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 shrink-0 leading-tight">
+              Wareegga
+            </label>
+            <select
+              id="month-select"
+              value={monthKey}
+              onChange={(e) => {
+                const [y, m] = e.target.value.split('-');
+                setYear(Number(y));
+                setMonth(Number(m) - 1);
+              }}
+              className="w-full min-w-0 bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+            >
+              {monthOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Print Button */}
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="flex items-center gap-2 rounded-2xl bg-brand-600 px-5 py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-brand-600/30 transition-all hover:bg-brand-700 active:scale-95 print:hidden"
+            title="Daabaco warbixinta (Print Report)"
           >
-            {monthOptions.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+            <Printer size={16} />
+            <span>Daabaco / Print</span>
+          </button>
         </div>
       </div>
 
