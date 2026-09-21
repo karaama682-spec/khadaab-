@@ -168,13 +168,13 @@ const DashboardOverview = () => {
             color: 'bg-teal-500',
             badge: 'Billing Cycle',
             badgeColor: 'bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300',
-            path: '/finance/monthly-payments',
+            path: '/finance/monthly-payments?status=paid',
             description: billingCycleName,
-            explanation: `Lacagaha waxbarashada ee ardayda laga soo ururiyey wareegga hadda socda (${billingCycleName}). Xisaabtan waxay si toos ah uga muuqataa Dakhliga Guud.`,
+            explanation: `Wadarta lacagaha waxbarashada ee ardayda laga soo ururiyey bishan (${billingCycleName}). Boggan wuxuu kuu soo saarayaa KELIYA dadka bishan lacagta bixiyey, wuxuuna ka reebayaa dadka aan weli bixin.`,
             statLabel: 'Wadarta La Filayo (Expected)',
             statValue: `$${(kpis.expectedStudentFees || 0).toLocaleString()}`,
             progress: kpis.expectedStudentFees ? ((kpis.studentFeesCollected || 0) / kpis.expectedStudentFees) * 100 : undefined,
-            actionText: 'Eeg Bixinta Lacagaha'
+            actionText: 'Eeg Dadka Bixiyey (Only Paid)'
         },
         {
             id: 'total-income',
@@ -205,12 +205,12 @@ const DashboardOverview = () => {
             color: 'bg-purple-600',
             badge: 'Uncollected',
             badgeColor: 'bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300',
-            path: '/finance/monthly-payments',
+            path: '/finance/monthly-payments?status=pending',
             description: billingCycleName,
-            explanation: `Lacagaha waxbarashada ee ardayda lagu leeyahay wareeggan socda ee aan weli la bixin. Marka ardaygu bixiyo waxay toos ugu biiraysaa Fees Collected.`,
+            explanation: `Lacagaha waxbarashada ee ardayda lagu leeyahay wareeggan socda ee aan weli la bixin. Boggan wuxuu ku tusayaa KELIYA dadka weli deyntu ku dhiman tahay, wuxuuna ka reebayaa kuwa lacagta wada bixiyey.`,
             statLabel: 'Isku-darka La Filayo',
             statValue: `$${(kpis.expectedStudentFees || 0).toLocaleString()}`,
-            actionText: 'Eeg Ardayda aan Bixin'
+            actionText: 'Eeg Dadka aan Bixin (Only Pending)'
         },
         {
             id: 'total-expenses',

@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { CalendarRange, Search, Phone, ChevronDown, ChevronRight, Wallet, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import {
+  CalendarRange, Search, Phone, ChevronDown, ChevronRight, Wallet, X,
+  CheckCircle2, Clock, AlertCircle, Users, ArrowUpRight, DollarSign, Filter
+} from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { cycleShortLabel, cycleLabel, currentCycle } from '../utils/billingCycle';
@@ -12,26 +16,35 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-const currentMonthKey = () => new Date().toISOString().slice(0, 7); // YYYY-MM
-
 /**
  * Monthly payment view.
  *
- * Reads the same /cashbook/payers endpoint the Payers page uses, with a month
- * argument. Students appear here purely because they exist in the database — the
- * endpoint groups every registered student under the person who pays for them, so
- * registering a student is all that is needed for them to show up.
+ * Reads the /cashbook/payers endpoint for a given billing cycle.
+ * Supports filtering by payment status:
+ *  - 'all': All registered payers
+ *  - 'paid': ONLY payers who have actually paid this month (paidAmount > 0)
+ *  - 'pending': ONLY payers who have unpaid balance (remaining > 0)
  */
 const MonthlyPayments = () => {
   const { showAlert } = useAlert();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [payers, setPayers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [expandedKey, setExpandedKey] = useState(null);
 
-  // Open on the CURRENT 25→24 billing cycle (from the centralized util), not the
-  // calendar month. e.g. Sep 24 → Aug cycle (2026-08); Sep 25 → Sep cycle.
+  // Status filter: 'all' | 'paid' | 'pending' (from URL or state)
+  const initialStatus = searchParams.get('status') || searchParams.get('filter') || 'all';
+  const [statusFilter, setStatusFilter] = useState(initialStatus);
+
+  // Sync with URL query parameter when it changes
+  useEffect(() => {
+    const s = searchParams.get('status') || searchParams.get('filter') || 'all';
+    setStatusFilter(s);
+  }, [searchParams]);
+
+  // Open on the CURRENT 25→24 billing cycle
   const [initYear, initMonth] = currentCycle().split('-').map(Number);
   const [year, setYear] = useState(initYear);
   const [month, setMonth] = useState(initMonth - 1); // 0-11
@@ -58,11 +71,28 @@ const MonthlyPayments = () => {
     fetchPayers();
   }, [monthKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Status filter logic
+  const statusFiltered = useMemo(() => {
+    if (statusFilter === 'paid') {
+      // ONLY payers who actually paid money for this cycle (paidAmount > 0)
+      return payers.filter((p) => Number(p.paidAmount || 0) > 0);
+    }
+    if (statusFilter === 'pending') {
+      // ONLY payers who have an unpaid balance (remaining > 0 or not fully paid)
+      return payers.filter((p) => {
+        const remaining = Number(p.remaining !== undefined ? p.remaining : (p.totalFee - (p.paidAmount || 0)));
+        return remaining > 0 && !p.paid;
+      });
+    }
+    return payers;
+  }, [payers, statusFilter]);
+
+  // Search filter applied on top of status filter
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return payers;
+    if (!q) return statusFiltered;
     const qDigits = q.replace(/\D/g, '');
-    return payers.filter((p) => {
+    return statusFiltered.filter((p) => {
       const nameMatch = (p.name || '').toLowerCase().includes(q);
       const phoneMatch =
         (p.phone || '').toLowerCase().includes(q) ||
@@ -73,27 +103,54 @@ const MonthlyPayments = () => {
       const studentMatch = (p.students || []).some((s) => (s.name || '').toLowerCase().includes(q));
       return nameMatch || phoneMatch || altPhoneMatch || studentMatch;
     });
-  }, [payers, search]);
+  }, [statusFiltered, search]);
 
-  const totals = useMemo(() => ({
-    money: payers.reduce((sum, p) => sum + Number(p.totalFee || 0), 0),
-    students: payers.reduce((sum, p) => sum + Number(p.studentCount || 0), 0)
-  }), [payers]);
+  // Comprehensive aggregate stats
+  const totals = useMemo(() => {
+    let expected = 0;
+    let collected = 0;
+    let pending = 0;
+    let paidPayersCount = 0;
+    let pendingPayersCount = 0;
+    let studentsCount = 0;
+
+    payers.forEach((p) => {
+      const fee = Number(p.totalFee || 0);
+      const paid = Number(p.paidAmount || 0);
+      const rem = Number(p.remaining !== undefined ? p.remaining : Math.max(0, fee - paid));
+      expected += fee;
+      collected += paid;
+      pending += rem;
+      studentsCount += Number(p.studentCount || 0);
+
+      if (paid > 0) {
+        paidPayersCount += 1;
+      }
+      if (rem > 0 && !p.paid) {
+        pendingPayersCount += 1;
+      }
+    });
+
+    return {
+      expected,
+      collected,
+      pending,
+      paidPayersCount,
+      pendingPayersCount,
+      studentsCount
+    };
+  }, [payers]);
 
   const years = useMemo(() => {
     const thisYear = new Date().getFullYear();
     return [thisYear - 2, thisYear - 1, thisYear, thisYear + 1];
   }, []);
 
-  // Every year/month pair the two old controls could reach, flattened into one
-  // list for the single combo box. Newest first so the current month is near the
-  // top. The value is the same YYYY-MM key the request already uses.
   const monthOptions = useMemo(() => {
     const opts = [];
     for (const y of [...years].sort((a, b) => b - a)) {
       for (let m = 11; m >= 0; m -= 1) {
         const value = `${y}-${String(m + 1).padStart(2, '0')}`;
-        // The value is a BILLING CYCLE key (25th→24th); label shows its date range.
         opts.push({
           value,
           label: `${MONTH_NAMES[m]} ${y} cycle (${cycleShortLabel(value)})`
@@ -103,9 +160,17 @@ const MonthlyPayments = () => {
     return opts;
   }, [years]);
 
-  if (loading) {
-    return <div className="p-10 text-center text-slate-500 font-bold">Loading Monthly Payments...</div>;
-  }
+  const handleTabChange = (newStatus) => {
+    setStatusFilter(newStatus);
+    const nextParams = new URLSearchParams(searchParams);
+    if (newStatus === 'all') {
+      nextParams.delete('status');
+      nextParams.delete('filter');
+    } else {
+      nextParams.set('status', newStatus);
+    }
+    setSearchParams(nextParams);
+  };
 
   return (
     <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24">
@@ -116,71 +181,204 @@ const MonthlyPayments = () => {
             <CalendarRange size={32} strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">
+            <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none md:text-4xl">
               Monthly Payments
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">
-              Registered students by billing cycle (25th → 24th) · who pays · total fee
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-bold mt-2 uppercase tracking-wider">
+              Xisaabta Bixinta Lacagaha Wareegga (25th → 24th) · {cycleLabel(monthKey)}
             </p>
           </div>
         </div>
+
+        {/* Period selector */}
+        <div className="flex items-center gap-3 bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm w-full max-w-sm print:hidden">
+          <label htmlFor="month-select" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 shrink-0 leading-tight">
+            Wareegga
+          </label>
+          <select
+            id="month-select"
+            value={monthKey}
+            onChange={(e) => {
+              const [y, m] = e.target.value.split('-');
+              setYear(Number(y));
+              setMonth(Number(m) - 1);
+            }}
+            className="w-full min-w-0 bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+          >
+            {monthOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {/* Period selector — a single combo box carrying both month and year. */}
-      <div className="flex items-center gap-3 bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm w-full max-w-xs print:hidden">
-        <label htmlFor="month-select" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 shrink-0 leading-tight">
-          Month &amp; Year
-        </label>
-        <select
-          id="month-select"
-          value={monthKey}
-          onChange={(e) => {
-            const [y, m] = e.target.value.split('-');
-            setYear(Number(y));
-            setMonth(Number(m) - 1);
-          }}
-          className="w-full min-w-0 bg-transparent outline-none text-sm font-bold text-slate-900 dark:text-white cursor-pointer"
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* Total Expected */}
+        <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              Wadarta La Filayo (Expected)
+            </span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+              <DollarSign size={18} />
+            </div>
+          </div>
+          <div className="mt-3 text-2xl font-black text-slate-900 dark:text-white tabular-nums">
+            ${fmtMoney(totals.expected)}
+          </div>
+          <p className="mt-1 text-xs font-medium text-slate-400">
+            {totals.studentsCount} arday guud ahaan
+          </p>
+        </div>
+
+        {/* Collected */}
+        <div 
+          onClick={() => handleTabChange('paid')}
+          className={`cursor-pointer rounded-3xl border p-5 shadow-sm transition-all hover:-translate-y-0.5 ${
+            statusFilter === 'paid'
+              ? 'border-emerald-500 bg-emerald-50/40 ring-2 ring-emerald-500/20 dark:border-emerald-500 dark:bg-emerald-950/20'
+              : 'border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900'
+          }`}
         >
-          {monthOptions.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+              Lacagta La Bixiyey (Collected)
+            </span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+              <CheckCircle2 size={18} />
+            </div>
+          </div>
+          <div className="mt-3 text-2xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+            ${fmtMoney(totals.collected)}
+          </div>
+          <p className="mt-1 text-xs font-medium text-slate-400">
+            {totals.paidPayersCount} qof ayaa lacag bixiyey
+          </p>
+        </div>
+
+        {/* Pending */}
+        <div 
+          onClick={() => handleTabChange('pending')}
+          className={`cursor-pointer rounded-3xl border p-5 shadow-sm transition-all hover:-translate-y-0.5 ${
+            statusFilter === 'pending'
+              ? 'border-rose-500 bg-rose-50/40 ring-2 ring-rose-500/20 dark:border-rose-500 dark:bg-rose-950/20'
+              : 'border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+              Lacagta Dhiman (Pending)
+            </span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+              <AlertCircle size={18} />
+            </div>
+          </div>
+          <div className="mt-3 text-2xl font-black text-rose-600 dark:text-rose-400 tabular-nums">
+            ${fmtMoney(totals.pending)}
+          </div>
+          <p className="mt-1 text-xs font-medium text-slate-400">
+            {totals.pendingPayersCount} qof ayaa weli lacag ku dhiman tahay
+          </p>
+        </div>
       </div>
 
-      {/* Search */}
-      <div className="flex items-center bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm max-w-md print:hidden focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
-        <Search size={18} className="text-slate-400 mr-3 shrink-0" />
-        <input
-          type="text"
-          placeholder="Search by payer name, number 1, or number 2..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400 font-medium"
-        />
-        {search && (
-          <button onClick={() => setSearch('')} className="text-slate-400 hover:text-slate-600 p-1">
-            <X size={14} />
+      {/* Filter Tabs & Search Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
+        {/* Status Filter Tabs */}
+        <div className="flex items-center gap-2 overflow-x-auto rounded-2xl bg-slate-100/90 p-1.5 dark:bg-slate-800/90 w-fit">
+          <button
+            onClick={() => handleTabChange('all')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+              statusFilter === 'all'
+                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+            }`}
+          >
+            <span>Dhammaan (All)</span>
+            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-extrabold text-slate-700 dark:bg-slate-600 dark:text-slate-200">
+              {payers.length}
+            </span>
           </button>
-        )}
+
+          <button
+            onClick={() => handleTabChange('paid')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+              statusFilter === 'paid'
+                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
+                : 'text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400'
+            }`}
+          >
+            <CheckCircle2 size={14} />
+            <span>Lacagta Bixiyey (Paid)</span>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+              statusFilter === 'paid' ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+            }`}>
+              {totals.paidPayersCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => handleTabChange('pending')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+              statusFilter === 'pending'
+                ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/30'
+                : 'text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400'
+            }`}
+          >
+            <AlertCircle size={14} />
+            <span>Weli Aan Bixin (Pending)</span>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+              statusFilter === 'pending' ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+            }`}>
+              {totals.pendingPayersCount}
+            </span>
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center bg-white dark:bg-slate-900 rounded-2xl px-4 py-2.5 border border-slate-100 dark:border-slate-800 shadow-sm w-full max-w-md focus-within:ring-2 focus-within:ring-brand-500/20 transition-all">
+          <Search size={16} className="text-slate-400 mr-2.5 shrink-0" />
+          <input
+            type="text"
+            placeholder="Raadi magaca ama lambarka taleefanka..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-transparent outline-none text-xs text-slate-900 dark:text-white placeholder:text-slate-400 font-medium"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="text-slate-400 hover:text-slate-600 p-1">
+              <X size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Table — same structure and styling as the Payers page */}
+      {/* Table */}
       <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden print:rounded-none print:border-0 print:shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/70 dark:bg-slate-800/40 text-slate-400 text-[10px] font-black uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
                 <th className="px-4 py-4 w-10 print:hidden"></th>
-                <th className="px-5 py-4">Payer Name</th>
-                <th className="px-5 py-4">Numbers (Phone 1 & 2)</th>
+                <th className="px-5 py-4">Payer Name (Lacag-bixiyaha)</th>
+                <th className="px-5 py-4">Phone Numbers</th>
                 <th className="px-5 py-4 text-center">Students</th>
-                <th className="px-5 py-4 text-right">Total Money</th>
-                <th className="px-5 py-4 text-center">Paid</th>
+                <th className="px-5 py-4 text-right">Fee (Wadarta)</th>
+                <th className="px-5 py-4 text-right">Paid (La Bixiyey)</th>
+                <th className="px-5 py-4 text-right">Remaining (Dhiman)</th>
+                <th className="px-5 py-4 text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filtered.map((p) => {
                 const isOpen = expandedKey === p.key;
+                const paidAmt = Number(p.paidAmount || 0);
+                const feeAmt = Number(p.totalFee || 0);
+                const remAmt = Number(p.remaining !== undefined ? p.remaining : Math.max(0, feeAmt - paidAmt));
+                const isFullyPaid = p.paid || (feeAmt > 0 && paidAmt >= feeAmt);
+                const isPartial = !isFullyPaid && paidAmt > 0;
+
                 return (
                   <React.Fragment key={p.key}>
                     <tr
@@ -231,44 +429,100 @@ const MonthlyPayments = () => {
                           {p.studentCount}
                         </span>
                       </td>
-                      <td className="px-5 py-4 text-right text-sm font-black text-slate-900 dark:text-white">
-                        ${fmtMoney(p.totalFee)}
+                      <td className="px-5 py-4 text-right text-sm font-bold text-slate-700 dark:text-slate-300 tabular-nums">
+                        ${fmtMoney(feeAmt)}
                       </td>
-                      {/* Empty box — printed and ticked by hand */}
-                      <td className="px-5 py-4">
-                        <div className="flex items-center justify-center">
-                          <span className="inline-block w-6 h-6 rounded-md border-2 border-slate-900 dark:border-slate-300 print:border-black" />
-                        </div>
+                      <td className="px-5 py-4 text-right text-sm font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+                        ${fmtMoney(paidAmt)}
+                      </td>
+                      <td className="px-5 py-4 text-right text-sm font-black text-rose-600 dark:text-rose-400 tabular-nums">
+                        ${fmtMoney(remAmt)}
+                      </td>
+                      <td className="px-5 py-4 text-center">
+                        {isFullyPaid ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-500/20 dark:bg-emerald-950/40 dark:text-emerald-300">
+                            <CheckCircle2 size={12} />
+                            <span>Bixiyey (Paid)</span>
+                          </span>
+                        ) : isPartial ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-500/20 dark:bg-amber-950/40 dark:text-amber-300">
+                            <Clock size={12} />
+                            <span>Qeyb (Partial)</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-500/20 dark:bg-rose-950/40 dark:text-rose-300">
+                            <AlertCircle size={12} />
+                            <span>Aan Bixin (Unpaid)</span>
+                          </span>
+                        )}
                       </td>
                     </tr>
 
                     {isOpen && (
                       <tr className="bg-slate-50/70 dark:bg-slate-800/20 print:hidden">
-                        <td colSpan={6} className="px-6 pb-6 pt-0">
-                          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900">
+                        <td colSpan={8} className="px-6 pb-6 pt-0">
+                          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900 mt-2">
                             <table className="w-full text-left text-sm">
                               <thead>
-                                <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800">
-                                  <th className="px-5 py-3">Student</th>
+                                <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+                                  <th className="px-5 py-3">Student Name</th>
                                   <th className="px-5 py-3">Class</th>
                                   <th className="px-5 py-3 text-right">Monthly Fee</th>
+                                  <th className="px-5 py-3 text-right">Paid</th>
+                                  <th className="px-5 py-3 text-right">Remaining</th>
+                                  <th className="px-5 py-3 text-center">Status</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                {(p.students || []).map((s) => (
-                                  <tr key={s.studentId}>
-                                    <td className="px-5 py-3 font-bold text-slate-800 dark:text-slate-200">{s.name}</td>
-                                    <td className="px-5 py-3 text-slate-500">{s.className || '—'}</td>
-                                    <td className="px-5 py-3 text-right font-black text-slate-900 dark:text-white">
-                                      ${fmtMoney(s.monthlyFee)}
-                                    </td>
-                                  </tr>
-                                ))}
-                                <tr className="bg-slate-50 dark:bg-slate-800/40">
-                                  <td className="px-5 py-3 uppercase text-[11px] text-slate-500" colSpan={2}>Total</td>
-                                  <td className="px-5 py-3 text-right font-black text-slate-900 dark:text-white">
-                                    ${fmtMoney(p.totalFee)}
+                                {(p.students || []).map((s) => {
+                                  const sPaid = Number(s.paid || 0);
+                                  const sFee = Number(s.monthlyFee || 0);
+                                  const sRem = Number(s.remaining !== undefined ? s.remaining : Math.max(0, sFee - sPaid));
+                                  const sIsPaid = sFee > 0 && sPaid >= sFee;
+
+                                  return (
+                                    <tr key={s.studentId}>
+                                      <td className="px-5 py-3 font-bold text-slate-800 dark:text-slate-200">{s.name}</td>
+                                      <td className="px-5 py-3 text-slate-500">{s.className || '—'}</td>
+                                      <td className="px-5 py-3 text-right font-bold text-slate-900 dark:text-white tabular-nums">
+                                        ${fmtMoney(sFee)}
+                                      </td>
+                                      <td className="px-5 py-3 text-right font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+                                        ${fmtMoney(sPaid)}
+                                      </td>
+                                      <td className="px-5 py-3 text-right font-black text-rose-600 dark:text-rose-400 tabular-nums">
+                                        ${fmtMoney(sRem)}
+                                      </td>
+                                      <td className="px-5 py-3 text-center">
+                                        {sIsPaid ? (
+                                          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                            ✓ Bixiyey
+                                          </span>
+                                        ) : sPaid > 0 ? (
+                                          <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                                            Qeyb
+                                          </span>
+                                        ) : (
+                                          <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400">
+                                            Aan Bixin
+                                          </span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                                <tr className="bg-slate-50 dark:bg-slate-800/40 font-black">
+                                  <td className="px-5 py-3 uppercase text-[11px] text-slate-500" colSpan={2}>Wadarta Payer-ka</td>
+                                  <td className="px-5 py-3 text-right text-slate-900 dark:text-white tabular-nums">
+                                    ${fmtMoney(feeAmt)}
                                   </td>
+                                  <td className="px-5 py-3 text-right text-emerald-600 dark:text-emerald-400 tabular-nums">
+                                    ${fmtMoney(paidAmt)}
+                                  </td>
+                                  <td className="px-5 py-3 text-right text-rose-600 dark:text-rose-400 tabular-nums">
+                                    ${fmtMoney(remAmt)}
+                                  </td>
+                                  <td></td>
                                 </tr>
                               </tbody>
                             </table>
@@ -282,7 +536,7 @@ const MonthlyPayments = () => {
 
               {loading && (
                 <tr>
-                  <td colSpan={6} className="px-8 py-16 text-center text-slate-400 text-sm font-medium">
+                  <td colSpan={8} className="px-8 py-16 text-center text-slate-400 text-sm font-medium">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
                       <span className="text-slate-500 font-semibold">Loading monthly payments...</span>
@@ -293,7 +547,7 @@ const MonthlyPayments = () => {
 
               {!loading && error && (
                 <tr>
-                  <td colSpan={6} className="px-8 py-12 text-center">
+                  <td colSpan={8} className="px-8 py-12 text-center">
                     <div className="max-w-md mx-auto p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-rose-700 dark:text-rose-300 text-sm flex flex-col items-center gap-3">
                       <p className="font-semibold">{error}</p>
                       <button
@@ -309,8 +563,32 @@ const MonthlyPayments = () => {
 
               {!loading && !error && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-8 py-16 text-center text-slate-400 text-sm font-semibold">
-                    No registered students for {MONTH_NAMES[month]} {year}.
+                  <td colSpan={8} className="px-8 py-16 text-center text-slate-500 text-sm">
+                    {statusFilter === 'paid' ? (
+                      <div className="max-w-md mx-auto flex flex-col items-center gap-2">
+                        <CheckCircle2 size={32} className="text-slate-300 dark:text-slate-600" />
+                        <p className="font-bold text-slate-700 dark:text-slate-300">
+                          Ma jiraan wax lacag ah oo bishan weli la qabtay
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          Dhammaan lacag-bixiyeyaasha bishan ({cycleLabel(monthKey)}) weli lacag ma bixin.
+                        </p>
+                      </div>
+                    ) : statusFilter === 'pending' ? (
+                      <div className="max-w-md mx-auto flex flex-col items-center gap-2">
+                        <CheckCircle2 size={32} className="text-emerald-500" />
+                        <p className="font-bold text-slate-700 dark:text-slate-300">
+                          Dhammaan lacag-bixiyeyaasha waa wada bixiyeen!
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          Wax deyn ah oo ku dhiman wareeggan ma jiraan.
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="font-semibold">
+                        Lama helin wax xog ah oo ku saabsan wareegga {MONTH_NAMES[month]} {year}.
+                      </p>
+                    )}
                   </td>
                 </tr>
               )}
@@ -319,7 +597,7 @@ const MonthlyPayments = () => {
         </div>
       </div>
 
-      {/* Month total — closes the monthly list it sums. Values unchanged. */}
+      {/* Month total footer */}
       <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm px-8 py-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 print:hidden">
@@ -330,13 +608,24 @@ const MonthlyPayments = () => {
               {MONTH_NAMES[month]} {year} cycle · {cycleLabel(monthKey)}
             </p>
             <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
-              {totals.students} student{totals.students === 1 ? '' : 's'} across {payers.length} payer{payers.length === 1 ? '' : 's'}
+              Xisaabta shaandheysan: {filtered.length} payer{filtered.length === 1 ? '' : 's'}
             </p>
           </div>
         </div>
-        <p className="text-4xl font-black text-emerald-600 dark:text-emerald-400 leading-none">
-          ${fmtMoney(totals.money)}
-        </p>
+        <div className="flex items-center gap-6">
+          <div className="text-right">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">La Bixiyey (Collected)</p>
+            <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 leading-none">
+              ${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.paidAmount || 0), 0))}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Wadarta (Total)</p>
+            <p className="text-2xl font-black text-slate-900 dark:text-white leading-none">
+              ${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.totalFee || 0), 0))}
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
