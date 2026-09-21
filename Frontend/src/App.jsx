@@ -174,7 +174,7 @@ const App = () => {
         logo: data?.logo
       }));
 
-      document.title = data?.name || 'Cumar Binu Khadhaab';
+      document.title = data?.name || 'salaax aldaareyn';
 
       applyBrandColors(brandColor, accentColor);
     } catch (error) {

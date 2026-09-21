@@ -7,7 +7,7 @@ const getOrCreateSettings = async () => {
     let settings = await SystemSettings.findOne();
     if (!settings) {
         settings = await SystemSettings.create({
-            businessInfo: { name: 'Cumar Binu Khadhaab', systemSubtitle: 'Institute Management' },
+            businessInfo: { name: 'salaax aldaareyn', systemSubtitle: 'Institute Management' },
             operatingHours: [
                 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
             ].map(day => ({ day, open: '08:00 AM', close: '06:00 PM', isClosed: day === 'Sunday' }))
@@ -23,7 +23,7 @@ router.get('/me', async (req, res) => {
     try {
         const settings = await getOrCreateSettings();
         res.json({
-            name: settings.businessInfo.name || 'Cumar Binu Khadhaab',
+            name: settings.businessInfo.name || 'salaax aldaareyn',
             systemSubtitle: settings.businessInfo.systemSubtitle || 'Institute Management',
             legalName: settings.businessInfo.legalName,
             industry: settings.businessInfo.industry,
@@ -42,7 +42,7 @@ router.get('/me', async (req, res) => {
     } catch (error) {
         // Fallback to defaults if DB is not ready
         res.json({
-            name: 'Cumar Binu Khadhaab',
+            name: 'salaax aldaareyn',
             systemSubtitle: 'Institute Management',
             logo: null,
             settings: {

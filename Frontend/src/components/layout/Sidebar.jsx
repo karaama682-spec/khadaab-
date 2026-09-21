@@ -133,7 +133,7 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
           )}
         </div>
         <div className="overflow-hidden min-w-0">
-          <span className="text-sm font-black text-white tracking-tight block truncate" title={tenantInfo.name || 'Cumar Binu Khadhaab'}>{tenantInfo.name || 'Cumar Binu Khadhaab'}</span>
+          <span className="text-sm font-black text-white tracking-tight block truncate capitalize" title={tenantInfo.name || 'salaax aldaareyn'}>{tenantInfo.name || 'salaax aldaareyn'}</span>
           <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-400 block truncate">{tenantInfo.systemSubtitle || t('instituteManagement')}</span>
         </div>
       </div>

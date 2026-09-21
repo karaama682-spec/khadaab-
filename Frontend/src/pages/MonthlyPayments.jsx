@@ -46,6 +46,29 @@ const MonthlyPayments = () => {
   const [search, setSearch] = useState('');
   const [expandedKey, setExpandedKey] = useState(null);
 
+  // Dynamic tenant / institute branding (salaax aldaareyn)
+  const [tenantInfo, setTenantInfo] = useState(() => {
+    try {
+      const cached = localStorage.getItem('tenantBranding');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.name) return { name: parsed.name, subtitle: parsed.systemSubtitle || 'Institute Management' };
+      }
+    } catch (e) {}
+    return { name: 'salaax aldaareyn', subtitle: 'Institute Management' };
+  });
+
+  useEffect(() => {
+    api.get('/tenants/me').then(({ data }) => {
+      if (data?.name) {
+        setTenantInfo({
+          name: data.name,
+          subtitle: data.systemSubtitle || 'Institute Management'
+        });
+      }
+    }).catch(() => {});
+  }, []);
+
   // Status filter: 'all' | 'paid' | 'pending' (from URL or state)
   const initialStatus = searchParams.get('status') || searchParams.get('filter') || 'all';
   const [statusFilter, setStatusFilter] = useState(initialStatus);
@@ -300,7 +323,7 @@ const MonthlyPayments = () => {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-[11pt] font-black uppercase tracking-tight text-black leading-tight">
-              CUMAR BINU KHADHAAB - INSTITUTE MANAGEMENT
+              {tenantInfo.name} - {tenantInfo.subtitle || 'INSTITUTE MANAGEMENT'}
             </h1>
             <h2 className="text-[8.5pt] font-extrabold text-black uppercase mt-0.5 leading-tight">
               {statusFilter === 'paid'
