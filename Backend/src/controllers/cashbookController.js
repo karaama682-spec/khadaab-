@@ -931,26 +931,19 @@ const lookupPhone = asyncHandler(async (req, res) => {
     res.json({ found: false, name: '', entityType: '', entityId: null, role: '' });
 });
 
-// One row per responsible payer (father / guardian): name, number, how many
-// students they cover, the total monthly fee, and whether it's fully paid this month.
-const getPayers = asyncHandler(async (req, res) => {
-    // The `month` param is now a BILLING CYCLE key (25th→24th), not a calendar
-    // month. Without it: the current cycle, every active student (Payers page).
-    const requestedCycle = isValidCycleKey(req.query.month || '') ? req.query.month : null;
-    const cycle = requestedCycle || currentCycle();
-    const { end } = cycleRange(cycle);
+// ---------------------------------------------------------------------------
+// Shared student-fee calculation — the single source of truth reused by BOTH the
+// Monthly Payments endpoint (getPayers) and the Dashboard (computeFeeTotals), so
+// the two can never drift apart. Always institute-wide (never branch-filtered).
+// ---------------------------------------------------------------------------
 
+// Active (non-Inactive/Exited) students and how much each has paid within a
+// billing cycle. registrationBound=true applies the Monthly-Payments rule: a
+// student counts once registered by the cycle's END (its 24th).
+const fetchStudentFeeData = async (cycle, { registrationBound = true } = {}) => {
+    const { end } = cycleRange(cycle);
     const studentQuery = { status: { $nin: ['Inactive', 'Exited'] } };
-    if (requestedCycle) {
-        // A student is a valid payer for a billing cycle once they have joined by
-        // the time that cycle ENDS (its 24th). So the filter is an upper bound on
-        // registrationDate — the cycle end — not an exact-cycle window:
-        //   • older active students keep appearing in later cycles;
-        //   • a newly registered student appears from their registration cycle
-        //     onward and never in earlier cycles (e.g. registered Oct 24 → shows
-        //     from the September cycle [ends Oct 24]; Oct 25 → from the October
-        //     cycle, not September).
-        // Inactive/Exited students remain excluded (Exit behaviour preserved).
+    if (registrationBound) {
         studentQuery.registrationDate = { $lte: end };
     }
 
@@ -963,17 +956,85 @@ const getPayers = asyncHandler(async (req, res) => {
     // Payments counted for this cycle: new records by their billingCycle key,
     // historical records (no key) by their real paymentDate falling in the range.
     const studentIds = students.map((s) => s._id);
-    const payments = await Payment.find({
-        studentId: { $in: studentIds },
-        status: 'Completed',
-        ...cycleMatch('billingCycle', 'paymentDate', cycle)
-    }).select('studentId amount').lean();
+    const payments = studentIds.length
+        ? await Payment.find({
+            studentId: { $in: studentIds },
+            status: 'Completed',
+            ...cycleMatch('billingCycle', 'paymentDate', cycle)
+        }).select('studentId amount').lean()
+        : [];
 
     const paidByStudent = new Map();
     for (const p of payments) {
         const sId = String(p.studentId);
         paidByStudent.set(sId, (paidByStudent.get(sId) || 0) + (Number(p.amount) || 0));
     }
+
+    return { students, paidByStudent };
+};
+
+// Institute-wide fee totals for a billing cycle (25th→24th):
+//   expected  = Σ each active student's monthly fee
+//   collected = Σ payments attributed to the cycle
+//   pending   = Σ max(0, fee − paid)   (an AMOUNT, not a student count)
+// This is exactly the calculation Monthly Payments performs, so the Dashboard's
+// "Student Fees Collected" and "Pending Student Fees" match that report.
+const computeFeeTotals = async (cycle = currentCycle()) => {
+    const { students, paidByStudent } = await fetchStudentFeeData(cycle, { registrationBound: true });
+    let expected = 0;
+    let collected = 0;
+    let pending = 0;
+    for (const s of students) {
+        const fee = Number(s.monthlyFee || s.fee || 0);
+        const paid = paidByStudent.get(String(s._id)) || 0;
+        expected += fee;
+        collected += paid;
+        pending += Math.max(0, fee - paid);
+    }
+    return { cycle, expected, collected, pending };
+};
+
+// Total student fees PAID IN ADVANCE: completed payments attributed to a billing
+// cycle LATER than the given one. Reuses the same Payment.billingCycle mechanism
+// as computeFeeTotals; "> cycle" is the existing advance rule (isAdvance). String
+// $gt on zero-padded "YYYY-MM" keys sorts correctly and excludes null (historical)
+// rows, so these never overlap the current-cycle "collected" figure.
+const computeAdvanceFeeTotal = async (cycle = currentCycle()) => {
+    const rows = await Payment.aggregate([
+        { $match: { status: 'Completed', billingCycle: { $gt: cycle } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
+    return rows.length ? rows[0].total : 0;
+};
+
+// Total salaries PAID IN ADVANCE: Paid salary rows attributed to a billing cycle
+// LATER than the given one — the same isAdvance rule used when the Cashbook
+// creates a forward-dated salary. Excludes current/historical rows, so it never
+// overlaps the current-cycle Total Salaries figure.
+const computeAdvanceSalaryTotal = async (cycle = currentCycle()) => {
+    const rows = await Salary.aggregate([
+        { $match: { status: 'Paid', billingCycle: { $gt: cycle } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
+    return rows.length ? rows[0].total : 0;
+};
+
+// One row per responsible payer (father / guardian): name, number, how many
+// students they cover, the total monthly fee, and whether it's fully paid this month.
+const getPayers = asyncHandler(async (req, res) => {
+    // The `month` param is now a BILLING CYCLE key (25th→24th), not a calendar
+    // month. Without it: the current cycle, every active student (Payers page).
+    const requestedCycle = isValidCycleKey(req.query.month || '') ? req.query.month : null;
+    const cycle = requestedCycle || currentCycle();
+
+    // Reuse the shared fee-data calculation. Monthly Payments (a specific cycle)
+    // bounds students to those registered by the cycle end; the Payers page (no
+    // cycle) lists every active student. Registration-window rationale:
+    //   • older active students keep appearing in later cycles;
+    //   • a newly registered student appears from their registration cycle onward
+    //     (registered Oct 24 → from the September cycle [ends Oct 24]; Oct 25 →
+    //     from October). Inactive/Exited stay excluded (Exit behaviour preserved).
+    const { students, paidByStudent } = await fetchStudentFeeData(cycle, { registrationBound: !!requestedCycle });
 
     const groups = new Map();
     for (const s of students) {
@@ -1140,5 +1201,8 @@ module.exports = {
     deleteEntry,
     lookupPhone,
     getPayers,
-    togglePayer
+    togglePayer,
+    computeFeeTotals,
+    computeAdvanceFeeTotal,
+    computeAdvanceSalaryTotal
 };

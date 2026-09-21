@@ -3,15 +3,13 @@ const Student = require('../models/Student');
 const User = require('../models/User');
 const Class = require('../models/Class');
 const Guardian = require('../models/Guardian');
-const Payment = require('../models/Payment');
 const Salary = require('../models/Salary');
-const Expense = require('../models/Expense');
-const Wallet = require('../models/Wallet');
 const Transaction = require('../models/Transaction');
 const StudentAttendance = require('../models/StudentAttendance');
 const TeacherAttendance = require('../models/TeacherAttendance');
 const Notification = require('../models/Notification');
-const { currentCycle, cycleRange } = require('../utils/billingCycle');
+const { currentCycle, cycleRange, cycleMatch } = require('../utils/billingCycle');
+const { computeFeeTotals, computeAdvanceFeeTotal, computeAdvanceSalaryTotal } = require('./cashbookController');
 
 // In-memory cache to prevent re-running 13 aggregations on every dashboard visit
 const dashboardCache = new Map();
@@ -51,11 +49,12 @@ const getDashboardData = asyncHandler(async (req, res) => {
         totalTeachers,
         totalClasses,
         totalGuardians,
-        monthlyIncomeAgg,
-        monthlyExpensesAgg,
-        wallets,
-        expectedFeesAgg,
-        collectedThisMonthAgg,
+        totalIncomeAgg,
+        totalExpensesAgg,
+        totalSalariesAgg,
+        feeTotals,
+        advanceStudentFees,
+        advanceSalaries,
         todayStudentAttendance,
         todayTeacherAttendance,
         recentTransactions,
@@ -65,46 +64,47 @@ const getDashboardData = asyncHandler(async (req, res) => {
         User.countDocuments({ ...branchQuery, role: 'Teacher' }),
         Class.countDocuments(branchQuery),
         Guardian.countDocuments(branchQuery),
-        Payment.aggregate([
-            { $match: { ...branchQuery, status: 'Completed', paymentDate: { $gte: startOfMonth, $lte: endOfMonth } } },
+        // FINANCE (institute-wide, no branch filter): the Transaction ledger is the
+        // single source of truth for every money movement. Total Income = all
+        // Income transactions posted within the current billing cycle. Student fee
+        // payments post exactly one Transaction each, so they are counted once here.
+        Transaction.aggregate([
+            { $match: { type: 'Income', date: { $gte: startOfMonth, $lte: endOfMonth } } },
             { $group: { _id: null, total: { $sum: '$amount' } } }
         ]),
-        Expense.aggregate([
-            { $match: { ...branchQuery, date: { $gte: startOfMonth, $lte: endOfMonth } } },
+        // Total Expenses = all Expense transactions in the cycle (standalone
+        // expenses + paid salaries, each of which posts one Expense transaction).
+        Transaction.aggregate([
+            { $match: { type: 'Expense', date: { $gte: startOfMonth, $lte: endOfMonth } } },
             { $group: { _id: null, total: { $sum: '$amount' } } }
         ]),
-        Wallet.find(branchQuery).lean(),
-        // Total monthly fee the active students are expected to pay.
-        Student.aggregate([
-            { $match: { ...branchQuery, status: 'Active' } },
-            { $group: { _id: null, total: { $sum: { $ifNull: ['$monthlyFee', { $ifNull: ['$fee', 0] }] } } } }
-        ]),
-        // Fees actually collected for the current billing cycle: new payments by
-        // their billingCycle key, historical payments by their real paymentDate.
-        Payment.aggregate([
-            { $match: {
-                ...branchQuery,
-                status: 'Completed',
-                $or: [
-                    { billingCycle: cycle },
-                    { billingCycle: null, paymentDate: { $gte: startOfMonth, $lte: endOfMonth } }
-                ]
-            } },
+        // Total Salaries = Paid salaries attributed to the cycle: new rows by their
+        // billingCycle key, historical rows by their real paymentDate. Only Paid
+        // salaries post an Expense transaction, so this is a subset of Total Expenses.
+        Salary.aggregate([
+            { $match: { status: 'Paid', ...cycleMatch('billingCycle', 'paymentDate', cycle) } },
             { $group: { _id: null, total: { $sum: '$amount' } } }
         ]),
+        // Student Fees Collected + Pending: reuse the exact Monthly-Payments
+        // calculation (shared computeFeeTotals) so Dashboard and Finance agree.
+        computeFeeTotals(cycle),
+        // Advance cards (institute-wide): fees/salaries attributed to a FUTURE
+        // billing cycle. Reuse the shared Finance helpers — the same billingCycle
+        // "> current cycle" rule the rest of the system uses for advances.
+        computeAdvanceFeeTotal(cycle),
+        computeAdvanceSalaryTotal(cycle),
         StudentAttendance.countDocuments({ ...branchQuery, date: { $gte: startOfToday, $lte: endOfToday }, status: 'Present' }),
         TeacherAttendance.countDocuments({ ...branchQuery, date: { $gte: startOfToday, $lte: endOfToday }, status: 'Present' }),
         Transaction.find(branchQuery).sort({ date: -1 }).limit(10).lean(),
         Notification.find().sort({ createdAt: -1 }).limit(10).lean()
     ]);
 
-    const walletBalance = wallets.reduce((sum, w) => sum + (w.balance || 0), 0);
-    const monthlyIncome = monthlyIncomeAgg.length > 0 ? monthlyIncomeAgg[0].total : 0;
-    const monthlyExpenses = monthlyExpensesAgg.length > 0 ? monthlyExpensesAgg[0].total : 0;
-    const expectedMonthlyFees = expectedFeesAgg.length > 0 ? expectedFeesAgg[0].total : 0;
-    const collectedThisMonth = collectedThisMonthAgg.length > 0 ? collectedThisMonthAgg[0].total : 0;
-    // Money still owed by students for the current month.
-    const pendingStudentFees = Math.max(0, expectedMonthlyFees - collectedThisMonth);
+    const totalIncome = totalIncomeAgg.length > 0 ? totalIncomeAgg[0].total : 0;
+    const totalExpenses = totalExpensesAgg.length > 0 ? totalExpensesAgg[0].total : 0;
+    const totalSalaries = totalSalariesAgg.length > 0 ? totalSalariesAgg[0].total : 0;
+    const studentFeesCollected = feeTotals.collected;
+    const expectedStudentFees = feeTotals.expected;
+    const pendingStudentFees = feeTotals.pending;
 
     const responsePayload = {
         kpis: {
@@ -112,12 +112,14 @@ const getDashboardData = asyncHandler(async (req, res) => {
             totalTeachers,
             totalClasses,
             totalGuardians,
-            monthlyIncome,
-            monthlyExpenses,
-            walletBalance,
-            expectedMonthlyFees,
-            collectedThisMonth,
+            studentFeesCollected,
+            totalIncome,
             pendingStudentFees,
+            totalExpenses,
+            totalSalaries,
+            expectedStudentFees,
+            advanceStudentFees,
+            advanceSalaries,
             todayStudentAttendance,
             todayTeacherAttendance
         },

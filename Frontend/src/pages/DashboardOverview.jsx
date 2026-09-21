@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Activity, AlertCircle, AlertTriangle, ArrowRight, ArrowRightLeft, BookOpen,
-    DollarSign, Download, Plus, Send, ShieldCheck, UserCheck, Users, Wallet, CalendarCheck, CreditCard, Receipt
+    DollarSign, Download, Plus, Send, ShieldCheck, UserCheck, Users, Wallet, CalendarCheck, CreditCard, Receipt,
+    CalendarClock, Coins
 } from 'lucide-react';
 import KPICard from './KPICard';
 import api from '../services/api';
@@ -135,10 +136,13 @@ const DashboardOverview = () => {
                 <KPICard label="Total Teachers" value={kpis.totalTeachers || 0} icon={<UserCheck size={20} />} color="bg-violet-600" />
                 <KPICard label="Total Classes" value={kpis.totalClasses || 0} icon={<BookOpen size={20} />} color="bg-blue-600" />
                 <KPICard label="Total Guardians" value={kpis.totalGuardians || 0} icon={<Users size={20} />} color="bg-amber-500" />
-                <KPICard label="Monthly Income" value={`$${(kpis.monthlyIncome || 0).toLocaleString()}`} icon={<DollarSign size={20} />} color="bg-teal-500" />
-                <KPICard label="Monthly Expenses" value={`$${(kpis.monthlyExpenses || 0).toLocaleString()}`} icon={<ArrowRightLeft size={20} />} color="bg-rose-500" />
-                <KPICard label="Wallet Balance" value={`$${(kpis.walletBalance || 0).toLocaleString()}`} icon={<Wallet size={20} />} color="bg-emerald-600" />
+                <KPICard label="Student Fees Collected" value={`$${(kpis.studentFeesCollected || 0).toLocaleString()}`} icon={<Receipt size={20} />} color="bg-teal-500" />
+                <KPICard label="Total Income" value={`$${(kpis.totalIncome || 0).toLocaleString()}`} icon={<DollarSign size={20} />} color="bg-emerald-600" />
                 <KPICard label="Pending Student Fees" value={`$${(kpis.pendingStudentFees || 0).toLocaleString()}`} icon={<CreditCard size={20} />} color="bg-purple-600" />
+                <KPICard label="Total Expenses" value={`$${(kpis.totalExpenses || 0).toLocaleString()}`} icon={<ArrowRightLeft size={20} />} color="bg-rose-500" />
+                <KPICard label="Total Salaries" value={`$${(kpis.totalSalaries || 0).toLocaleString()}`} icon={<Wallet size={20} />} color="bg-amber-600" />
+                <KPICard label="Advance Student Fees" value={`$${(kpis.advanceStudentFees || 0).toLocaleString()}`} icon={<CalendarClock size={20} />} color="bg-cyan-600" />
+                <KPICard label="Advance Salaries" value={`$${(kpis.advanceSalaries || 0).toLocaleString()}`} icon={<Coins size={20} />} color="bg-orange-600" />
                 <KPICard label="Student Attendance Today" value={kpis.todayStudentAttendance || 0} icon={<CalendarCheck size={20} />} color="bg-brand-500" />
                 <KPICard label="Teacher Attendance Today" value={kpis.todayTeacherAttendance || 0} icon={<CalendarCheck size={20} />} color="bg-pink-500" />
             </div>
