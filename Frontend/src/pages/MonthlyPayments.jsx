@@ -205,55 +205,97 @@ const MonthlyPayments = () => {
             padding: 0 !important;
             overflow: visible !important;
           }
+          .print-header-banner {
+            background-color: #020617 !important;
+            color: #ffffff !important;
+            padding: 6px 8px !important;
+            margin-bottom: 4px !important;
+            border-radius: 2px !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .print-header-banner h1,
+          .print-header-banner h2,
+          .print-header-banner p,
+          .print-header-banner span,
+          .print-header-banner div {
+            color: #ffffff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .print-header-banner .report-accent {
+            color: #86efac !important;
+            font-weight: 900 !important;
+          }
           .print-compact-table {
             border-collapse: collapse !important;
             width: 100% !important;
             margin: 0 !important;
           }
           .print-compact-table th {
-            padding: 2px 4px !important;
+            padding: 3px 5px !important;
             font-size: 7.5pt !important;
-            background-color: #f1f5f9 !important;
-            color: #0f172a !important;
-            border: 0.5px solid #cbd5e1 !important;
+            background-color: #0f172a !important;
+            color: #ffffff !important;
+            border: 0.5px solid #0f172a !important;
             font-weight: 800 !important;
             line-height: 1.1 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .print-compact-table th * {
+            color: #ffffff !important;
           }
           .print-compact-table td {
-            padding: 1.5px 4px !important;
+            padding: 2px 5px !important;
             font-size: 8pt !important;
             line-height: 1.1 !important;
-            border: 0.5px solid #e2e8f0 !important;
+            border: 0.5px solid #cbd5e1 !important;
             color: #0f172a !important;
           }
           .print-compact-table tr {
             page-break-inside: avoid !important;
           }
+          .print-summary-row {
+            background-color: #0f172a !important;
+            color: #ffffff !important;
+            font-weight: 900 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .print-summary-row td {
+            color: #ffffff !important;
+            background-color: #0f172a !important;
+            border: 0.5px solid #0f172a !important;
+          }
+          .print-summary-row td * {
+            color: #ffffff !important;
+          }
         }
       `}</style>
 
-      {/* Printable Header Banner (Only visible on paper / print preview) */}
-      <div className="hidden print:block mb-1 border-b border-slate-900 pb-1 text-black">
+      {/* Printable Header Banner (Front of paper - all white text on dark card) */}
+      <div className="hidden print:block print-header-banner">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xs font-black uppercase tracking-tight text-slate-950 leading-none">
+            <h1 className="text-[11pt] font-black uppercase tracking-tight text-white leading-tight">
               CUMAR BINU KHADHAAB - INSTITUTE MANAGEMENT
             </h1>
-            <h2 className="text-[10px] font-extrabold text-slate-800 uppercase mt-0.5 leading-none">
+            <h2 className="text-[8.5pt] font-extrabold text-white report-accent uppercase mt-0.5 leading-tight">
               {statusFilter === 'paid'
                 ? 'LIISKA ARDAYDA & WAALIDIINTA LACAGTA BIXIYEY (FEES COLLECTED)'
                 : statusFilter === 'pending'
                 ? 'LIISKA ARDAYDA & WAALIDIINTA DEYNTA KU DHIMAN TAHAY (PENDING FEES)'
                 : 'WARBIXINTA GUUD EE BIXINTA LACAGAHA (TUITION PAYMENTS REPORT)'}
             </h2>
-            <p className="text-[8px] text-slate-600 mt-0.5">
-              Wareegga: <span className="font-bold">{cycleLabel(monthKey)}</span> · Daabacay: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            <p className="text-[7.5pt] text-white mt-0.5">
+              Wareegga: <span className="font-bold text-white">{cycleLabel(monthKey)}</span> · Daabacay: <span className="text-white">{new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </p>
           </div>
-          <div className="text-right text-[8px] leading-tight">
-            <p className="font-bold">Wadarta La Bixiyey: <span className="font-black">${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.paidAmount || 0), 0))}</span></p>
-            <p className="font-bold">Wadarta Guud: <span className="font-black">${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.totalFee || 0), 0))}</span></p>
-            <p className="font-bold">Tirada Payer-ka: <span className="font-black">{filtered.length}</span></p>
+          <div className="text-right text-[7.5pt] leading-tight text-white">
+            <p className="font-bold text-white">Wadarta La Bixiyey: <span className="font-black text-white report-accent">${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.paidAmount || 0), 0))}</span></p>
+            <p className="font-bold text-white">Wadarta Guud: <span className="font-black text-white">${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.totalFee || 0), 0))}</span></p>
+            <p className="font-bold text-white">Tirada Payer-ka: <span className="font-black text-white">{filtered.length}</span></p>
           </div>
         </div>
       </div>
@@ -457,15 +499,15 @@ const MonthlyPayments = () => {
         <div className="overflow-x-auto print:overflow-visible">
           <table className="w-full text-left print-compact-table">
             <thead>
-              <tr className="bg-slate-50/70 dark:bg-slate-800/40 text-slate-400 text-[10px] font-black uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 print:text-[7.5pt] print:bg-slate-100 print:text-black">
+              <tr className="bg-slate-50/70 dark:bg-slate-800/40 text-slate-400 text-[10px] font-black uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 print:text-[7.5pt] print:bg-slate-900 print:text-white">
                 <th className="px-4 py-4 w-10 print:hidden"></th>
-                <th className="px-5 py-4 print:px-1.5 print:py-1 print:text-[8pt] print:text-black">Payer Name (Lacag-bixiyaha)</th>
-                <th className="px-5 py-4 print:px-1.5 print:py-1 print:text-[8pt] print:text-black">Phone Numbers</th>
-                <th className="px-5 py-4 text-center print:px-1.5 print:py-1 print:text-[8pt] print:text-black">Students</th>
-                <th className="px-5 py-4 text-right print:px-1.5 print:py-1 print:text-[8pt] print:text-black">Fee (Wadarta)</th>
-                <th className="px-5 py-4 text-right print:px-1.5 print:py-1 print:text-[8pt] print:text-black">Paid (La Bixiyey)</th>
-                <th className="px-5 py-4 text-right print:px-1.5 print:py-1 print:text-[8pt] print:text-black">Remaining (Dhiman)</th>
-                <th className="px-5 py-4 text-center print:px-1.5 print:py-1 print:text-[8pt] print:text-black">Status</th>
+                <th className="px-5 py-4 print:px-1.5 print:py-1 print:text-[8pt] print:text-white">Payer Name (Lacag-bixiyaha)</th>
+                <th className="px-5 py-4 print:px-1.5 print:py-1 print:text-[8pt] print:text-white">Phone Numbers</th>
+                <th className="px-5 py-4 text-center print:px-1.5 print:py-1 print:text-[8pt] print:text-white">Students</th>
+                <th className="px-5 py-4 text-right print:px-1.5 print:py-1 print:text-[8pt] print:text-white">Fee (Wadarta)</th>
+                <th className="px-5 py-4 text-right print:px-1.5 print:py-1 print:text-[8pt] print:text-white">Paid (La Bixiyey)</th>
+                <th className="px-5 py-4 text-right print:px-1.5 print:py-1 print:text-[8pt] print:text-white">Remaining (Dhiman)</th>
+                <th className="px-5 py-4 text-center print:px-1.5 print:py-1 print:text-[8pt] print:text-white">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 print:divide-slate-300">
@@ -680,23 +722,23 @@ const MonthlyPayments = () => {
               )}
 
               {/* Compact Print Summary Row (Only on paper) */}
-              <tr className="hidden print:table-row font-black bg-slate-100 text-black border-t-2 border-slate-900">
-                <td colSpan={3} className="px-1.5 py-0.5 text-right uppercase text-[8pt] text-black">
+              <tr className="hidden print:table-row font-black print-summary-row border-t-2 border-slate-950">
+                <td colSpan={3} className="px-1.5 py-1 text-right uppercase text-[8pt] text-white">
                   Wadarta Guud ee Liiska:
                 </td>
-                <td className="px-1.5 py-0.5 text-center text-[8pt] text-black">
+                <td className="px-1.5 py-1 text-center text-[8pt] text-white">
                   {filtered.reduce((sum, p) => sum + Number(p.studentCount || 0), 0)}
                 </td>
-                <td className="px-1.5 py-0.5 text-right text-[8pt] text-black">
+                <td className="px-1.5 py-1 text-right text-[8pt] text-white">
                   ${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.totalFee || 0), 0))}
                 </td>
-                <td className="px-1.5 py-0.5 text-right text-[8pt] text-emerald-900">
+                <td className="px-1.5 py-1 text-right text-[8pt] text-white">
                   ${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.paidAmount || 0), 0))}
                 </td>
-                <td className="px-1.5 py-0.5 text-right text-[8pt] text-rose-900">
+                <td className="px-1.5 py-1 text-right text-[8pt] text-white">
                   ${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.remaining !== undefined ? p.remaining : Math.max(0, p.totalFee - (p.paidAmount || 0))), 0))}
                 </td>
-                <td className="px-1.5 py-0.5 text-center text-[7.5pt] text-black">
+                <td className="px-1.5 py-1 text-center text-[7.5pt] text-white">
                   {filtered.length} Payers
                 </td>
               </tr>
