@@ -402,7 +402,7 @@ const MonthlyPayments = () => {
         <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Wadarta La Filayo (Expected)
+              Total Fees Due
             </span>
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
               <DollarSign size={18} />

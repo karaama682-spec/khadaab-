@@ -1019,6 +1019,213 @@ const computeAdvanceSalaryTotal = async (cycle = currentCycle()) => {
     return rows.length ? rows[0].total : 0;
 };
 
+// The payer (fee-responsible person) shown for a student: the linked guardian's
+// name, else the denormalised father name.
+const payerNameOf = (student) => {
+    const g = student && student.guardianId && typeof student.guardianId === 'object' ? student.guardianId : null;
+    return (g && g.fullName) || student?.fatherName || '—';
+};
+
+// ---------------------------------------------------------------------------
+// FINANCE CARD DETAIL — the record-level rows behind each Dashboard finance card.
+// Every branch below reuses the SAME source + filter as the matching total, so a
+// report's summed rows always equal the card's headline figure. Institute-wide:
+// no branchId filter is ever applied. `columns` describes the report layout (and
+// which columns are money/date) so the frontend and print view render generically.
+// ---------------------------------------------------------------------------
+const financeCardDetail = async (cardKey, cycle = currentCycle()) => {
+    const num = (v) => Number(v) || 0;
+    const sumRows = (rows) => rows.reduce((a, r) => a + num(r.amount), 0);
+
+    switch (cardKey) {
+        // 1. Student Fees Collected — the same completed payments computeFeeTotals
+        // sums as `collected` (current-cycle payments for the active student set).
+        case 'studentFeesCollected': {
+            const { students } = await fetchStudentFeeData(cycle, { registrationBound: true });
+            const byId = new Map(students.map((s) => [String(s._id), s]));
+            const studentIds = students.map((s) => s._id);
+            const payments = studentIds.length
+                ? await Payment.find({
+                    studentId: { $in: studentIds }, status: 'Completed',
+                    ...cycleMatch('billingCycle', 'paymentDate', cycle)
+                }).select('studentId amount paymentDate billingCycle').sort({ paymentDate: 1 }).lean()
+                : [];
+            const rows = payments.map((p) => {
+                const s = byId.get(String(p.studentId));
+                return {
+                    studentName: s?.fullName || '—',
+                    studentId: s?.studentCode || String(p.studentId),
+                    payer: payerNameOf(s),
+                    amount: num(p.amount),
+                    paymentDate: p.paymentDate || null,
+                    billingCycle: p.billingCycle || cycle
+                };
+            });
+            return {
+                title: 'Student Fees Collected',
+                columns: [
+                    { key: 'studentName', label: 'Student Name' },
+                    { key: 'studentId', label: 'Student ID' },
+                    { key: 'payer', label: 'Payer' },
+                    { key: 'amount', label: 'Amount', money: true },
+                    { key: 'paymentDate', label: 'Payment Date', date: true },
+                    { key: 'billingCycle', label: 'Billing Cycle' }
+                ],
+                rows,
+                total: sumRows(rows)
+            };
+        }
+
+        // 3. Pending Student Fees — same active student set + paid map as
+        // computeFeeTotals; pending = max(0, fee - paid), summed = `pending`.
+        case 'pendingStudentFees': {
+            const { students, paidByStudent } = await fetchStudentFeeData(cycle, { registrationBound: true });
+            const rows = [];
+            for (const s of students) {
+                const fee = num(s.monthlyFee || s.fee);
+                const paid = paidByStudent.get(String(s._id)) || 0;
+                const pending = Math.max(0, fee - paid);
+                if (pending <= 0) continue;
+                rows.push({
+                    studentName: s.fullName || '—',
+                    studentId: s.studentCode || String(s._id),
+                    monthlyFee: fee,
+                    paidAmount: paid,
+                    amount: pending, // the report's summed column = pending total
+                    payer: payerNameOf(s)
+                });
+            }
+            return {
+                title: 'Pending Student Fees',
+                columns: [
+                    { key: 'studentName', label: 'Student Name' },
+                    { key: 'studentId', label: 'Student ID' },
+                    { key: 'monthlyFee', label: 'Monthly Fee', money: true },
+                    { key: 'paidAmount', label: 'Paid', money: true },
+                    { key: 'amount', label: 'Pending', money: true },
+                    { key: 'payer', label: 'Payer' }
+                ],
+                rows,
+                total: sumRows(rows)
+            };
+        }
+
+        // 6. Advance Student Fees — completed payments attributed to a FUTURE cycle
+        // (computeAdvanceFeeTotal). billingCycle > cycle, institute-wide.
+        case 'advanceStudentFees': {
+            const payments = await Payment.find({ status: 'Completed', billingCycle: { $gt: cycle } })
+                .select('studentId amount paymentDate billingCycle')
+                .populate({ path: 'studentId', select: 'fullName studentCode fatherName guardianId', populate: { path: 'guardianId', select: 'fullName' } })
+                .sort({ billingCycle: 1, paymentDate: 1 })
+                .lean();
+            const rows = payments.map((p) => {
+                const s = p.studentId && typeof p.studentId === 'object' ? p.studentId : null;
+                return {
+                    studentName: s?.fullName || '—',
+                    studentId: s?.studentCode || String(p.studentId || '—'),
+                    payer: payerNameOf(s),
+                    amount: num(p.amount),
+                    paymentDate: p.paymentDate || null,
+                    billingCycle: p.billingCycle || '—'
+                };
+            });
+            return {
+                title: 'Advance Student Fees',
+                columns: [
+                    { key: 'studentName', label: 'Student Name' },
+                    { key: 'studentId', label: 'Student ID' },
+                    { key: 'payer', label: 'Payer' },
+                    { key: 'amount', label: 'Amount', money: true },
+                    { key: 'paymentDate', label: 'Payment Date', date: true },
+                    { key: 'billingCycle', label: 'Future Billing Cycle' }
+                ],
+                rows,
+                total: sumRows(rows)
+            };
+        }
+
+        // 5. Total Salaries — Paid salaries attributed to the current cycle (same
+        // filter as totalSalariesAgg).
+        case 'totalSalaries':
+        // 7. Advance Salaries — Paid salaries attributed to a FUTURE cycle.
+        case 'advanceSalaries': {
+            const isAdvance = cardKey === 'advanceSalaries';
+            const match = isAdvance
+                ? { status: 'Paid', billingCycle: { $gt: cycle } }
+                : { status: 'Paid', ...cycleMatch('billingCycle', 'paymentDate', cycle) };
+            const salaries = await Salary.find(match)
+                .select('teacherId amount paymentDate billingCycle status')
+                .populate('teacherId', 'fullName')
+                .sort({ paymentDate: 1 })
+                .lean();
+            const rows = salaries.map((s) => ({
+                employee: (s.teacherId && s.teacherId.fullName) || '—',
+                amount: num(s.amount),
+                paymentDate: s.paymentDate || null,
+                billingCycle: s.billingCycle || cycle,
+                status: s.status || 'Paid'
+            }));
+            return {
+                title: isAdvance ? 'Advance Salaries' : 'Total Salaries',
+                columns: [
+                    { key: 'employee', label: 'Employee / Teacher' },
+                    { key: 'amount', label: 'Amount', money: true },
+                    { key: 'paymentDate', label: 'Payment Date', date: true },
+                    { key: 'billingCycle', label: isAdvance ? 'Future Billing Cycle' : 'Billing Cycle' },
+                    { key: 'status', label: 'Status' }
+                ],
+                rows,
+                total: sumRows(rows)
+            };
+        }
+
+        // 2. Total Income / 4. Total Expenses — the Transaction ledger, the single
+        // source of truth, filtered by type + date within the current cycle (same
+        // filter as totalIncomeAgg / totalExpensesAgg). Institute-wide.
+        case 'totalIncome':
+        case 'totalExpenses': {
+            const isIncome = cardKey === 'totalIncome';
+            const { start, end } = cycleRange(cycle);
+            const txns = await Transaction.find({ type: isIncome ? 'Income' : 'Expense', date: { $gte: start, $lte: end } })
+                .select('date description amount referenceId walletId')
+                .populate('walletId', 'name')
+                .sort({ date: 1 })
+                .lean();
+            const rows = txns.map((t) => ({
+                date: t.date || null,
+                description: t.description || '—',
+                wallet: (t.walletId && t.walletId.name) || '—',
+                amount: num(t.amount),
+                reference: t.referenceId ? String(t.referenceId) : '—'
+            }));
+            const columns = isIncome
+                ? [
+                    { key: 'date', label: 'Date', date: true },
+                    { key: 'description', label: 'Category / Description' },
+                    { key: 'wallet', label: 'Receiver / Wallet' },
+                    { key: 'amount', label: 'Amount', money: true },
+                    { key: 'reference', label: 'Reference' }
+                ]
+                : [
+                    { key: 'date', label: 'Date', date: true },
+                    { key: 'description', label: 'Category / Description' },
+                    { key: 'wallet', label: 'Sender / Wallet' },
+                    { key: 'amount', label: 'Amount', money: true },
+                    { key: 'reference', label: 'Reference' }
+                ];
+            return {
+                title: isIncome ? 'Total Income' : 'Total Expenses',
+                columns,
+                rows,
+                total: sumRows(rows)
+            };
+        }
+
+        default:
+            return null;
+    }
+};
+
 // One row per responsible payer (father / guardian): name, number, how many
 // students they cover, the total monthly fee, and whether it's fully paid this month.
 const getPayers = asyncHandler(async (req, res) => {
