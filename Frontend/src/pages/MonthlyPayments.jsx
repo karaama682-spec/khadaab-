@@ -17,6 +17,18 @@ const MONTH_NAMES = [
 ];
 
 /**
+ * Format person names cleanly with proper capitalization and elegant typography.
+ */
+const formatPersonName = (str) => {
+  if (!str || typeof str !== 'string') return '—';
+  return str
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+};
+
+/**
  * Monthly payment view.
  *
  * Reads the /cashbook/payers endpoint for a given billing cycle.
@@ -193,9 +205,17 @@ const MonthlyPayments = () => {
             background: #ffffff !important;
             color: #000000 !important;
             font-size: 8pt !important;
+            font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif !important;
             margin: 0 !important;
             padding: 0 !important;
             width: 100% !important;
+          }
+          .person-name-print {
+            font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif !important;
+            font-weight: 800 !important;
+            color: #000000 !important;
+            text-transform: capitalize !important;
+            letter-spacing: -0.01em !important;
           }
           aside, nav, header, footer, .print\\:hidden {
             display: none !important;
@@ -531,11 +551,22 @@ const MonthlyPayments = () => {
                       <td className="px-4 py-4 text-slate-400 print:hidden">
                         {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                       </td>
-                      <td className="px-5 py-4 text-sm font-bold text-slate-900 dark:text-slate-100 print:px-1.5 print:py-0.5 print:text-[8pt] print:text-black">
-                        {p.name}
-                        {p.relationship && (
-                          <span className="block text-[10px] text-slate-400 font-semibold uppercase print:text-[7pt] print:text-slate-600 leading-tight">{p.relationship}</span>
-                        )}
+                      <td className="px-5 py-4 text-sm print:px-1.5 print:py-0.5 print:text-[8pt] print:text-black">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-brand-600 to-emerald-500 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-sm print:hidden select-none">
+                            {formatPersonName(p.name).charAt(0)}
+                          </div>
+                          <div className="leading-tight">
+                            <span className="font-bold tracking-tight capitalize text-slate-900 dark:text-white print:font-bold print:text-[8.5pt] print:text-black block person-name-print font-sans">
+                              {formatPersonName(p.name)}
+                            </span>
+                            {p.relationship && (
+                              <span className="inline-block text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider print:text-[7pt] print:text-slate-700 leading-none mt-0.5 font-sans">
+                                {p.relationship}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-5 py-4 text-sm font-semibold text-slate-600 dark:text-slate-300 print:px-1.5 print:py-0.5 print:text-[8pt] print:text-black">
                         <div className="flex flex-col gap-1.5 print:gap-0 leading-tight">
@@ -611,7 +642,7 @@ const MonthlyPayments = () => {
 
                                   return (
                                     <tr key={s.studentId}>
-                                      <td className="px-5 py-3 font-bold text-slate-800 dark:text-slate-200">{s.name}</td>
+                                      <td className="px-5 py-3 font-bold text-slate-800 dark:text-slate-200 capitalize font-sans">{formatPersonName(s.name)}</td>
                                       <td className="px-5 py-3 text-slate-500">{s.className || '—'}</td>
                                       <td className="px-5 py-3 text-right font-bold text-slate-900 dark:text-white tabular-nums">
                                         ${fmtMoney(sFee)}
