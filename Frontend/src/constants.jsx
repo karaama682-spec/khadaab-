@@ -42,6 +42,7 @@ export const NAV_CONFIG = [
       { label: 'Classes', translationKey: 'classes', path: '/academic/classes', icon: BookOpen },
       { label: 'Teachers', translationKey: 'teachers', path: '/academic/teachers', icon: GraduationCap },
       { label: 'Students', translationKey: 'students', path: '/academic/students', icon: Users },
+      { label: 'Guardians', translationKey: 'guardians', path: '/academic/guardians', icon: Users },
       { label: 'Exit Students', translationKey: 'exitStudents', path: '/academic/exit-students', icon: UserCheck },
       { label: 'Class Promotion', translationKey: 'classPromotion', path: '/academic/promotion', icon: UserCheck },
     ]

@@ -10,6 +10,7 @@ import DashboardOverview from './pages/DashboardOverview.jsx';
 import ClassesManagement from './pages/ClassesManagement.jsx';
 import TeachersManagement from './pages/TeachersManagement.jsx';
 import StudentsManagement from './pages/StudentsManagement.jsx';
+import GuardiansManagement from './pages/GuardiansManagement.jsx';
 import ExitStudents from './pages/ExitStudents.jsx';
 import StudentAttendanceManagement from './pages/StudentAttendanceManagement.jsx';
 import TeacherAttendanceManagement from './pages/TeacherAttendanceManagement.jsx';
@@ -271,6 +272,7 @@ const App = () => {
                   <Route path="/academic/classes" element={<ClassesManagement />} />
                   <Route path="/academic/teachers" element={<TeachersManagement />} />
                   <Route path="/academic/students" element={<StudentsManagement />} />
+                  <Route path="/academic/guardians" element={<GuardiansManagement />} />
                   <Route path="/academic/exit-students" element={<ExitStudents />} />
                   <Route path="/academic/promotion" element={<ClassPromotion />} />
 
