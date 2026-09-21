@@ -336,10 +336,10 @@ const MonthlyPayments = () => {
               Wareegga: <span className="font-bold text-black">{cycleLabel(monthKey)}</span> · Daabacay: <span className="text-black">{new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </p>
           </div>
-          <div className="text-right text-[7.5pt] leading-tight text-black">
-            <p className="font-bold text-black">Wadarta La Bixiyey: <span className="font-black text-black">${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.paidAmount || 0), 0))}</span></p>
-            <p className="font-bold text-black">Wadarta Guud: <span className="font-black text-black">${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.totalFee || 0), 0))}</span></p>
-            <p className="font-bold text-black">Tirada Payer-ka: <span className="font-black text-black">{filtered.length}</span></p>
+          <div className="text-right text-[8pt] leading-tight text-black">
+            <p className="font-bold text-black">
+              Wadarta Dhiman (Unpaid Total): <span className="font-black text-[9pt]">${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.remaining !== undefined ? p.remaining : Math.max(0, p.totalFee - (p.paidAmount || 0))), 0))}</span>
+            </p>
           </div>
         </div>
       </div>
@@ -776,26 +776,15 @@ const MonthlyPayments = () => {
                 </tr>
               )}
 
-              {/* Compact Print Summary Row (Only on paper) */}
+              {/* Compact Print Summary Row (Only on paper) - Only Unpaid Total */}
               <tr className="hidden print:table-row font-black print-summary-row border-t-2 border-black">
-                <td colSpan={3} className="px-1.5 py-1 text-right uppercase text-[8pt] text-black">
-                  Wadarta Guud ee Liiska:
+                <td colSpan={5} className="px-2 py-1 text-right uppercase text-[8pt] text-black font-extrabold">
+                  Wadarta Dhiman (Unpaid Total):
                 </td>
-                <td className="px-1.5 py-1 text-center text-[8pt] text-black">
-                  {filtered.reduce((sum, p) => sum + Number(p.studentCount || 0), 0)}
-                </td>
-                <td className="px-1.5 py-1 text-right text-[8pt] text-black">
-                  ${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.totalFee || 0), 0))}
-                </td>
-                <td className="px-1.5 py-1 text-right text-[8pt] text-black">
-                  ${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.paidAmount || 0), 0))}
-                </td>
-                <td className="px-1.5 py-1 text-right text-[8pt] text-black">
+                <td className="px-1.5 py-1 text-right text-[8.5pt] text-black font-black">
                   ${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.remaining !== undefined ? p.remaining : Math.max(0, p.totalFee - (p.paidAmount || 0))), 0))}
                 </td>
-                <td className="px-1.5 py-1 text-center text-[7.5pt] text-black">
-                  {filtered.length} Payers
-                </td>
+                <td className="px-1.5 py-1"></td>
               </tr>
             </tbody>
           </table>
