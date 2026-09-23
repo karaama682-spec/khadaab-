@@ -994,6 +994,58 @@ const computeFeeTotals = async (cycle = currentCycle()) => {
     return { cycle, expected, collected, pending };
 };
 
+// Debt carried over from EARLIER billing cycles: for every cycle before `cycle`,
+// Σ max(0, fee − paid) — exactly computeFeeTotals' `pending` rule applied to each
+// past cycle and summed (same active student set, same "registered by the cycle's
+// end" rule, same payment attribution as cycleMatch: billingCycle key, else the
+// cycle of paymentDate). Once a cycle ends its unpaid amount leaves the current
+// `pending` and lands here; a later payment targeted at that cycle reduces it.
+// Counting starts at the first cycle with any completed fee payment, so cycles
+// from before the system was in use are never counted as debt.
+const computePreviousDebt = async (cycle = currentCycle()) => {
+    const [firstByDate, firstByKey] = await Promise.all([
+        Payment.findOne({ status: 'Completed', paymentDate: { $ne: null } }).sort({ paymentDate: 1 }).select('paymentDate').lean(),
+        Payment.findOne({ status: 'Completed', billingCycle: { $nin: [null, ''] } }).sort({ billingCycle: 1 }).select('billingCycle').lean()
+    ]);
+    const starts = [
+        firstByDate && cycleKeyForDate(firstByDate.paymentDate),
+        firstByKey && firstByKey.billingCycle
+    ].filter(Boolean).sort();
+    const firstCycle = starts[0];
+    if (!firstCycle || firstCycle >= cycle) return 0;
+
+    const { end: lastEnd } = cycleRange(addCycles(cycle, -1));
+    const students = await Student.find({
+        status: { $nin: ['Inactive', 'Exited'] },
+        registrationDate: { $lte: lastEnd }
+    }).select('monthlyFee fee registrationDate').lean();
+    if (!students.length) return 0;
+
+    const payments = await Payment.find({
+        studentId: { $in: students.map((s) => s._id) },
+        status: 'Completed'
+    }).select('studentId amount billingCycle paymentDate').lean();
+
+    const paidByStudentCycle = new Map();
+    for (const p of payments) {
+        const key = p.billingCycle || (p.paymentDate ? cycleKeyForDate(p.paymentDate) : null);
+        if (!key || key >= cycle) continue;
+        const k = `${p.studentId}|${key}`;
+        paidByStudentCycle.set(k, (paidByStudentCycle.get(k) || 0) + (Number(p.amount) || 0));
+    }
+
+    let debt = 0;
+    for (const s of students) {
+        const fee = Number(s.monthlyFee || s.fee || 0);
+        if (fee <= 0) continue;
+        const regCycle = cycleKeyForDate(s.registrationDate);
+        for (let c = regCycle > firstCycle ? regCycle : firstCycle; c < cycle; c = addCycles(c, 1)) {
+            debt += Math.max(0, fee - (paidByStudentCycle.get(`${s._id}|${c}`) || 0));
+        }
+    }
+    return debt;
+};
+
 // The payer (fee-responsible person) shown for a student: the linked guardian's
 // name, else the denormalised father name.
 const payerNameOf = (student) => {
@@ -1315,5 +1367,6 @@ module.exports = {
     lookupPhone,
     getPayers,
     togglePayer,
-    computeFeeTotals
+    computeFeeTotals,
+    computePreviousDebt
 };
