@@ -8,8 +8,8 @@ const Transaction = require('../models/Transaction');
 const StudentAttendance = require('../models/StudentAttendance');
 const TeacherAttendance = require('../models/TeacherAttendance');
 const Notification = require('../models/Notification');
-const { currentCycle, cycleRange, cycleMatch } = require('../utils/billingCycle');
-const { computeFeeTotals, computeAdvanceFeeTotal, computeAdvanceSalaryTotal } = require('./cashbookController');
+const { currentCycle, previousCycle, cycleRange, cycleMatch } = require('../utils/billingCycle');
+const { computeFeeTotals } = require('./cashbookController');
 
 // In-memory cache to prevent re-running 13 aggregations on every dashboard visit
 const dashboardCache = new Map();
@@ -53,8 +53,7 @@ const getDashboardData = asyncHandler(async (req, res) => {
         totalExpensesAgg,
         totalSalariesAgg,
         feeTotals,
-        advanceStudentFees,
-        advanceSalaries,
+        previousFeeTotals,
         todayStudentAttendance,
         todayTeacherAttendance,
         recentTransactions,
@@ -88,11 +87,9 @@ const getDashboardData = asyncHandler(async (req, res) => {
         // Student Fees Collected + Pending: reuse the exact Monthly-Payments
         // calculation (shared computeFeeTotals) so Dashboard and Finance agree.
         computeFeeTotals(cycle),
-        // Advance cards (institute-wide): fees/salaries attributed to a FUTURE
-        // billing cycle. Reuse the shared Finance helpers — the same billingCycle
-        // "> current cycle" rule the rest of the system uses for advances.
-        computeAdvanceFeeTotal(cycle),
-        computeAdvanceSalaryTotal(cycle),
+        // Previous Month Debt: the same shared fee calculation run for the
+        // PREVIOUS billing cycle — its `pending` is what was left unpaid then.
+        computeFeeTotals(previousCycle(cycle)),
         StudentAttendance.countDocuments({ ...branchQuery, date: { $gte: startOfToday, $lte: endOfToday }, status: 'Present' }),
         TeacherAttendance.countDocuments({ ...branchQuery, date: { $gte: startOfToday, $lte: endOfToday }, status: 'Present' }),
         Transaction.find(branchQuery).sort({ date: -1 }).limit(10).lean(),
@@ -105,6 +102,7 @@ const getDashboardData = asyncHandler(async (req, res) => {
     const studentFeesCollected = feeTotals.collected;
     const expectedStudentFees = feeTotals.expected;
     const pendingStudentFees = feeTotals.pending;
+    const previousMonthDebt = previousFeeTotals.pending;
 
     const responsePayload = {
         kpis: {
@@ -118,8 +116,7 @@ const getDashboardData = asyncHandler(async (req, res) => {
             totalExpenses,
             totalSalaries,
             expectedStudentFees,
-            advanceStudentFees,
-            advanceSalaries,
+            previousMonthDebt,
             todayStudentAttendance,
             todayTeacherAttendance
         },

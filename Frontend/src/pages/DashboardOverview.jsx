@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import {
     Activity, AlertCircle, AlertTriangle, ArrowRight, ArrowRightLeft, BookOpen,
     DollarSign, Plus, ShieldCheck, UserCheck, Users, Wallet, CalendarCheck, CreditCard, Receipt,
-    CalendarClock, Coins, RefreshCw, X, ExternalLink, Sparkles, Filter, CheckCircle2
+    RefreshCw, X, ExternalLink, Sparkles, Filter, CheckCircle2
 } from 'lucide-react';
 import KPICard from './KPICard';
 import api, { clearApiCache } from '../services/api';
-import { currentCycle, cycleLabel } from '../utils/billingCycle';
+import { currentCycle, previousCycle, cycleLabel } from '../utils/billingCycle';
 
 const DashboardOverview = () => {
     const navigate = useNavigate();
@@ -76,6 +76,9 @@ const DashboardOverview = () => {
     const today = new Date();
     const cycle = currentCycle();
     const billingCycleName = cycleLabel(cycle);
+    const previousCycleName = cycleLabel(previousCycle(cycle));
+    const balance = (kpis.totalIncome || 0) - (kpis.totalExpenses || 0);
+    const fmtSignedMoney = (n) => `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString()}`;
 
     const quickActions = [
         { title: 'Add Student', subtitle: 'Register new student', icon: Plus, path: '/academic/students' },
@@ -158,6 +161,24 @@ const DashboardOverview = () => {
             actionText: 'Maamul Waalidiinta'
         },
         {
+            id: 'total-fees-due',
+            category: 'finance',
+            label: 'Total Fees Due',
+            somaliLabel: 'Wadarta Lacagaha Ardayda La Filayo',
+            value: `$${(kpis.expectedStudentFees || 0).toLocaleString()}`,
+            rawValue: kpis.expectedStudentFees || 0,
+            icon: <DollarSign size={20} />,
+            color: 'bg-blue-600',
+            badge: 'Billing Cycle',
+            badgeColor: 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300',
+            path: '/finance/monthly-payments',
+            description: billingCycleName,
+            explanation: `Wadarta lacagaha waxbarashada ee laga filayo dhammaan ardayda firfircoon wareeggan (${billingCycleName}) — isku-darka khidmadda bishii ee arday kasta. Waa isla tirada Monthly Payments.`,
+            statLabel: 'La Qaaday / Ku Dhiman',
+            statValue: `$${(kpis.studentFeesCollected || 0).toLocaleString()} / $${(kpis.pendingStudentFees || 0).toLocaleString()}`,
+            actionText: 'Fur Monthly Payments'
+        },
+        {
             id: 'fees-collected',
             category: 'finance',
             label: 'Student Fees Collected',
@@ -175,24 +196,6 @@ const DashboardOverview = () => {
             statValue: `$${(kpis.expectedStudentFees || 0).toLocaleString()}`,
             progress: kpis.expectedStudentFees ? ((kpis.studentFeesCollected || 0) / kpis.expectedStudentFees) * 100 : undefined,
             actionText: 'Eeg Dadka Bixiyey (Only Paid)'
-        },
-        {
-            id: 'total-income',
-            category: 'finance',
-            label: 'Total Income',
-            somaliLabel: 'Dakhliga Guud ee Soo Galay',
-            value: `$${(kpis.totalIncome || 0).toLocaleString()}`,
-            rawValue: kpis.totalIncome || 0,
-            icon: <DollarSign size={20} />,
-            color: 'bg-emerald-600',
-            badge: 'Finance Truth',
-            badgeColor: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
-            path: '/finance/cashbook',
-            description: billingCycleName,
-            explanation: `Dhammaan lacagaha dakhliga ah ee soo galay nidaamka wareeggan (${billingCycleName}): Lacagaha ardayda ($${(kpis.studentFeesCollected || 0).toLocaleString()}) + Dakhliyada kale ($${Math.max(0, (kpis.totalIncome || 0) - (kpis.studentFeesCollected || 0)).toLocaleString()}).`,
-            statLabel: 'Dakhliga Kale',
-            statValue: `$${Math.max(0, (kpis.totalIncome || 0) - (kpis.studentFeesCollected || 0)).toLocaleString()}`,
-            actionText: 'Fur Diiwaanka Cashbook-ka'
         },
         {
             id: 'pending-fees',
@@ -213,6 +216,24 @@ const DashboardOverview = () => {
             actionText: 'Eeg Dadka aan Bixin (Only Pending)'
         },
         {
+            id: 'total-income',
+            category: 'finance',
+            label: 'Total Income',
+            somaliLabel: 'Dakhliga Guud ee Soo Galay',
+            value: `$${(kpis.totalIncome || 0).toLocaleString()}`,
+            rawValue: kpis.totalIncome || 0,
+            icon: <DollarSign size={20} />,
+            color: 'bg-emerald-600',
+            badge: 'Finance Truth',
+            badgeColor: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
+            path: '/finance/cashbook',
+            description: billingCycleName,
+            explanation: `Dhammaan lacagaha dakhliga ah ee soo galay nidaamka wareeggan (${billingCycleName}): Lacagaha ardayda ($${(kpis.studentFeesCollected || 0).toLocaleString()}) + Dakhliyada kale ($${Math.max(0, (kpis.totalIncome || 0) - (kpis.studentFeesCollected || 0)).toLocaleString()}).`,
+            statLabel: 'Dakhliga Kale',
+            statValue: `$${Math.max(0, (kpis.totalIncome || 0) - (kpis.studentFeesCollected || 0)).toLocaleString()}`,
+            actionText: 'Fur Diiwaanka Cashbook-ka'
+        },
+        {
             id: 'total-expenses',
             category: 'finance',
             label: 'Total Expenses',
@@ -231,58 +252,42 @@ const DashboardOverview = () => {
             actionText: 'Maamul Kharashaadka'
         },
         {
-            id: 'total-salaries',
+            id: 'balance',
             category: 'finance',
-            label: 'Total Salaries',
-            somaliLabel: 'Mushaharka Guud ee La Bixiyay',
-            value: `$${(kpis.totalSalaries || 0).toLocaleString()}`,
-            rawValue: kpis.totalSalaries || 0,
+            label: 'Balance',
+            somaliLabel: 'Haraaga (Dakhli − Kharash)',
+            value: fmtSignedMoney(balance),
+            rawValue: balance,
             icon: <Wallet size={20} />,
-            color: 'bg-amber-600',
-            badge: 'Payroll',
-            badgeColor: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
-            path: '/finance/salaries',
+            color: balance < 0 ? 'bg-rose-600' : 'bg-emerald-700',
+            badge: balance < 0 ? 'Deficit' : 'Net',
+            badgeColor: balance < 0
+                ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+                : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
+            path: '/finance/cashbook',
             description: billingCycleName,
-            explanation: `Wadarta mushaharka macallimiinta iyo shaqaalaha ee la bixiyay wareeggan dhexdiisa. Waa qeyb toos ah oo ka mid ah Kharashaadka Guud.`,
-            statLabel: 'Heerka Kharashaadka',
-            statValue: kpis.totalExpenses ? `${Math.round(((kpis.totalSalaries || 0) / kpis.totalExpenses) * 100)}% Kharashka` : '0%',
-            actionText: 'Eeg Liiska Mushaharka'
+            explanation: `Haraaga wareeggan (${billingCycleName}): Dakhliga Guud ($${(kpis.totalIncome || 0).toLocaleString()}) oo laga jaray Kharashaadka Guud ($${(kpis.totalExpenses || 0).toLocaleString()}).`,
+            statLabel: 'Dakhli / Kharash',
+            statValue: `$${(kpis.totalIncome || 0).toLocaleString()} / $${(kpis.totalExpenses || 0).toLocaleString()}`,
+            actionText: 'Fur Diiwaanka Cashbook-ka'
         },
         {
-            id: 'advance-fees',
+            id: 'previous-month-debt',
             category: 'finance',
-            label: 'Advance Student Fees',
-            somaliLabel: 'Lacagaha Hormariska ah ee Ardayda',
-            value: `$${(kpis.advanceStudentFees || 0).toLocaleString()}`,
-            rawValue: kpis.advanceStudentFees || 0,
-            icon: <CalendarClock size={20} />,
-            color: 'bg-cyan-600',
-            badge: 'Future Cycle',
-            badgeColor: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-300',
-            path: '/finance/monthly-payments',
-            description: 'Wareegyada mustaqbalka',
-            explanation: 'Lacagaha ay ardaydu horay u bixiyeen ee khuseeya bilaha/wareegyada mustaqbalka. Xisaab ahaan looma tiriyo wareeggan si dakhliga bishan uu dhab u noqdo.',
-            statLabel: 'Nooca',
-            statValue: 'Hormaris / Prepaid',
-            actionText: 'Eeg Lacagaha Hormariska'
-        },
-        {
-            id: 'advance-salaries',
-            category: 'finance',
-            label: 'Advance Salaries',
-            somaliLabel: 'Mushaharka Hormariska ah',
-            value: `$${(kpis.advanceSalaries || 0).toLocaleString()}`,
-            rawValue: kpis.advanceSalaries || 0,
-            icon: <Coins size={20} />,
-            color: 'bg-orange-600',
-            badge: 'Advance Payout',
-            badgeColor: 'bg-orange-50 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300',
-            path: '/finance/salaries',
-            description: 'Mushahar mustaqbal',
-            explanation: 'Mushaharooyinka macallimiinta ama shaqaalaha horay loogu bixiyay ee la xiriira wareegyada mustaqbalka.',
-            statLabel: 'Xaaladda',
-            statValue: 'Advance Disbursed',
-            actionText: 'Eeg Mushaharka Hormariska'
+            label: 'Previous Month Debt',
+            somaliLabel: 'Deynta Bishii Hore',
+            value: `$${(kpis.previousMonthDebt || 0).toLocaleString()}`,
+            rawValue: kpis.previousMonthDebt || 0,
+            icon: <AlertCircle size={20} />,
+            color: 'bg-red-600',
+            badge: 'Previous Cycle',
+            badgeColor: 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300',
+            path: '/finance/monthly-payments?status=pending',
+            description: previousCycleName,
+            explanation: `Lacagaha waxbarashada ee ardayda ku dhimanaa wareeggii hore (${previousCycleName}) — isla xisaabta "Pending Student Fees" oo loo sameeyey bishii hore. Monthly Payments dooro bishaas si aad u aragto dadka.`,
+            statLabel: 'Wareegga',
+            statValue: previousCycleName,
+            actionText: 'Eeg Dadka aan Bixin (Only Pending)'
         },
         {
             id: 'today-student-attendance',
