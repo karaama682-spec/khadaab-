@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { ArrowRight, Eye, EyeOff, GraduationCap, Lock, Mail, ShieldCheck, User, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const Login = ({ onLogin }) => {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const [canRegister, setCanRegister] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -89,17 +91,17 @@ const Login = ({ onLogin }) => {
 
     if (isRegister) {
       if (!formData.fullName.trim()) {
-        setError('Fadlan geli magacaaga oo buuxa.');
+        setError(t('auth.errors.fullNameRequired'));
         setIsLoading(false);
         return;
       }
       if (formData.password.length < 6) {
-        setError('Furaha sirta ah waa inuu ugu yaraan ka koobnaadaa 6 xaraf ama lambar.');
+        setError(t('auth.errors.passwordLength'));
         setIsLoading(false);
         return;
       }
       if (formData.password !== formData.confirmPassword) {
-        setError('Labada fure sir isma laha. Fadlan hubi.');
+        setError(t('auth.errors.passwordMismatch'));
         setIsLoading(false);
         return;
       }
@@ -132,9 +134,9 @@ const Login = ({ onLogin }) => {
       if (serverMessage) {
         setError(serverMessage);
       } else if (isRegister) {
-        setError('Diiwaangelintu way fashilantay. Hubi xogta aad gelisay, kadibna isku day mar kale.');
+        setError(t('auth.errors.registerFailed'));
       } else {
-        setError('Gelitaanku wuu fashilmay. Hubi iimaylkaaga iyo furaha sirta, kadibna isku day mar kale.');
+        setError(t('auth.errors.loginFailed'));
       }
       console.error('Auth error:', err);
     } finally {
@@ -153,7 +155,7 @@ const Login = ({ onLogin }) => {
         <div className="mb-6 text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-tr from-brand-600 to-emerald-500 text-white shadow-xl shadow-brand-500/30 ring-4 ring-brand-500/20">
             {tenantBranding?.logo ? (
-              <img src={tenantBranding.logo} alt="Logo" className="h-full w-full object-cover" />
+              <img src={tenantBranding.logo} alt={t('auth.logoAlt')} className="h-full w-full object-cover" />
             ) : (
               <GraduationCap size={32} />
             )}
@@ -162,7 +164,9 @@ const Login = ({ onLogin }) => {
             {tenantBranding?.name || 'salaax aldaareyn'}
           </h1>
           <p className="mt-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
-            {tenantBranding?.systemSubtitle || 'Ku soo dhowow nidaamka maamulka machadka'}
+            {tenantBranding?.systemSubtitle === 'Institute Management'
+              ? t('nav.instituteManagement')
+              : (tenantBranding?.systemSubtitle || t('auth.defaultSubtitle'))}
           </p>
         </div>
 
@@ -170,7 +174,7 @@ const Login = ({ onLogin }) => {
         {canRegister && (
           <div className="mb-6 space-y-3">
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-center text-xs font-semibold text-amber-600 dark:text-amber-400">
-              ⚡ Bilowga Nidaamka: Sameyso akoonka maamulaha guud (Super Admin).
+              {t('auth.setupNotice')}
             </div>
             <div className="flex rounded-2xl bg-slate-100 p-1 dark:bg-slate-800">
               <button
@@ -182,7 +186,7 @@ const Login = ({ onLogin }) => {
                     : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
                 }`}
               >
-                Soo Gal (Sign In)
+                {t('auth.signIn')}
               </button>
               <button
                 type="button"
@@ -194,7 +198,7 @@ const Login = ({ onLogin }) => {
                 }`}
               >
                 <UserPlus size={14} />
-                Sameyso Akoon
+                {t('auth.createAccount')}
               </button>
             </div>
           </div>
@@ -211,13 +215,13 @@ const Login = ({ onLogin }) => {
           {isRegister && (
             <div>
               <label className="block space-y-1.5">
-                <span className="ml-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Magaca oo buuxa</span>
+                <span className="ml-1 text-[10px] font-black uppercase tracking-widest text-slate-400">{t('auth.fullName')}</span>
                 <span className="relative block">
                   <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
                     name="fullName"
-                    placeholder="Mustaf Maxamed"
+                    placeholder={t('auth.fullNamePlaceholder')}
                     className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3.5 pl-12 pr-4 text-sm text-slate-900 outline-none transition focus:border-brand-600 focus:bg-white dark:border-slate-800 dark:bg-slate-800/60 dark:text-white dark:focus:border-brand-500"
                     value={formData.fullName}
                     onChange={handleChange}
@@ -231,7 +235,7 @@ const Login = ({ onLogin }) => {
           {/* Email field */}
           <div>
             <label className="block space-y-1.5">
-              <span className="ml-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Cinwaanka iimaylka</span>
+              <span className="ml-1 text-[10px] font-black uppercase tracking-widest text-slate-400">{t('auth.email')}</span>
               <span className="relative block">
                 <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -250,7 +254,7 @@ const Login = ({ onLogin }) => {
           {/* Password field */}
           <div>
             <label className="block space-y-1.5">
-              <span className="ml-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Furaha sirta</span>
+              <span className="ml-1 text-[10px] font-black uppercase tracking-widest text-slate-400">{t('auth.password')}</span>
               <span className="relative block">
                 <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -265,7 +269,7 @@ const Login = ({ onLogin }) => {
                 <button
                   type="button"
                   onClick={() => setShowPassword((visible) => !visible)}
-                  aria-label="Muuji ama qari furaha sirta"
+                  aria-label={t('auth.togglePassword')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -278,7 +282,7 @@ const Login = ({ onLogin }) => {
           {isRegister && (
             <div>
               <label className="block space-y-1.5">
-                <span className="ml-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Xaqiiji Furaha sirta</span>
+                <span className="ml-1 text-[10px] font-black uppercase tracking-widest text-slate-400">{t('auth.confirmPassword')}</span>
                 <span className="relative block">
                   <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
@@ -293,7 +297,7 @@ const Login = ({ onLogin }) => {
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword((visible) => !visible)}
-                    aria-label="Muuji ama qari xaqiijinta furaha sirta"
+                    aria-label={t('auth.toggleConfirmPassword')}
                     className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
                   >
                     {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -304,7 +308,7 @@ const Login = ({ onLogin }) => {
               {/* Admin badge */}
               <div className="mt-2 flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3.5 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                 <ShieldCheck size={16} className="shrink-0" />
-                <span>Akoonku wuxuu toos u helayaa awoodda <strong>Super Admin</strong></span>
+                <span>{t('auth.superAdminBefore')}<strong>{t('auth.superAdmin')}</strong>{t('auth.superAdminAfter')}</span>
               </div>
             </div>
           )}
@@ -318,15 +322,15 @@ const Login = ({ onLogin }) => {
             {isLoading ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                Fadlan sug…
+                {t('auth.pleaseWait')}
               </span>
             ) : isRegister ? (
               <span className="flex items-center justify-center gap-2">
-                Abuur Akoonka oo Soo Gal <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
+                {t('auth.createAndSignIn')} <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
               </span>
             ) : (
               <span className="flex items-center justify-center gap-2">
-                Soo gal <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
+                {t('auth.signInButton')} <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
               </span>
             )}
           </button>
@@ -337,24 +341,24 @@ const Login = ({ onLogin }) => {
           <div className="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">
             {!isRegister ? (
               <p>
-                Ma doonaysaa akoon cusub?{' '}
+                {t('auth.wantNewAccount')}{' '}
                 <button
                   type="button"
                   onClick={() => handleModeSwitch(true)}
                   className="font-bold text-brand-600 hover:underline dark:text-brand-400"
                 >
-                  Sameyso halkan
+                  {t('auth.createHere')}
                 </button>
               </p>
             ) : (
               <p>
-                Horey ma u lahayd akoon?{' '}
+                {t('auth.haveAccount')}{' '}
                 <button
                   type="button"
                   onClick={() => handleModeSwitch(false)}
                   className="font-bold text-brand-600 hover:underline dark:text-brand-400"
                 >
-                  Halkan ka soo gal
+                  {t('auth.signInHere')}
                 </button>
               </p>
             )}

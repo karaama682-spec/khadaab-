@@ -1,37 +1,38 @@
 import React, { useEffect } from 'react';
 import { AlertTriangle, Check, Info, XCircle } from 'lucide-react';
+import { useLanguage } from '../../../i18n/LanguageContext.jsx';
 
 const TYPE_CONFIG = {
   success: {
-    title: 'Woohoo!',
+    titleKey: 'success',
     icon: Check,
     iconWrap: 'bg-sky-500 text-white',
     rings: ['bg-sky-100', 'bg-sky-200/70', 'bg-sky-300/50'],
     primary: 'bg-sky-500 hover:bg-sky-600 focus:ring-sky-200',
   },
   error: {
-    title: 'Uh oh!',
+    titleKey: 'error',
     icon: XCircle,
     iconWrap: 'bg-rose-400 text-white',
     rings: ['bg-rose-100', 'bg-rose-200/70', 'bg-rose-300/45'],
     primary: 'bg-rose-500 hover:bg-rose-600 focus:ring-rose-200',
   },
   warning: {
-    title: 'Warning',
+    titleKey: 'warning',
     icon: AlertTriangle,
     iconWrap: 'bg-amber-400 text-white',
     rings: ['bg-amber-100', 'bg-amber-200/70', 'bg-amber-300/45'],
     primary: 'bg-amber-500 hover:bg-amber-600 focus:ring-amber-200',
   },
   info: {
-    title: 'Notice',
+    titleKey: 'info',
     icon: Info,
     iconWrap: 'bg-blue-500 text-white',
     rings: ['bg-blue-100', 'bg-blue-200/70', 'bg-blue-300/45'],
     primary: 'bg-blue-500 hover:bg-blue-600 focus:ring-blue-200',
   },
   confirm: {
-    title: 'Are you sure?',
+    titleKey: 'confirm',
     icon: AlertTriangle,
     iconWrap: 'bg-amber-400 text-white',
     rings: ['bg-amber-100', 'bg-amber-200/70', 'bg-amber-300/45'],
@@ -40,6 +41,7 @@ const TYPE_CONFIG = {
 };
 
 const AlertModal = ({ alert, onResolve }) => {
+  const { t } = useLanguage();
   useEffect(() => {
     if (!alert || alert.kind === 'confirm') return undefined;
 
@@ -71,7 +73,7 @@ const AlertModal = ({ alert, onResolve }) => {
         </div>
 
         <h2 className="text-xl font-black tracking-tight text-slate-800">
-          {alert.title || config.title}
+          {alert.title || t(`common.alert.${config.titleKey}`)}
         </h2>
         {alert.message && (
           <p className="mx-auto mt-2 max-w-xs text-sm font-medium leading-6 text-slate-500">
@@ -85,7 +87,7 @@ const AlertModal = ({ alert, onResolve }) => {
             onClick={() => onResolve(true)}
             className={`w-full rounded-md px-5 py-3 text-sm font-bold text-white shadow-sm transition-all focus:outline-none focus:ring-4 active:scale-[0.98] ${primaryClass}`}
           >
-            {alert.confirmText || alert.buttonText || (isConfirm ? 'Confirm' : 'Continue')}
+            {alert.confirmText || alert.buttonText || (isConfirm ? t('common.alert.confirmButton') : t('common.alert.continueButton'))}
           </button>
           {isConfirm && (
             <button
@@ -93,7 +95,7 @@ const AlertModal = ({ alert, onResolve }) => {
               onClick={() => onResolve(false)}
               className="w-full rounded-md bg-slate-100 px-5 py-3 text-sm font-bold text-slate-600 transition-all hover:bg-slate-200 focus:outline-none focus:ring-4 focus:ring-slate-200 active:scale-[0.98]"
             >
-              {alert.cancelText || 'Cancel'}
+              {alert.cancelText || t('common.alert.cancelButton')}
             </button>
           )}
         </div>

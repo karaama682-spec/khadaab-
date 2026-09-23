@@ -3,12 +3,17 @@ import { Users, Search, Phone, ChevronDown, ChevronRight, Printer, FileDown, Wal
 import { jsPDF } from 'jspdf';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const fmtMoney = (n) =>
   Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const PayersManagement = () => {
   const { showAlert } = useAlert();
+  const { t, locale } = useLanguage();
+  // The API names a payer "Unknown" when none is stored; show that in the selected language.
+  const payerName = (name) => (!name || name === 'Unknown' ? t('common.unknown') : name);
+  const relationshipLabel = (value) => t(`academic.guardians.relationships.${value}`, { defaultValue: value });
   const [payers, setPayers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -32,9 +37,9 @@ const PayersManagement = () => {
       setPayers(data || []);
     } catch (err) {
       console.error('Failed to load payers', err);
-      const msg = err.response?.data?.message || err.message || 'Failed to load payers.';
+      const msg = err.response?.data?.message || err.message || t('payers.loadFailed');
       setError(msg);
-      showAlert({ type: 'danger', title: 'Error', message: msg });
+      showAlert({ type: 'danger', title: t('common.error'), message: msg });
     } finally {
       setLoading(false);
     }
@@ -61,7 +66,7 @@ const PayersManagement = () => {
     e.preventDefault();
     const cleanPhone = (editFormData.phone || '').trim();
     if (!cleanPhone) {
-      showAlert({ type: 'warning', title: 'Validation Error', message: 'Primary phone number is required.' });
+      showAlert({ type: 'warning', title: t('common.validationError'), message: t('payers.phoneRequired') });
       return;
     }
 
@@ -84,8 +89,8 @@ const PayersManagement = () => {
       const count = editingPayer?.studentCount || (editingPayer?.students || []).length;
       showAlert({
         type: 'success',
-        title: 'Success',
-        message: `Payer and ${count} linked student${count === 1 ? '' : 's'} updated successfully.`
+        title: t('common.success'),
+        message: t('payers.updated', { count })
       });
       setIsEditModalOpen(false);
       setEditingPayer(null);
@@ -94,8 +99,8 @@ const PayersManagement = () => {
       console.error('Failed to update payer', err);
       showAlert({
         type: 'danger',
-        title: 'Update Error',
-        message: err.response?.data?.message || err.message || 'Failed to update payer.'
+        title: t('payers.updateErrorTitle'),
+        message: err.response?.data?.message || err.message || t('payers.updateFailed')
       });
     } finally {
       setSaving(false);
@@ -152,10 +157,10 @@ const PayersManagement = () => {
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
-    doc.text('MACHAD INSTITUTE - PAYERS CHECKLIST', 14, 12);
+    doc.text(t('payers.pdf.title'), 14, 12);
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Generated: ${new Date().toLocaleString()}   |   Payers: ${filtered.length}`, 14, 20);
+    doc.text(`${t('payers.pdf.generated')}: ${new Date().toLocaleString(locale)}   |   ${t('payers.pdf.payers')}: ${filtered.length}`, 14, 20);
 
     const cols = { no: 12, name: 22, number: 78, students: 132, total: 155, paid: 190 };
     let y = 36;
@@ -167,11 +172,11 @@ const PayersManagement = () => {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7.5);
       doc.text('#', cols.no, y);
-      doc.text('PAYER NAME', cols.name, y);
-      doc.text('NUMBER', cols.number, y);
-      doc.text('STUDENTS', cols.students, y);
-      doc.text('TOTAL ($)', cols.total, y);
-      doc.text('PAID', cols.paid, y);
+      doc.text(t('payers.pdf.payerName'), cols.name, y);
+      doc.text(t('payers.pdf.number'), cols.number, y);
+      doc.text(t('payers.pdf.students'), cols.students, y);
+      doc.text(t('payers.pdf.total'), cols.total, y);
+      doc.text(t('payers.pdf.paid'), cols.paid, y);
       y += 9;
     };
 
@@ -193,7 +198,7 @@ const PayersManagement = () => {
 
       doc.setTextColor(15, 23, 42);
       doc.setFont('helvetica', 'bold');
-      doc.text(String(p.name || 'Unknown').slice(0, 28), cols.name, y);
+      doc.text(String(payerName(p.name)).slice(0, 28), cols.name, y);
 
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(71, 85, 105);
@@ -215,11 +220,11 @@ const PayersManagement = () => {
       y += 9;
     });
 
-    doc.save(`Machad_Payers_Checklist_${new Date().toISOString().slice(0, 10)}.pdf`);
+    doc.save(`${t('payers.pdf.file')}_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   if (loading) {
-    return <div className="p-10 text-center text-slate-500 font-bold">Loading Payers...</div>;
+    return <div className="p-10 text-center text-slate-500 font-bold">{t('payers.loading')}</div>;
   }
 
   return (
@@ -231,9 +236,9 @@ const PayersManagement = () => {
             <Users size={32} strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Payers</h1>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">{t('payers.title')}</h1>
             <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">
-              Fee Payer Directory & Checklist
+              {t('payers.subtitle')}
             </p>
           </div>
         </div>
@@ -243,13 +248,13 @@ const PayersManagement = () => {
             onClick={handleExportPDF}
             className="flex items-center gap-2 px-6 py-3.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-95"
           >
-            <FileDown size={16} /> Export PDF
+            <FileDown size={16} /> {t('exams.results.exportPdf')}
           </button>
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 px-6 py-3.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-brand-600/30 active:scale-95"
           >
-            <Printer size={16} /> Print Checklist
+            <Printer size={16} /> {t('payers.printChecklist')}
           </button>
         </div>
       </div>
@@ -259,7 +264,7 @@ const PayersManagement = () => {
         <Search size={18} className="text-slate-400 mr-3 shrink-0" />
         <input
           type="text"
-          placeholder="Search by payer name, number 1, or number 2..."
+          placeholder={t('payers.searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400 font-medium"
@@ -278,12 +283,12 @@ const PayersManagement = () => {
             <thead>
               <tr className="bg-slate-50/70 dark:bg-slate-800/40 text-slate-400 text-[10px] font-black uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
                 <th className="px-4 py-4 w-10 print:hidden"></th>
-                <th className="px-5 py-4">Payer Name</th>
-                <th className="px-5 py-4">Numbers (Phone 1 & 2)</th>
-                <th className="px-5 py-4 text-center">Students</th>
-                <th className="px-5 py-4 text-right">Total Money</th>
-                <th className="px-5 py-4 text-center">Paid</th>
-                <th className="px-5 py-4 text-center print:hidden">Actions</th>
+                <th className="px-5 py-4">{t('payers.colName')}</th>
+                <th className="px-5 py-4">{t('payers.colNumbers')}</th>
+                <th className="px-5 py-4 text-center">{t('nav.students')}</th>
+                <th className="px-5 py-4 text-right">{t('payers.colTotal')}</th>
+                <th className="px-5 py-4 text-center">{t('common.paid')}</th>
+                <th className="px-5 py-4 text-center print:hidden">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -301,9 +306,9 @@ const PayersManagement = () => {
                         {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                       </td>
                       <td className="px-5 py-4 text-sm font-bold text-slate-900 dark:text-slate-100">
-                        {p.name}
+                        {payerName(p.name)}
                         {p.relationship && (
-                          <span className="block text-[10px] text-slate-400 font-semibold uppercase">{p.relationship}</span>
+                          <span className="block text-[10px] text-slate-400 font-semibold uppercase">{relationshipLabel(p.relationship)}</span>
                         )}
                       </td>
                       <td className="px-5 py-4 text-sm font-semibold text-slate-600 dark:text-slate-300">
@@ -313,7 +318,7 @@ const PayersManagement = () => {
                               href={`tel:${p.phone}`}
                               onClick={(e) => e.stopPropagation()}
                               className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-500/20 w-fit"
-                              title="Phone 1 (Primary)"
+                              title={t('academic.guardians.phone1Title')}
                             >
                               <Phone size={11} className="shrink-0 print:hidden text-emerald-500" />
                               <span>{p.phone}</span>
@@ -326,7 +331,7 @@ const PayersManagement = () => {
                               href={`tel:${p.alternatePhone}`}
                               onClick={(e) => e.stopPropagation()}
                               className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 rounded-lg border border-blue-500/20 w-fit"
-                              title="Phone 2 (Second Number)"
+                              title={t('academic.guardians.phone2Title')}
                             >
                               <Phone size={11} className="shrink-0 print:hidden text-blue-500" />
                               <span>{p.alternatePhone}</span>
@@ -353,7 +358,7 @@ const PayersManagement = () => {
                           type="button"
                           onClick={() => openEditModal(p)}
                           className="inline-flex items-center justify-center p-2 rounded-xl text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:text-brand-400 dark:hover:bg-brand-950/50 transition-all active:scale-95 shadow-xs"
-                          title="Edit Payer / Wax ka beddel Payer"
+                          title={t('payers.editTitle')}
                         >
                           <Edit2 size={16} />
                         </button>
@@ -367,9 +372,9 @@ const PayersManagement = () => {
                             <table className="w-full text-left text-sm">
                               <thead>
                                 <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800">
-                                  <th className="px-5 py-3">Student</th>
-                                  <th className="px-5 py-3">Class</th>
-                                  <th className="px-5 py-3 text-right">Monthly Fee</th>
+                                  <th className="px-5 py-3">{t('common.student')}</th>
+                                  <th className="px-5 py-3">{t('common.class')}</th>
+                                  <th className="px-5 py-3 text-right">{t('monthlyPayments.monthlyFee')}</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -383,7 +388,7 @@ const PayersManagement = () => {
                               </tbody>
                               <tfoot>
                                 <tr className="border-t-2 border-slate-200 dark:border-slate-700 font-black text-slate-900 dark:text-white">
-                                  <td className="px-5 py-3 uppercase text-[11px] text-slate-500" colSpan={2}>Total</td>
+                                  <td className="px-5 py-3 uppercase text-[11px] text-slate-500" colSpan={2}>{t('common.total')}</td>
                                   <td className="px-5 py-3 text-right">${fmtMoney(p.totalFee)}</td>
                                 </tr>
                               </tfoot>
@@ -400,7 +405,7 @@ const PayersManagement = () => {
                   <td colSpan={7} className="px-8 py-16 text-center text-slate-400 text-sm font-medium">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                      <span className="text-slate-500 font-semibold">Loading payers...</span>
+                      <span className="text-slate-500 font-semibold">{t('payers.loadingRows')}</span>
                     </div>
                   </td>
                 </tr>
@@ -414,7 +419,7 @@ const PayersManagement = () => {
                         onClick={fetchPayers}
                         className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shadow-sm"
                       >
-                        Retry Loading
+                        {t('monthlyPayments.retry')}
                       </button>
                     </div>
                   </td>
@@ -423,7 +428,7 @@ const PayersManagement = () => {
               {!loading && !error && filtered.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-8 py-12 text-center text-slate-400 text-sm font-medium">
-                    No payers found. They appear here once students with a responsible person's number are added.
+                    {t('payers.empty')}
                   </td>
                 </tr>
               )}
@@ -441,9 +446,9 @@ const PayersManagement = () => {
             <Wallet size={22} strokeWidth={2.5} />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Grand Total</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{t('payers.grandTotal')}</p>
             <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
-              Total money across {payers.length} payer{payers.length === 1 ? '' : 's'}
+              {t('payers.acrossPayers', { count: payers.length })}
             </p>
           </div>
         </div>
@@ -454,7 +459,7 @@ const PayersManagement = () => {
           </p>
           {search.trim() && (
             <p className="mt-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Matching this search: ${fmtMoney(filteredTotal)} ({filtered.length} of {payers.length})
+              {t('payers.matchingSearch', { amount: `$${fmtMoney(filteredTotal)}`, shown: filtered.length, total: payers.length })}
             </p>
           )}
         </div>
@@ -472,10 +477,10 @@ const PayersManagement = () => {
                 </div>
                 <div>
                   <h2 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">
-                    Edit Payer
+                    {t('payers.editPayer')}
                   </h2>
                   <p className="text-xs text-slate-400 font-semibold">
-                    Wax ka beddel Payer & Ardayda ku xiran
+                    {t('payers.editSubtitle')}
                   </p>
                 </div>
               </div>
@@ -495,10 +500,10 @@ const PayersManagement = () => {
               <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-xs text-amber-800 dark:text-amber-200">
                 <div className="flex items-center gap-2 font-bold mb-1">
                   <AlertCircle size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span>Default Student Sync / Isku-xirka Ardayda</span>
+                  <span>{t('payers.syncTitle')}</span>
                 </div>
                 <p className="text-[11px] opacity-90 leading-relaxed">
-                  Markii aad badasho number-ka ama magaca, dhammaan <strong>{editingPayer.studentCount || (editingPayer.students || []).length}</strong> arday ee hoos ku xusan si toos ah (default) ayey taleefankooda iyo magaca waalidka ugu cusboonaanayaan.
+                  {t('payers.syncMessage', { count: editingPayer.studentCount || (editingPayer.students || []).length })}
                 </p>
                 {editingPayer.students?.length > 0 && (
                   <div className="mt-2.5 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
@@ -517,13 +522,13 @@ const PayersManagement = () => {
               {/* Payer Name */}
               <div>
                 <label className="block text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-2">
-                  Payer Name / Magaca Payer
+                  {t('payers.colName')}
                 </label>
                 <input
                   type="text"
                   value={editFormData.fullName}
                   onChange={(e) => setEditFormData({ ...editFormData, fullName: e.target.value })}
-                  placeholder="e.g. Maxamed Axmed Cali"
+                  placeholder={t('payers.namePlaceholder')}
                   className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-semibold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
                 />
               </div>
@@ -533,10 +538,10 @@ const PayersManagement = () => {
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    Phone 1 (Primary / Number 1) <span className="text-rose-500">*</span>
+                    {t('payers.phone1Label')} <span className="text-rose-500">*</span>
                   </label>
                   <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded">
-                    Updates Students
+                    {t('payers.updatesStudents')}
                   </span>
                 </div>
                 <div className="relative">
@@ -546,7 +551,7 @@ const PayersManagement = () => {
                     required
                     value={editFormData.phone}
                     onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
-                    placeholder="e.g. 615123456"
+                    placeholder={t('payers.phone1Placeholder')}
                     className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-mono font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
                   />
                 </div>
@@ -557,10 +562,10 @@ const PayersManagement = () => {
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                    Phone 2 (Second Number / Alternate)
+                    {t('payers.phone2Label')}
                   </label>
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    Optional
+                    {t('common.optional')}
                   </span>
                 </div>
                 <div className="relative">
@@ -569,7 +574,7 @@ const PayersManagement = () => {
                     type="tel"
                     value={editFormData.alternatePhone}
                     onChange={(e) => setEditFormData({ ...editFormData, alternatePhone: e.target.value })}
-                    placeholder="e.g. 615987654 (Optional second number)"
+                    placeholder={t('payers.phone2Placeholder')}
                     className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-mono font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
                   />
                 </div>
@@ -578,18 +583,18 @@ const PayersManagement = () => {
               {/* Relationship */}
               <div>
                 <label className="block text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-2">
-                  Relationship / Xiriirka
+                  {t('academic.guardians.colRelationship')}
                 </label>
                 <select
                   value={editFormData.relationship}
                   onChange={(e) => setEditFormData({ ...editFormData, relationship: e.target.value })}
                   className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-semibold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition"
                 >
-                  <option value="Father">Father / Aabbe</option>
-                  <option value="Mother">Mother / Hooyo</option>
-                  <option value="Guardian">Guardian / Mas'uul</option>
-                  <option value="Sponsor">Sponsor / Kafil</option>
-                  <option value="Other">Other / Kale</option>
+                  <option value="Father">{relationshipLabel('Father')}</option>
+                  <option value="Mother">{relationshipLabel('Mother')}</option>
+                  <option value="Guardian">{relationshipLabel('Guardian')}</option>
+                  <option value="Sponsor">{relationshipLabel('Sponsor')}</option>
+                  <option value="Other">{relationshipLabel('Other')}</option>
                 </select>
               </div>
 
@@ -601,7 +606,7 @@ const PayersManagement = () => {
                   disabled={saving}
                   className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800 transition disabled:opacity-50"
                 >
-                  Cancel / Ka noqo
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -611,12 +616,12 @@ const PayersManagement = () => {
                   {saving ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>Saving...</span>
+                      <span>{t('common.saving')}</span>
                     </>
                   ) : (
                     <>
                       <Save size={15} />
-                      <span>Save Changes / Keydi</span>
+                      <span>{t('common.saveChanges')}</span>
                     </>
                   )}
                 </button>

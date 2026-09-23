@@ -6,6 +6,8 @@ import api from '../services/api';
 import { NAV_CONFIG } from '../constants';
 import { PERMISSION_ACTIONS } from '../utils/permissionUtils';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
+import { navLabel } from '../utils/navLabel';
 
 // Same catalogue the Roles & Permissions screen builds from, derived from
 // NAV_CONFIG so there is exactly one source of modules and actions.
@@ -30,6 +32,7 @@ const isPermissionChecked = (permissions, module, sub, action) =>
 
 const UsersList = () => {
   const { showAlert, showConfirm } = useAlert();
+  const { t, tv } = useLanguage();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -157,9 +160,9 @@ const UsersList = () => {
       console.error("Failed to save user", error);
       showAlert({
         type: 'error',
-        title: 'Uh oh!',
-        message: error.response?.data?.message || 'Failed to save user.',
-        buttonText: 'Try again'
+        title: t('common.alert.error'),
+        message: error.response?.data?.message || t('access.users.saveFailed'),
+        buttonText: t('settings.profile.tryAgain')
       });
     }
   };
@@ -175,9 +178,9 @@ const UsersList = () => {
       console.error("Failed to update status", error);
       showAlert({
         type: 'error',
-        title: 'Uh oh!',
-        message: 'Failed to update status.',
-        buttonText: 'Try again'
+        title: t('common.alert.error'),
+        message: t('access.users.statusFailed'),
+        buttonText: t('settings.profile.tryAgain')
       });
     }
   };
@@ -185,10 +188,10 @@ const UsersList = () => {
   const handleDelete = async (user) => {
     const ok = await showConfirm({
       type: 'warning',
-      title: 'Delete user?',
-      message: `Are you sure you want to delete ${user.username || user.email}? This cannot be undone.`,
-      confirmText: 'Yes, delete',
-      cancelText: 'Cancel',
+      title: t('access.users.deleteTitle'),
+      message: t('access.users.deleteConfirm', { name: user.username || user.email }),
+      confirmText: t('common.yesDelete'),
+      cancelText: t('common.cancel'),
       danger: true
     });
     if (!ok) return;
@@ -200,9 +203,9 @@ const UsersList = () => {
       console.error("Failed to delete user", error);
       showAlert({
         type: 'error',
-        title: 'Uh oh!',
-        message: error.response?.data?.message || 'Failed to delete user.',
-        buttonText: 'Try again'
+        title: t('common.alert.error'),
+        message: error.response?.data?.message || t('access.users.deleteFailed'),
+        buttonText: t('settings.profile.tryAgain')
       });
     }
   };
@@ -218,7 +221,7 @@ const UsersList = () => {
     return matchesSearch && matchesType;
   });
 
-  if (loading) return <div className="p-10 text-center text-slate-500">Loading Users...</div>;
+  if (loading) return <div className="p-10 text-center text-slate-500">{t('access.users.loading')}</div>;
 
   return (
     <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24">
@@ -229,15 +232,15 @@ const UsersList = () => {
             <UserCircle size={32} strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">System Users</h1>
-            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">Access Control & Identity Management Hub</p>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">{t('access.users.title')}</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">{t('access.users.subtitle')}</p>
           </div>
         </div>
         <button
           onClick={() => { setEditingUser(null); setIsModalOpen(true); }}
           className="flex items-center gap-3 px-8 py-4 bg-slate-900 dark:bg-brand-600 text-white rounded-[20px] font-black text-[10px] uppercase tracking-[0.2em] hover:bg-slate-800 shadow-xl transition-all active:scale-95 border border-slate-700"
         >
-          <Plus size={18} strokeWidth={3} /> Add New User
+          <Plus size={18} strokeWidth={3} /> {t('access.users.addNew')}
         </button>
       </div>
 
@@ -249,7 +252,7 @@ const UsersList = () => {
             <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search by username or email..."
+              placeholder={t('access.users.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500"
@@ -258,9 +261,9 @@ const UsersList = () => {
 
           <div className="flex items-center gap-2">
             {[
-              { id: 'All', label: 'All Users' },
-              { id: 'Staff', label: 'System Staff' },
-              { id: 'Teachers', label: 'Teachers' }
+              { id: 'All', label: t('access.users.tabAll') },
+              { id: 'Staff', label: t('access.users.tabStaff') },
+              { id: 'Teachers', label: t('access.users.tabTeachers') }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -281,18 +284,18 @@ const UsersList = () => {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                <th className="px-10 py-6">Username</th>
-                <th className="px-10 py-6">Email</th>
-                <th className="px-10 py-6">Status</th>
-                <th className="px-10 py-6">Roles</th>
-                <th className="px-10 py-6 text-right">Actions</th>
+                <th className="px-10 py-6">{t('access.users.username')}</th>
+                <th className="px-10 py-6">{t('common.email')}</th>
+                <th className="px-10 py-6">{t('common.status')}</th>
+                <th className="px-10 py-6">{t('access.users.roles')}</th>
+                <th className="px-10 py-6 text-right">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredUsers.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-10 py-12 text-center text-slate-400 font-semibold text-sm">
-                    No matching users found.
+                    {t('access.users.empty')}
                   </td>
                 </tr>
               ) : (
@@ -313,18 +316,18 @@ const UsersList = () => {
                     </td>
                     <td className="px-10 py-8">
                       <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${user.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                        {user.status}
+                        {tv(user.status)}
                       </span>
                     </td>
                     <td className="px-10 py-8">
                       {user.role === 'Teacher' ? (
                         <span className="inline-flex items-center px-3 py-1.5 rounded-[10px] text-[10px] font-black uppercase tracking-wider bg-purple-100 dark:bg-purple-950/40 text-purple-600 border border-purple-200 shadow-sm">
-                          Teacher
+                          {tv('Teacher')}
                         </span>
                       ) : (
                         user.roles?.map(r => (
                           <span key={r._id || r} className="inline-flex items-center px-3 py-1.5 rounded-[10px] text-[10px] font-black uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 mr-2 mb-1 shadow-sm">
-                            {r.name || 'Role'}
+                            {tv(r.name) || t('access.users.role')}
                           </span>
                         ))
                       )}
@@ -334,7 +337,7 @@ const UsersList = () => {
                         <button
                           onClick={() => handleEdit(user)}
                           className="p-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl text-slate-400 hover:text-brand-600 transition-all shadow-sm active:scale-90"
-                          title="Edit User"
+                          title={t('access.users.editTitle')}
                         >
                           <Edit2 size={16} />
                         </button>
@@ -344,14 +347,14 @@ const UsersList = () => {
                             ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-800/50 text-emerald-600 hover:bg-emerald-600 hover:text-white'
                             : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 hover:text-emerald-600'
                             }`}
-                          title={user.status === 'active' ? 'Deactivate User' : 'Activate User'}
+                          title={user.status === 'active' ? t('access.users.deactivate') : t('access.users.activate')}
                         >
                           <CheckCircle2 size={16} />
                         </button>
                         <button
                           onClick={() => handleDelete(user)}
                           className="p-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl text-slate-300 hover:text-rose-500 hover:border-rose-100 transition-all shadow-sm active:scale-90"
-                          title="Delete User"
+                          title={t('access.users.deleteButton')}
                         >
                           <Trash2 size={16} />
                         </button>
@@ -376,8 +379,8 @@ const UsersList = () => {
                   <UserCircle size={28} strokeWidth={3} />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">{editingUser ? 'Edit User' : 'New User'}</h3>
-                  <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">{editingUser ? 'Modify User Details' : 'Onboard System Access'}</p>
+                  <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">{editingUser ? t('access.users.editTitle') : t('access.users.newUser')}</h3>
+                  <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">{editingUser ? t('access.users.modifyDetails') : t('access.users.onboard')}</p>
                 </div>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all active:scale-90"><X size={20} strokeWidth={2.5} /></button>
@@ -386,45 +389,45 @@ const UsersList = () => {
             <form onSubmit={handleSave} className="px-12 py-10 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar bg-slate-50/50 dark:bg-slate-900/50">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Email</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">{t('common.email')}</label>
                   <input required type="email" placeholder="john@example.com" className="w-full px-5 py-4 bg-white dark:bg-slate-800 rounded-[20px] font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 outline-none transition-all shadow-sm" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Username</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">{t('access.users.username')}</label>
                   <input required type="text" placeholder="johndoe" className="w-full px-5 py-4 bg-white dark:bg-slate-800 rounded-[20px] font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 outline-none transition-all shadow-sm" value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value })} />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Password {editingUser && '(Leave empty to keep)'}</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">{t('auth.password')} {editingUser && t('access.users.leaveEmpty')}</label>
                   <input type="password" required={!editingUser} placeholder="••••••••" className="w-full px-5 py-4 bg-white dark:bg-slate-800 rounded-[20px] font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 outline-none transition-all shadow-sm" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} />
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Status</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">{t('common.status')}</label>
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                     className="w-full px-5 py-4 bg-white dark:bg-slate-800 rounded-[20px] font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 outline-none transition-all shadow-sm"
                   >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
+                    <option value="active">{t('common.active')}</option>
+                    <option value="inactive">{t('common.inactive')}</option>
                   </select>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Role</label>
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">{t('access.users.role')}</label>
                 {availableRoles.length > 0 ? (
                   <select
                     value={formData.roles[0] || ''}
                     onChange={(e) => handleRoleChange(e.target.value)}
                     className="w-full px-5 py-4 bg-white dark:bg-slate-800 rounded-[20px] font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 outline-none transition-all shadow-sm"
                   >
-                    <option value="">Select role</option>
+                    <option value="">{t('access.users.selectRole')}</option>
                     {availableRoles.map((role) => (
-                      <option key={role._id} value={role._id}>{role.name}</option>
+                      <option key={role._id} value={role._id}>{tv(role.name)}</option>
                     ))}
                   </select>
                 ) : (
-                  <p className="text-sm text-slate-500 dark:text-slate-400">No roles available yet. Create roles first in the Roles & Permissions section.</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{t('access.users.noRoles')}</p>
                 )}
               </div>
 
@@ -432,20 +435,20 @@ const UsersList = () => {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 ml-2">
                     <ShieldCheck size={14} className="text-brand-500" />
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Permissions</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">{t('access.users.permissions')}</label>
                   </div>
                   <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 ml-2">
-                    Choose exactly what this account may do. Anything left unchecked is refused by the server.
+                    {t('access.users.permissionsHint')}
                   </p>
 
                   <div className="max-h-80 overflow-y-auto rounded-[20px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 divide-y divide-slate-100 dark:divide-slate-700">
                     {Object.entries(PERMISSION_HIERARCHY).map(([module, subs]) => (
                       <div key={module} className="p-4">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-900 dark:text-white mb-3">{module}</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-900 dark:text-white mb-3">{navLabel(module)}</p>
                         <div className="space-y-3">
                           {Object.entries(subs).map(([sub, actions]) => (
                             <div key={sub} className="pl-2">
-                              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">{sub}</p>
+                              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">{navLabel(sub)}</p>
                               <div className="flex flex-wrap gap-x-4 gap-y-2">
                                 {actions.map((action) => (
                                   <label key={action} className="flex items-center gap-2 cursor-pointer select-none">
@@ -455,7 +458,7 @@ const UsersList = () => {
                                       onChange={() => togglePermission(module, sub, action)}
                                       className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500"
                                     />
-                                    <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{action}</span>
+                                    <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{t(`access.actions.${action}`, { defaultValue: action })}</span>
                                   </label>
                                 ))}
                               </div>
@@ -469,8 +472,8 @@ const UsersList = () => {
               )}
 
               <div className="flex items-center justify-end gap-4 pt-6 border-t border-slate-200/60 dark:border-slate-800/60">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-4 rounded-[20px] font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all">Cancel</button>
-                <button type="submit" className="px-10 py-4 bg-slate-900 dark:bg-brand-600 text-white rounded-[20px] font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-slate-800 transition-all active:scale-95">Save User</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-4 rounded-[20px] font-black text-[10px] uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all">{t('common.cancel')}</button>
+                <button type="submit" className="px-10 py-4 bg-slate-900 dark:bg-brand-600 text-white rounded-[20px] font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-slate-800 transition-all active:scale-95">{t('access.users.save')}</button>
               </div>
             </form>
           </div>

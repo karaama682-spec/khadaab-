@@ -15,9 +15,11 @@ import {
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import IdCard from '../components/IdCard.jsx';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const TeachersManagement = () => {
   const { showAlert, showConfirm } = useAlert();
+  const { t: tr, tv } = useLanguage();
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cardTeacher, setCardTeacher] = useState(null);
@@ -45,8 +47,8 @@ const TeachersManagement = () => {
       console.error('Failed to fetch teachers:', error);
       showAlert({
         type: 'danger',
-        title: 'Error',
-        message: 'Failed to load teachers.'
+        title: tr('common.error'),
+        message: tr('academic.teachers.loadFailed')
       });
     } finally {
       setLoading(false);
@@ -107,8 +109,8 @@ const TeachersManagement = () => {
     if (!formData.fullName.trim()) {
       showAlert({
         type: 'warning',
-        title: 'Validation Error',
-        message: 'Full Name is required.'
+        title: tr('common.validationError'),
+        message: tr('academic.teachers.nameRequired')
       });
       return;
     }
@@ -130,15 +132,15 @@ const TeachersManagement = () => {
         await api.put(`/users/${editingTeacher._id}`, payload);
         showAlert({
           type: 'success',
-          title: 'Updated',
-          message: 'Teacher details updated successfully.'
+          title: tr('academic.teachers.updatedTitle'),
+          message: tr('academic.teachers.updated')
         });
       } else {
         await api.post('/users', payload);
         showAlert({
           type: 'success',
-          title: 'Registered',
-          message: 'New Teacher registered successfully.'
+          title: tr('academic.teachers.registeredTitle'),
+          message: tr('academic.teachers.registered')
         });
       }
 
@@ -148,8 +150,8 @@ const TeachersManagement = () => {
       console.error('Failed to save teacher:', error);
       showAlert({
         type: 'danger',
-        title: 'Error',
-        message: error.response?.data?.message || 'Failed to save teacher record.'
+        title: tr('common.error'),
+        message: error.response?.data?.message || tr('academic.teachers.saveFailed')
       });
     } finally {
       setSubmitting(false);
@@ -159,10 +161,10 @@ const TeachersManagement = () => {
   const handleDelete = async (teacher) => {
     const ok = await showConfirm({
       type: 'warning',
-      title: 'Delete Teacher?',
-      message: `Are you sure you want to delete teacher "${teacher.fullName}"? This action cannot be undone.`,
-      confirmText: 'Yes, Delete',
-      cancelText: 'Cancel',
+      title: tr('academic.teachers.deleteTitle'),
+      message: tr('academic.teachers.deleteConfirm', { name: teacher.fullName }),
+      confirmText: tr('academic.teachers.yesDelete'),
+      cancelText: tr('common.cancel'),
       danger: true
     });
 
@@ -172,16 +174,16 @@ const TeachersManagement = () => {
       await api.delete(`/users/${teacher._id}`);
       showAlert({
         type: 'success',
-        title: 'Deleted',
-        message: 'Teacher account deleted.'
+        title: tr('common.deleted'),
+        message: tr('academic.teachers.deletedMsg')
       });
       fetchTeachers();
     } catch (error) {
       console.error('Failed to delete teacher:', error);
       showAlert({
         type: 'danger',
-        title: 'Error',
-        message: error.response?.data?.message || 'Failed to delete teacher.'
+        title: tr('common.error'),
+        message: error.response?.data?.message || tr('academic.teachers.deleteFailed')
       });
     }
   };
@@ -189,7 +191,7 @@ const TeachersManagement = () => {
   if (loading) {
     return (
       <div className="p-10 text-center text-slate-500 font-medium animate-pulse">
-        Loading Teachers Data...
+        {tr('academic.teachers.loading')}
       </div>
     );
   }
@@ -204,10 +206,10 @@ const TeachersManagement = () => {
           </div>
           <div>
             <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">
-              Teachers Management
+              {tr('academic.teachers.title')}
             </h1>
             <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">
-              Teaching Staff Directory & Academic Registration
+              {tr('academic.teachers.subtitle')}
             </p>
           </div>
         </div>
@@ -216,7 +218,7 @@ const TeachersManagement = () => {
           onClick={handleOpenAdd}
           className="flex items-center gap-3 px-8 py-4 bg-brand-500 hover:bg-brand-600 text-white rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:shadow-brand-500/25 transition-all active:scale-95"
         >
-          <Plus size={18} strokeWidth={3} /> Register New Teacher
+          <Plus size={18} strokeWidth={3} /> {tr('academic.teachers.registerNew')}
         </button>
       </div>
 
@@ -227,7 +229,7 @@ const TeachersManagement = () => {
             <GraduationCap size={28} />
           </div>
           <div>
-            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Total Teachers</p>
+            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{tr('academic.teachers.total')}</p>
             <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{stats.total}</h3>
           </div>
         </div>
@@ -237,7 +239,7 @@ const TeachersManagement = () => {
             <DollarSign size={28} />
           </div>
           <div>
-            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Monthly Payroll</p>
+            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{tr('academic.teachers.payroll')}</p>
             <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">
               ${stats.totalSalary.toLocaleString()}
             </h3>
@@ -251,7 +253,7 @@ const TeachersManagement = () => {
           <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search teacher by name or phone..."
+            placeholder={tr('academic.teachers.searchPlaceholder')}
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             className="w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 placeholder-slate-400"
@@ -269,7 +271,7 @@ const TeachersManagement = () => {
                   : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-400 hover:bg-slate-100'
               }`}
             >
-              {s === 'All' ? 'All Status' : s}
+              {s === 'All' ? tr('academic.teachers.allStatus') : tv(s)}
             </button>
           ))}
         </div>
@@ -281,19 +283,19 @@ const TeachersManagement = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                <th className="px-8 py-5">Teacher Name</th>
-                <th className="px-8 py-5">Phone Number</th>
-                <th className="px-8 py-5">Masuul</th>
-                <th className="px-8 py-5">Status</th>
-                <th className="px-8 py-5">Monthly Salary</th>
-                <th className="px-8 py-5 text-right">Actions</th>
+                <th className="px-8 py-5">{tr('academic.teachers.colName')}</th>
+                <th className="px-8 py-5">{tr('academic.teachers.colPhone')}</th>
+                <th className="px-8 py-5">{tr('academic.teachers.colMasuul')}</th>
+                <th className="px-8 py-5">{tr('academic.teachers.colStatus')}</th>
+                <th className="px-8 py-5">{tr('academic.teachers.colSalary')}</th>
+                <th className="px-8 py-5 text-right">{tr('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
               {filteredTeachers.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-8 py-16 text-center text-slate-400 font-semibold text-sm">
-                    No teachers found. Click "Register New Teacher" to add one.
+                    {tr('academic.teachers.empty')}
                   </td>
                 </tr>
               ) : (
@@ -312,7 +314,7 @@ const TeachersManagement = () => {
                             {t.fullName || t.username}
                           </p>
                           <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                            Faculty / Teacher
+                            {tr('academic.teachers.facultyBadge')}
                           </span>
                         </div>
                       </div>
@@ -325,7 +327,7 @@ const TeachersManagement = () => {
                           {t.phone}
                         </div>
                       ) : (
-                        <span className="text-slate-400 text-xs font-medium">N/A</span>
+                        <span className="text-slate-400 text-xs font-medium">{tr('common.notAvailable')}</span>
                       )}
                     </td>
 
@@ -338,7 +340,7 @@ const TeachersManagement = () => {
                           )}
                         </div>
                       ) : (
-                        <span className="text-slate-400 text-xs font-medium">N/A</span>
+                        <span className="text-slate-400 text-xs font-medium">{tr('common.notAvailable')}</span>
                       )}
                     </td>
 
@@ -348,7 +350,7 @@ const TeachersManagement = () => {
                           ? 'bg-pink-50 text-pink-600 dark:bg-pink-950/40 dark:text-pink-400'
                           : 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400'
                       }`}>
-                        {t.gender || 'Male'}
+                        {tv(t.gender || 'Male')}
                       </span>
                     </td>
 
@@ -361,21 +363,21 @@ const TeachersManagement = () => {
                         <button
                           onClick={() => setCardTeacher(t)}
                           className="p-2.5 rounded-xl bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 transition-colors"
-                          title="ID Card"
+                          title={tr('academic.teachers.idCard')}
                         >
                           <IdCardIcon size={16} />
                         </button>
                         <button
                           onClick={() => handleOpenEdit(t)}
                           className="p-2.5 rounded-xl bg-slate-100 hover:bg-brand-50 text-slate-600 hover:text-brand-600 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 transition-colors"
-                          title="Edit Teacher"
+                          title={tr('academic.teachers.editTitle')}
                         >
                           <Edit2 size={16} />
                         </button>
                         <button
                           onClick={() => handleDelete(t)}
                           className="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/30 dark:hover:bg-rose-900/50 dark:text-rose-400 transition-colors"
-                          title="Delete Teacher"
+                          title={tr('academic.teachers.deleteButton')}
                         >
                           <Trash2 size={16} />
                         </button>
@@ -400,9 +402,9 @@ const TeachersManagement = () => {
                 </div>
                 <div>
                   <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
-                    {editingTeacher ? 'Edit Teacher' : 'Register New Teacher'}
+                    {editingTeacher ? tr('academic.teachers.editTitle') : tr('academic.teachers.registerNew')}
                   </h3>
-                  <p className="text-xs font-semibold text-slate-400">Faculty Information</p>
+                  <p className="text-xs font-semibold text-slate-400">{tr('academic.teachers.facultyInfo')}</p>
                 </div>
               </div>
               <button
@@ -415,11 +417,11 @@ const TeachersManagement = () => {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Full Name *</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{tr('academic.teachers.fullNameLabel')}</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. John Doe"
+                  placeholder={tr('academic.teachers.fullNamePlaceholder')}
                   value={formData.fullName}
                   onChange={e => setFormData({ ...formData, fullName: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border-none text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500"
@@ -427,7 +429,7 @@ const TeachersManagement = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Phone Number</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{tr('academic.teachers.colPhone')}</label>
                 <input
                   type="text"
                   placeholder="+1 234 567 890"
@@ -438,7 +440,7 @@ const TeachersManagement = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Masuul Name</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{tr('academic.teachers.masuulName')}</label>
                 <input
                   type="text"
                   value={formData.masuulName}
@@ -448,7 +450,7 @@ const TeachersManagement = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Masuul Number</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{tr('academic.teachers.masuulNumber')}</label>
                 <input
                   type="tel"
                   value={formData.masuulNumber}
@@ -458,19 +460,19 @@ const TeachersManagement = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Status *</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{tr('academic.teachers.statusLabel')}</label>
                 <select
                   value={formData.gender}
                   onChange={e => setFormData({ ...formData, gender: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border-none text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500"
                 >
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
+                  <option value="Male">{tv('Male')}</option>
+                  <option value="Female">{tv('Female')}</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Monthly Salary ($)</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{tr('academic.teachers.salaryLabel')}</label>
                 <input
                   type="number"
                   placeholder="2500"
@@ -486,14 +488,14 @@ const TeachersManagement = () => {
                   onClick={() => setIsModalOpen(false)}
                   className="px-6 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs hover:bg-slate-200"
                 >
-                  Cancel
+                  {tr('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
                   className="px-8 py-3 rounded-2xl bg-brand-500 hover:bg-brand-600 text-white font-black text-xs uppercase tracking-wider shadow-lg transition-all"
                 >
-                  {submitting ? 'Saving...' : editingTeacher ? 'Save Changes' : 'Register Teacher'}
+                  {submitting ? tr('common.saving') : editingTeacher ? tr('common.saveChanges') : tr('academic.teachers.register')}
                 </button>
               </div>
             </form>
@@ -508,9 +510,9 @@ const TeachersManagement = () => {
         name={cardTeacher?.fullName}
         idNumber={cardTeacher?.teacherCode}
         rows={[
-          { label: 'Role', value: cardTeacher?.role || '' },
-          { label: 'Phone', value: cardTeacher?.phone || '' },
-          { label: 'Email', value: cardTeacher?.email || '' }
+          { label: tr('academic.idCard.role'), value: tv(cardTeacher?.role) || '' },
+          { label: tr('common.phone'), value: cardTeacher?.phone || '' },
+          { label: tr('common.email'), value: cardTeacher?.email || '' }
         ]}
       />
     </div>

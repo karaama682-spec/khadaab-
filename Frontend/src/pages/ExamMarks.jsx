@@ -4,9 +4,11 @@ import { PenSquare, Save, Loader2, ClipboardList, Users } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { classLabel } from '../utils/classLabel';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const ExamMarks = () => {
   const { showAlert } = useAlert();
+  const { t, tv } = useLanguage();
   const location = useLocation();
   const [exams, setExams] = useState([]);
   const [selectedId, setSelectedId] = useState('');
@@ -25,7 +27,7 @@ const ExamMarks = () => {
         if (param) setSelectedId(param);
         else if (data?.length) setSelectedId(data[0]._id);
       } catch (error) {
-        showAlert({ type: 'danger', title: 'Error', message: 'Failed to load exams.' });
+        showAlert({ type: 'danger', title: t('common.error'), message: t('exams.loadFailed') });
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -49,7 +51,7 @@ const ExamMarks = () => {
           marks: Object.fromEntries(r.subjects.map(s => [s.subject, r.entered ? String(s.marksObtained) : '']))
         })));
       } catch (error) {
-        showAlert({ type: 'danger', title: 'Error', message: 'Failed to load exam data.' });
+        showAlert({ type: 'danger', title: t('common.error'), message: t('exams.marks.loadFailed') });
       } finally {
         setLoading(false);
       }
@@ -81,7 +83,7 @@ const ExamMarks = () => {
       for (const s of subjects) {
         const v = Number(r.marks[s.name]);
         if (String(r.marks[s.name] ?? '').trim() !== '' && (v < 0 || v > Number(s.fullMarks))) {
-          return showAlert({ type: 'warning', title: 'Invalid marks', message: `${r.studentName}: ${s.name} must be between 0 and ${s.fullMarks}.` });
+          return showAlert({ type: 'warning', title: t('exams.marks.invalidTitle'), message: t('exams.marks.invalidRange', { name: r.studentName, subject: s.name, max: s.fullMarks }) });
         }
       }
     }
@@ -96,12 +98,12 @@ const ExamMarks = () => {
       }))
     }));
 
-    if (!payloadRows.length) return showAlert({ type: 'warning', title: 'Nothing to save', message: 'Enter marks for at least one student.' });
+    if (!payloadRows.length) return showAlert({ type: 'warning', title: t('exams.marks.nothingTitle'), message: t('exams.marks.nothing') });
 
     try {
       setSaving(true);
       const { data } = await api.post(`/exams/${selectedId}/results`, { results: payloadRows });
-      showAlert({ type: 'success', title: 'Saved', message: data.message || 'Marks saved.' });
+      showAlert({ type: 'success', title: t('exams.marks.savedTitle'), message: data.message || t('exams.marks.saved') });
       // Refresh to reflect entered state.
       const { data: fresh } = await api.get(`/exams/${selectedId}/results`);
       setRows((fresh.results || []).map(r => ({
@@ -111,7 +113,7 @@ const ExamMarks = () => {
         marks: Object.fromEntries(r.subjects.map(s => [s.subject, r.entered ? String(s.marksObtained) : '']))
       })));
     } catch (error) {
-      showAlert({ type: 'danger', title: 'Error', message: error.response?.data?.message || 'Failed to save marks.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: error.response?.data?.message || t('exams.marks.saveFailed') });
     } finally {
       setSaving(false);
     }
@@ -126,33 +128,33 @@ const ExamMarks = () => {
             <PenSquare size={28} />
           </div>
           <div>
-            <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Mark Entry</h1>
-            <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mt-0.5">Enter each student's marks per subject</p>
+            <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">{t('exams.marks.title')}</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mt-0.5">{t('exams.marks.subtitle')}</p>
           </div>
         </div>
         <button onClick={handleSave} disabled={saving || !exam || !rows.length} className="flex items-center gap-2 px-6 py-3.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-brand-600/30 active:scale-95 disabled:opacity-60">
-          {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} Save Marks
+          {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />} {t('exams.marks.save')}
         </button>
       </div>
 
       {/* Exam selector */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-4 flex flex-col md:flex-row md:items-center gap-4">
-        <span className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-2"><ClipboardList size={16} /> Select Exam</span>
+        <span className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-2"><ClipboardList size={16} /> {t('exams.selectExam')}</span>
         <select value={selectedId} onChange={e => setSelectedId(e.target.value)} className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white font-bold">
-          <option value="">-- Select an exam --</option>
-          {exams.map(e => <option key={e._id} value={e._id}>{e.title} · {classLabel(e.classId, '')} · {e.examType}</option>)}
+          <option value="">{t('exams.selectExamOption')}</option>
+          {exams.map(e => <option key={e._id} value={e._id}>{e.title} · {classLabel(e.classId, '')} · {tv(e.examType)}</option>)}
         </select>
         {exam && (
-          <span className="text-xs font-bold text-slate-500 flex items-center gap-2"><Users size={16} /> {rows.length} students · Total {totalFull} marks</span>
+          <span className="text-xs font-bold text-slate-500 flex items-center gap-2"><Users size={16} /> {t('exams.marks.summary', { count: rows.length, total: totalFull })}</span>
         )}
       </div>
 
       {loading ? (
-        <div className="p-10 text-center text-slate-500 font-bold">Loading students...</div>
+        <div className="p-10 text-center text-slate-500 font-bold">{t('attendance.student.loadingStudents')}</div>
       ) : !exam ? (
-        <div className="p-10 text-center text-slate-400 font-medium">Select an exam to enter marks.</div>
+        <div className="p-10 text-center text-slate-400 font-medium">{t('exams.marks.selectHint')}</div>
       ) : rows.length === 0 ? (
-        <div className="p-10 text-center text-slate-400 font-medium">No students in this exam's class yet.</div>
+        <div className="p-10 text-center text-slate-400 font-medium">{t('exams.marks.noStudents')}</div>
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
@@ -160,13 +162,13 @@ const ExamMarks = () => {
               <thead>
                 <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
                   <th className="px-4 py-4 sticky left-0 bg-slate-50 dark:bg-slate-800/30">#</th>
-                  <th className="px-4 py-4">Student</th>
+                  <th className="px-4 py-4">{t('common.student')}</th>
                   {subjects.map(s => (
-                    <th key={s.name} className="px-3 py-4 text-center">{s.name}<span className="block text-[9px] text-slate-400 font-bold">/{s.fullMarks} · pass {s.passMarks}</span></th>
+                    <th key={s.name} className="px-3 py-4 text-center">{s.name}<span className="block text-[9px] text-slate-400 font-bold">{t('exams.marks.subjectHeader', { full: s.fullMarks, pass: s.passMarks })}</span></th>
                   ))}
-                  <th className="px-3 py-4 text-center">Total</th>
-                  <th className="px-3 py-4 text-center">Absent</th>
-                  <th className="px-4 py-4">Remarks</th>
+                  <th className="px-3 py-4 text-center">{t('common.total')}</th>
+                  <th className="px-3 py-4 text-center">{tv('Absent')}</th>
+                  <th className="px-4 py-4">{t('academic.exit.remarks')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

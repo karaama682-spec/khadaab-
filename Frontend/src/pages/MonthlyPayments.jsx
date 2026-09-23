@@ -7,14 +7,10 @@ import {
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { cycleShortLabel, cycleLabel, currentCycle } from '../utils/billingCycle';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const fmtMoney = (n) =>
   Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
 
 /**
  * Format person names cleanly with proper capitalization and elegant typography.
@@ -39,6 +35,8 @@ const formatPersonName = (str) => {
  */
 const MonthlyPayments = () => {
   const { showAlert } = useAlert();
+  const { t, months: MONTH_NAMES, locale } = useLanguage();
+  const relationshipLabel = (value) => t(`academic.guardians.relationships.${value}`, { defaultValue: value });
   const [searchParams, setSearchParams] = useSearchParams();
   const [payers, setPayers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -52,10 +50,10 @@ const MonthlyPayments = () => {
       const cached = localStorage.getItem('tenantBranding');
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed.name) return { name: parsed.name, subtitle: parsed.systemSubtitle || 'Institute Management' };
+        if (parsed.name) return { name: parsed.name, subtitle: parsed.systemSubtitle || '' };
       }
     } catch (e) {}
-    return { name: 'salaax aldaareyn', subtitle: 'Institute Management' };
+    return { name: 'salaax aldaareyn', subtitle: '' };
   });
 
   useEffect(() => {
@@ -63,7 +61,7 @@ const MonthlyPayments = () => {
       if (data?.name) {
         setTenantInfo({
           name: data.name,
-          subtitle: data.systemSubtitle || 'Institute Management'
+          subtitle: data.systemSubtitle || ''
         });
       }
     }).catch(() => {});
@@ -94,9 +92,9 @@ const MonthlyPayments = () => {
       setPayers(data || []);
     } catch (err) {
       console.error('Failed to load monthly payments', err);
-      const msg = err.response?.data?.message || err.message || 'Failed to load monthly payments.';
+      const msg = err.response?.data?.message || err.message || t('monthlyPayments.loadFailed');
       setError(msg);
-      showAlert({ type: 'danger', title: 'Error', message: msg });
+      showAlert({ type: 'danger', title: t('common.error'), message: msg });
     } finally {
       setLoading(false);
     }
@@ -188,12 +186,12 @@ const MonthlyPayments = () => {
         const value = `${y}-${String(m + 1).padStart(2, '0')}`;
         opts.push({
           value,
-          label: `${MONTH_NAMES[m]} ${y} cycle (${cycleShortLabel(value)})`
+          label: t('monthlyPayments.cycleOption', { month: MONTH_NAMES[m], year: y, range: cycleShortLabel(value) })
         });
       }
     }
     return opts;
-  }, [years]);
+  }, [years, MONTH_NAMES]);
 
   const handleTabChange = (newStatus) => {
     setStatusFilter(newStatus);
@@ -323,22 +321,22 @@ const MonthlyPayments = () => {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-[11pt] font-black uppercase tracking-tight text-black leading-tight">
-              {tenantInfo.name} - {tenantInfo.subtitle || 'INSTITUTE MANAGEMENT'}
+              {tenantInfo.name} - {tenantInfo.subtitle && tenantInfo.subtitle !== 'Institute Management' ? tenantInfo.subtitle : t('nav.instituteManagement')}
             </h1>
             <h2 className="text-[8.5pt] font-extrabold text-black uppercase mt-0.5 leading-tight">
               {statusFilter === 'paid'
-                ? 'LIISKA ARDAYDA & WAALIDIINTA LACAGTA BIXIYEY (FEES COLLECTED)'
+                ? t('monthlyPayments.print.titlePaid')
                 : statusFilter === 'pending'
-                ? 'LIISKA ARDAYDA & WAALIDIINTA DEYNTA KU DHIMAN TAHAY (PENDING FEES)'
-                : 'WARBIXINTA GUUD EE BIXINTA LACAGAHA (TUITION PAYMENTS REPORT)'}
+                ? t('monthlyPayments.print.titlePending')
+                : t('monthlyPayments.print.titleAll')}
             </h2>
             <p className="text-[7.5pt] text-black mt-0.5">
-              Wareegga: <span className="font-bold text-black">{cycleLabel(monthKey)}</span> · Daabacay: <span className="text-black">{new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              {t('monthlyPayments.print.cycle')}: <span className="font-bold text-black">{cycleLabel(monthKey)}</span> · {t('monthlyPayments.print.printed')}: <span className="text-black">{new Date().toLocaleDateString(locale)} {new Date().toLocaleTimeString(locale || [], { hour: '2-digit', minute: '2-digit' })}</span>
             </p>
           </div>
           <div className="text-right text-[8pt] leading-tight text-black">
             <p className="font-bold text-black">
-              Wadarta Dhiman (Unpaid Total): <span className="font-black text-[9pt]">${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.remaining !== undefined ? p.remaining : Math.max(0, p.totalFee - (p.paidAmount || 0))), 0))}</span>
+              {t('monthlyPayments.print.unpaidTotal')}: <span className="font-black text-[9pt]">${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.remaining !== undefined ? p.remaining : Math.max(0, p.totalFee - (p.paidAmount || 0))), 0))}</span>
             </p>
           </div>
         </div>
@@ -352,10 +350,10 @@ const MonthlyPayments = () => {
           </div>
           <div>
             <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none md:text-4xl">
-              Monthly Payments
+              {t('monthlyPayments.title')}
             </h1>
             <p className="text-slate-500 dark:text-slate-400 text-xs font-bold mt-2 uppercase tracking-wider">
-              Xisaabta Bixinta Lacagaha Wareegga (25th → 24th) · {cycleLabel(monthKey)}
+              {t('monthlyPayments.subtitle')} · {cycleLabel(monthKey)}
             </p>
           </div>
         </div>
@@ -365,7 +363,7 @@ const MonthlyPayments = () => {
           {/* Period selector */}
           <div className="flex items-center gap-3 bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm w-full sm:w-auto print:hidden">
             <label htmlFor="month-select" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 shrink-0 leading-tight">
-              Wareegga
+              {t('monthlyPayments.cycle')}
             </label>
             <select
               id="month-select"
@@ -388,10 +386,10 @@ const MonthlyPayments = () => {
             type="button"
             onClick={handlePrint}
             className="flex items-center gap-2 rounded-2xl bg-brand-600 px-5 py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-brand-600/30 transition-all hover:bg-brand-700 active:scale-95 print:hidden"
-            title="Daabaco warbixinta (Print Report)"
+            title={t('monthlyPayments.printTitle')}
           >
             <Printer size={16} />
-            <span>Daabaco / Print</span>
+            <span>{t('common.print')}</span>
           </button>
         </div>
       </div>
@@ -402,7 +400,7 @@ const MonthlyPayments = () => {
         <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Total Fees Due
+              {t('monthlyPayments.totalDue')}
             </span>
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
               <DollarSign size={18} />
@@ -412,7 +410,7 @@ const MonthlyPayments = () => {
             ${fmtMoney(totals.expected)}
           </div>
           <p className="mt-1 text-xs font-medium text-slate-400">
-            {totals.studentsCount} arday guud ahaan
+            {t('monthlyPayments.studentsTotal', { count: totals.studentsCount })}
           </p>
         </div>
 
@@ -427,7 +425,7 @@ const MonthlyPayments = () => {
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-              Lacagta La Bixiyey (Collected)
+              {t('monthlyPayments.collected')}
             </span>
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
               <CheckCircle2 size={18} />
@@ -437,7 +435,7 @@ const MonthlyPayments = () => {
             ${fmtMoney(totals.collected)}
           </div>
           <p className="mt-1 text-xs font-medium text-slate-400">
-            {totals.paidPayersCount} qof ayaa lacag bixiyey
+            {t('monthlyPayments.paidPeople', { count: totals.paidPayersCount })}
           </p>
         </div>
 
@@ -452,7 +450,7 @@ const MonthlyPayments = () => {
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
-              Lacagta Dhiman (Pending)
+              {t('monthlyPayments.pending')}
             </span>
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
               <AlertCircle size={18} />
@@ -462,7 +460,7 @@ const MonthlyPayments = () => {
             ${fmtMoney(totals.pending)}
           </div>
           <p className="mt-1 text-xs font-medium text-slate-400">
-            {totals.pendingPayersCount} qof ayaa weli lacag ku dhiman tahay
+            {t('monthlyPayments.pendingPeople', { count: totals.pendingPayersCount })}
           </p>
         </div>
       </div>
@@ -479,7 +477,7 @@ const MonthlyPayments = () => {
                 : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
             }`}
           >
-            <span>Dhammaan (All)</span>
+            <span>{t('common.all')}</span>
             <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-extrabold text-slate-700 dark:bg-slate-600 dark:text-slate-200">
               {payers.length}
             </span>
@@ -494,7 +492,7 @@ const MonthlyPayments = () => {
             }`}
           >
             <CheckCircle2 size={14} />
-            <span>Lacagta Bixiyey (Paid)</span>
+            <span>{t('monthlyPayments.tabPaid')}</span>
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
               statusFilter === 'paid' ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
             }`}>
@@ -511,7 +509,7 @@ const MonthlyPayments = () => {
             }`}
           >
             <AlertCircle size={14} />
-            <span>Weli Aan Bixin (Pending)</span>
+            <span>{t('monthlyPayments.tabPending')}</span>
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
               statusFilter === 'pending' ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
             }`}>
@@ -525,7 +523,7 @@ const MonthlyPayments = () => {
           <Search size={16} className="text-slate-400 mr-2.5 shrink-0" />
           <input
             type="text"
-            placeholder="Raadi magaca ama lambarka taleefanka..."
+            placeholder={t('monthlyPayments.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-transparent outline-none text-xs text-slate-900 dark:text-white placeholder:text-slate-400 font-medium"
@@ -545,13 +543,13 @@ const MonthlyPayments = () => {
             <thead>
               <tr className="bg-slate-50/70 dark:bg-slate-800/40 text-slate-400 text-[10px] font-black uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 print:text-[7.5pt] print:bg-white print:text-black">
                 <th className="px-4 py-4 w-10 print:hidden"></th>
-                <th className="px-5 py-4 print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">Payer Name (Lacag-bixiyaha)</th>
-                <th className="px-5 py-4 print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">Phone Numbers</th>
-                <th className="px-5 py-4 text-center print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">Students</th>
-                <th className="px-5 py-4 text-right print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">Fee (Wadarta)</th>
-                <th className="px-5 py-4 text-right print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">Paid (La Bixiyey)</th>
-                <th className="px-5 py-4 text-right print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">Remaining (Dhiman)</th>
-                <th className="px-5 py-4 text-center print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">Status</th>
+                <th className="px-5 py-4 print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">{t('monthlyPayments.colPayer')}</th>
+                <th className="px-5 py-4 print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">{t('monthlyPayments.colPhones')}</th>
+                <th className="px-5 py-4 text-center print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">{t('nav.students')}</th>
+                <th className="px-5 py-4 text-right print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">{t('monthlyPayments.colFee')}</th>
+                <th className="px-5 py-4 text-right print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">{t('monthlyPayments.colPaid')}</th>
+                <th className="px-5 py-4 text-right print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">{t('monthlyPayments.colRemaining')}</th>
+                <th className="px-5 py-4 text-center print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">{t('common.status')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 print:divide-slate-300">
@@ -585,7 +583,7 @@ const MonthlyPayments = () => {
                             </span>
                             {p.relationship && (
                               <span className="inline-block text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider print:text-[7pt] print:text-slate-700 leading-none mt-0.5 font-sans">
-                                {p.relationship}
+                                {relationshipLabel(p.relationship)}
                               </span>
                             )}
                           </div>
@@ -625,17 +623,17 @@ const MonthlyPayments = () => {
                         {isFullyPaid ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-500/20 dark:bg-emerald-950/40 dark:text-emerald-300 print:border-emerald-700 print:text-emerald-900 print:px-1.5 print:py-0.2 print:text-[7pt]">
                             <CheckCircle2 size={12} className="print:hidden" />
-                            <span>Bixiyey (Paid)</span>
+                            <span>{t('monthlyPayments.statusPaid')}</span>
                           </span>
                         ) : isPartial ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-500/20 dark:bg-amber-950/40 dark:text-amber-300 print:border-amber-700 print:text-amber-900 print:px-1.5 print:py-0.2 print:text-[7pt]">
                             <Clock size={12} className="print:hidden" />
-                            <span>Qeyb (Partial)</span>
+                            <span>{t('monthlyPayments.statusPartial')}</span>
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-500/20 dark:bg-rose-950/40 dark:text-rose-300 print:border-rose-700 print:text-rose-900 print:px-1.5 print:py-0.2 print:text-[7pt]">
                             <AlertCircle size={12} className="print:hidden" />
-                            <span>Aan Bixin (Unpaid)</span>
+                            <span>{t('monthlyPayments.statusUnpaid')}</span>
                           </span>
                         )}
                       </td>
@@ -648,12 +646,12 @@ const MonthlyPayments = () => {
                             <table className="w-full text-left text-sm">
                               <thead>
                                 <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
-                                  <th className="px-5 py-3">Student Name</th>
-                                  <th className="px-5 py-3">Class</th>
-                                  <th className="px-5 py-3 text-right">Monthly Fee</th>
-                                  <th className="px-5 py-3 text-right">Paid</th>
-                                  <th className="px-5 py-3 text-right">Remaining</th>
-                                  <th className="px-5 py-3 text-center">Status</th>
+                                  <th className="px-5 py-3">{t('students.studentName')}</th>
+                                  <th className="px-5 py-3">{t('common.class')}</th>
+                                  <th className="px-5 py-3 text-right">{t('monthlyPayments.monthlyFee')}</th>
+                                  <th className="px-5 py-3 text-right">{t('common.paid')}</th>
+                                  <th className="px-5 py-3 text-right">{t('common.remaining')}</th>
+                                  <th className="px-5 py-3 text-center">{t('common.status')}</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -679,15 +677,15 @@ const MonthlyPayments = () => {
                                       <td className="px-5 py-3 text-center">
                                         {sIsPaid ? (
                                           <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                                            ✓ Bixiyey
+                                            ✓ {t('monthlyPayments.studentPaid')}
                                           </span>
                                         ) : sPaid > 0 ? (
                                           <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
-                                            Qeyb
+                                            {t('monthlyPayments.studentPartial')}
                                           </span>
                                         ) : (
                                           <span className="text-[11px] font-bold text-rose-600 dark:text-rose-400">
-                                            Aan Bixin
+                                            {t('monthlyPayments.studentUnpaid')}
                                           </span>
                                         )}
                                       </td>
@@ -695,7 +693,7 @@ const MonthlyPayments = () => {
                                   );
                                 })}
                                 <tr className="bg-slate-50 dark:bg-slate-800/40 font-black">
-                                  <td className="px-5 py-3 uppercase text-[11px] text-slate-500" colSpan={2}>Wadarta Payer-ka</td>
+                                  <td className="px-5 py-3 uppercase text-[11px] text-slate-500" colSpan={2}>{t('monthlyPayments.payerTotal')}</td>
                                   <td className="px-5 py-3 text-right text-slate-900 dark:text-white tabular-nums">
                                     ${fmtMoney(feeAmt)}
                                   </td>
@@ -722,7 +720,7 @@ const MonthlyPayments = () => {
                   <td colSpan={8} className="px-8 py-16 text-center text-slate-400 text-sm font-medium">
                     <div className="flex flex-col items-center justify-center gap-3">
                       <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                      <span className="text-slate-500 font-semibold">Loading monthly payments...</span>
+                      <span className="text-slate-500 font-semibold">{t('monthlyPayments.loading')}</span>
                     </div>
                   </td>
                 </tr>
@@ -737,7 +735,7 @@ const MonthlyPayments = () => {
                         onClick={fetchPayers}
                         className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shadow-sm"
                       >
-                        Retry Loading
+                        {t('monthlyPayments.retry')}
                       </button>
                     </div>
                   </td>
@@ -751,25 +749,25 @@ const MonthlyPayments = () => {
                       <div className="max-w-md mx-auto flex flex-col items-center gap-2">
                         <CheckCircle2 size={32} className="text-slate-300 dark:text-slate-600" />
                         <p className="font-bold text-slate-700 dark:text-slate-300">
-                          Ma jiraan wax lacag ah oo bishan weli la qabtay
+                          {t('monthlyPayments.emptyPaidTitle')}
                         </p>
                         <p className="text-xs text-slate-400">
-                          Dhammaan lacag-bixiyeyaasha bishan ({cycleLabel(monthKey)}) weli lacag ma bixin.
+                          {t('monthlyPayments.emptyPaidMsg', { cycle: cycleLabel(monthKey) })}
                         </p>
                       </div>
                     ) : statusFilter === 'pending' ? (
                       <div className="max-w-md mx-auto flex flex-col items-center gap-2">
                         <CheckCircle2 size={32} className="text-emerald-500" />
                         <p className="font-bold text-slate-700 dark:text-slate-300">
-                          Dhammaan lacag-bixiyeyaasha waa wada bixiyeen!
+                          {t('monthlyPayments.emptyPendingTitle')}
                         </p>
                         <p className="text-xs text-slate-400">
-                          Wax deyn ah oo ku dhiman wareeggan ma jiraan.
+                          {t('monthlyPayments.emptyPendingMsg')}
                         </p>
                       </div>
                     ) : (
                       <p className="font-semibold">
-                        Lama helin wax xog ah oo ku saabsan wareegga {MONTH_NAMES[month]} {year}.
+                        {t('monthlyPayments.emptyAll', { month: MONTH_NAMES[month], year })}
                       </p>
                     )}
                   </td>
@@ -779,7 +777,7 @@ const MonthlyPayments = () => {
               {/* Compact Print Summary Row (Only on paper) - Only Unpaid Total */}
               <tr className="hidden print:table-row font-black print-summary-row border-t-2 border-black">
                 <td colSpan={5} className="px-2 py-1 text-right uppercase text-[8pt] text-black font-extrabold">
-                  Wadarta Dhiman (Unpaid Total):
+                  {t('monthlyPayments.print.unpaidTotal')}:
                 </td>
                 <td className="px-1.5 py-1 text-right text-[8.5pt] text-black font-black">
                   ${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.remaining !== undefined ? p.remaining : Math.max(0, p.totalFee - (p.paidAmount || 0))), 0))}
@@ -799,22 +797,22 @@ const MonthlyPayments = () => {
           </div>
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-              {MONTH_NAMES[month]} {year} cycle · {cycleLabel(monthKey)}
+              {t('monthlyPayments.footerCycle', { month: MONTH_NAMES[month], year })} · {cycleLabel(monthKey)}
             </p>
             <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
-              Xisaabta shaandheysan: {filtered.length} payer{filtered.length === 1 ? '' : 's'}
+              {t('monthlyPayments.filteredCount', { count: filtered.length })}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">La Bixiyey (Collected)</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('monthlyPayments.footerCollected')}</p>
             <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 leading-none">
               ${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.paidAmount || 0), 0))}
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Wadarta (Total)</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{t('common.total')}</p>
             <p className="text-2xl font-black text-slate-900 dark:text-white leading-none">
               ${fmtMoney(filtered.reduce((sum, p) => sum + Number(p.totalFee || 0), 0))}
             </p>

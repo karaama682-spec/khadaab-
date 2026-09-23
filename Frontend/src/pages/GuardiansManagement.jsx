@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Plus, X, Edit2, Trash2, UserCheck, Search } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const GuardiansManagement = () => {
   const { showAlert, showConfirm } = useAlert();
+  const { t, tv } = useLanguage();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -58,7 +60,7 @@ const GuardiansManagement = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.fullName) {
-      showAlert({ type: 'warning', title: 'Validation Error', message: 'Guardian name is required.' });
+      showAlert({ type: 'warning', title: t('common.validationError'), message: t('academic.guardians.nameRequired') });
       return;
     }
 
@@ -66,27 +68,27 @@ const GuardiansManagement = () => {
       if (editingItem) {
         const res = await api.put(`/guardians/${editingItem._id}`, formData);
         setData(prev => prev.map(i => i._id === editingItem._id ? (res.data || { ...i, ...formData }) : i));
-        showAlert({ type: 'success', title: 'Success', message: 'Guardian updated successfully.' });
+        showAlert({ type: 'success', title: t('common.success'), message: t('academic.guardians.updated') });
       } else {
         const res = await api.post('/guardians', formData);
         setData(prev => [res.data, ...prev]);
-        showAlert({ type: 'success', title: 'Success', message: 'Guardian created successfully.' });
+        showAlert({ type: 'success', title: t('common.success'), message: t('academic.guardians.created') });
       }
       setIsModalOpen(false);
       fetchData();
     } catch (error) {
       console.error("Failed to save guardian", error);
-      showAlert({ type: 'danger', title: 'Error', message: error.response?.data?.message || 'Failed to save guardian.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: error.response?.data?.message || t('academic.guardians.saveFailed') });
     }
   };
 
   const handleDelete = async (item) => {
     const ok = await showConfirm({
       type: 'warning',
-      title: 'Delete Guardian?',
-      message: `Are you sure you want to delete "${item.fullName}"?`,
-      confirmText: 'Yes, delete',
-      cancelText: 'Cancel',
+      title: t('academic.guardians.deleteTitle'),
+      message: t('academic.guardians.deleteConfirm', { name: item.fullName }),
+      confirmText: t('common.yesDelete'),
+      cancelText: t('common.cancel'),
       danger: true
     });
     if (!ok) return;
@@ -94,10 +96,10 @@ const GuardiansManagement = () => {
     try {
       await api.delete(`/guardians/${item._id}`);
       setData(prev => prev.filter(i => i._id !== item._id));
-      showAlert({ type: 'success', title: 'Deleted', message: 'Guardian deleted successfully.' });
+      showAlert({ type: 'success', title: t('common.deleted'), message: t('academic.guardians.deletedMsg') });
     } catch (error) {
       console.error("Failed to delete guardian", error);
-      showAlert({ type: 'danger', title: 'Error', message: 'Failed to delete guardian.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: t('academic.guardians.deleteFailed') });
     }
   };
 
@@ -108,7 +110,7 @@ const GuardiansManagement = () => {
     (item.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (loading) return <div className="p-10 text-center text-slate-500">Loading Guardians...</div>;
+  if (loading) return <div className="p-10 text-center text-slate-500">{t('academic.guardians.loading')}</div>;
 
   return (
     <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24">
@@ -119,15 +121,15 @@ const GuardiansManagement = () => {
             <UserCheck size={32} strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Guardians</h1>
-            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">Parent & Guardian Contacts</p>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">{t('academic.guardians.title')}</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">{t('academic.guardians.subtitle')}</p>
           </div>
         </div>
         <button
           onClick={openAddModal}
           className="flex items-center gap-3 px-8 py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95"
         >
-          <Plus size={18} strokeWidth={3} /> Add New Guardian
+          <Plus size={18} strokeWidth={3} /> {t('academic.guardians.addNew')}
         </button>
       </div>
 
@@ -136,7 +138,7 @@ const GuardiansManagement = () => {
         <Search size={18} className="text-slate-400 mr-3" />
         <input
           type="text"
-          placeholder="Search guardians by name, phone 1, phone 2, or email..."
+          placeholder={t('academic.guardians.searchPlaceholder')}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400"
@@ -149,12 +151,12 @@ const GuardiansManagement = () => {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                <th className="px-8 py-5">Full Name</th>
-                <th className="px-8 py-5">Relationship</th>
-                <th className="px-8 py-5">Phone Numbers (1 & 2)</th>
-                <th className="px-8 py-5">Email</th>
-                <th className="px-8 py-5">Address</th>
-                <th className="px-8 py-5 text-right">Actions</th>
+                <th className="px-8 py-5">{t('academic.guardians.colName')}</th>
+                <th className="px-8 py-5">{t('academic.guardians.colRelationship')}</th>
+                <th className="px-8 py-5">{t('academic.guardians.colPhones')}</th>
+                <th className="px-8 py-5">{t('common.email')}</th>
+                <th className="px-8 py-5">{t('common.address')}</th>
+                <th className="px-8 py-5 text-right">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -164,7 +166,7 @@ const GuardiansManagement = () => {
                     {item.fullName}
                   </td>
                   <td className="px-8 py-6 text-sm font-semibold text-slate-500 dark:text-slate-400">
-                    {item.relationship || '-'}
+                    {item.relationship ? t(`academic.guardians.relationships.${item.relationship}`, { defaultValue: item.relationship }) : '-'}
                   </td>
                   <td className="px-8 py-6 text-sm font-semibold text-slate-500 dark:text-slate-400">
                     <div className="flex flex-col gap-1.5">
@@ -172,9 +174,9 @@ const GuardiansManagement = () => {
                         <a
                           href={`tel:${item.phone}`}
                           className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-500/20 w-fit"
-                          title="Phone 1 (Primary)"
+                          title={t('academic.guardians.phone1Title')}
                         >
-                          Phone 1: {item.phone}
+                          {t('academic.guardians.phone1')}: {item.phone}
                         </a>
                       ) : (
                         <span className="text-slate-400 font-mono text-xs">—</span>
@@ -183,9 +185,9 @@ const GuardiansManagement = () => {
                         <a
                           href={`tel:${item.alternatePhone}`}
                           className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 rounded-lg border border-blue-500/20 w-fit"
-                          title="Phone 2 (Second Number)"
+                          title={t('academic.guardians.phone2Title')}
                         >
-                          Phone 2: {item.alternatePhone}
+                          {t('academic.guardians.phone2')}: {item.alternatePhone}
                         </a>
                       )}
                     </div>
@@ -210,7 +212,7 @@ const GuardiansManagement = () => {
               ))}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="px-8 py-10 text-center text-slate-400 text-sm font-medium">No guardians found. Click "Add New Guardian" to create one.</td>
+                  <td colSpan="6" className="px-8 py-10 text-center text-slate-400 text-sm font-medium">{t('academic.guardians.empty')}</td>
                 </tr>
               )}
             </tbody>
@@ -224,7 +226,7 @@ const GuardiansManagement = () => {
           <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 max-w-lg w-full shadow-2xl border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
-                {editingItem ? 'Edit Guardian' : 'Add New Guardian'}
+                {editingItem ? t('academic.guardians.editTitle') : t('academic.guardians.addNew')}
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-full">
                 <X size={20} />
@@ -233,11 +235,11 @@ const GuardiansManagement = () => {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Full Name *</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('academic.guardians.fullNameLabel')}</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Abdi Mohamed"
+                  placeholder={t('academic.guardians.fullNamePlaceholder')}
                   value={formData.fullName}
                   onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
@@ -246,20 +248,20 @@ const GuardiansManagement = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Relationship</label>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('academic.guardians.colRelationship')}</label>
                   <select
                     value={formData.relationship}
                     onChange={(e) => setFormData({ ...formData, relationship: e.target.value })}
                     className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
                   >
-                    <option value="Father">Father</option>
-                    <option value="Mother">Mother</option>
-                    <option value="Guardian">Guardian</option>
-                    <option value="Other">Other</option>
+                    <option value="Father">{t('academic.guardians.relationships.Father')}</option>
+                    <option value="Mother">{t('academic.guardians.relationships.Mother')}</option>
+                    <option value="Guardian">{t('academic.guardians.relationships.Guardian')}</option>
+                    <option value="Other">{t('academic.guardians.relationships.Other')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Email Address</label>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('academic.guardians.emailLabel')}</label>
                   <input
                     type="email"
                     placeholder="guardian@example.com"
@@ -272,7 +274,7 @@ const GuardiansManagement = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Primary Phone (Phone 1) *</label>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('academic.guardians.phone1Label')}</label>
                   <input
                     type="text"
                     required
@@ -283,10 +285,10 @@ const GuardiansManagement = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Second Phone (Phone 2)</label>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('academic.guardians.phone2Label')}</label>
                   <input
                     type="text"
-                    placeholder="Optional second phone..."
+                    placeholder={t('academic.guardians.phone2Placeholder')}
                     value={formData.alternatePhone}
                     onChange={(e) => setFormData({ ...formData, alternatePhone: e.target.value })}
                     className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
@@ -295,10 +297,10 @@ const GuardiansManagement = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Address</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.address')}</label>
                 <input
                   type="text"
-                  placeholder="Mogadishu, Somalia"
+                  placeholder={t('academic.guardians.addressPlaceholder')}
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
@@ -311,13 +313,13 @@ const GuardiansManagement = () => {
                   onClick={() => setIsModalOpen(false)}
                   className="px-6 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs uppercase"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="px-6 py-3 rounded-xl bg-brand-600 text-white font-bold text-xs uppercase shadow-lg hover:bg-brand-700"
                 >
-                  {editingItem ? 'Save Changes' : 'Create Guardian'}
+                  {editingItem ? t('common.saveChanges') : t('academic.guardians.create')}
                 </button>
               </div>
             </form>

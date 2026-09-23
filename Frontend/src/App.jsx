@@ -317,7 +317,7 @@ const App = () => {
             </main>
 
             <footer className="py-4 px-8 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 text-xs text-center">
-              &copy; {new Date().getFullYear()} {t('instituteManagement')}
+              &copy; {new Date().getFullYear()} {t('nav.instituteManagement')}
             </footer>
           </div>
         </div>

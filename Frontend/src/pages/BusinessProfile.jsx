@@ -86,16 +86,16 @@ const BusinessProfile = () => {
       window.dispatchEvent(new Event('tenant:updated'));
       showAlert({
         type: 'success',
-        title: 'Guul!',
-        message: 'Xogta machadka si sax ah ayaa loo keydiyay.',
-        buttonText: 'Sii wad'
+        title: t('settings.profile.successTitle'),
+        message: t('settings.profile.savedMessage'),
+        buttonText: t('settings.profile.continue')
       });
     } catch (error) {
       showAlert({
         type: 'error',
-        title: 'Uh oh!',
-        message: 'Failed to update profile.',
-        buttonText: 'Try again'
+        title: t('common.alert.error'),
+        message: t('settings.profile.failedMessage'),
+        buttonText: t('settings.profile.tryAgain')
       });
     } finally {
       setIsSaving(false);
@@ -103,13 +103,13 @@ const BusinessProfile = () => {
   };
 
   const sections = [
-    { id: 'general', label: 'General Info', icon: <Building size={18} /> },
-    { id: 'branding', label: 'Branding', icon: <Camera size={18} /> },
-    { id: 'contact', label: 'Contact Details', icon: <Globe size={18} /> },
-    { id: 'hours', label: 'Operating Hours', icon: <Clock size={18} /> },
+    { id: 'general', label: t('settings.profile.sections.general'), icon: <Building size={18} /> },
+    { id: 'branding', label: t('settings.profile.sections.branding'), icon: <Camera size={18} /> },
+    { id: 'contact', label: t('settings.profile.sections.contact'), icon: <Globe size={18} /> },
+    { id: 'hours', label: t('settings.profile.sections.hours'), icon: <Clock size={18} /> },
   ];
 
-  if (loading) return <div className="p-10 text-center">Loading Profile Data...</div>;
+  if (loading) return <div className="p-10 text-center">{t('settings.profile.loading')}</div>;
 
   return (
     <div className="p-6 lg:p-8 space-y-8 max-w-[1440px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
@@ -118,7 +118,7 @@ const BusinessProfile = () => {
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 bg-brand-600 rounded-2xl flex items-center justify-center text-white text-2xl font-black shadow-lg shadow-brand-500/20 overflow-hidden">
             {tenant.logo ? (
-              <img src={tenant.logo} alt="Logo" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerText = tenant.name?.charAt(0) || 'B'; }} />
+              <img src={tenant.logo} alt={t('settings.profile.logoAlt')} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerText = tenant.name?.charAt(0) || 'B'; }} />
             ) : (
               tenant.name?.charAt(0) || 'B'
             )}
@@ -126,7 +126,7 @@ const BusinessProfile = () => {
           <div>
             <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{tenant.name}</h1>
             <p className="text-slate-500 dark:text-slate-400 text-sm flex items-center gap-1.5">
-              <ShieldCheck size={14} className="text-emerald-500" /> Verified Somali Professional Business
+              <ShieldCheck size={14} className="text-emerald-500" /> {t('settings.profile.verified')}
             </p>
           </div>
         </div>
@@ -135,7 +135,7 @@ const BusinessProfile = () => {
           disabled={isSaving}
           className="flex items-center justify-center gap-2 px-6 py-3 bg-brand-600 rounded-xl text-sm font-bold text-white hover:bg-brand-700 transition-all shadow-lg shadow-brand-600/20 active:scale-95 disabled:opacity-70"
         >
-          {isSaving ? 'Saving...' : <><Save size={18} /> Save Changes</>}
+          {isSaving ? t('settings.profile.saving') : <><Save size={18} /> {t('settings.profile.saveChanges')}</>}
         </button>
       </div>
 
@@ -162,82 +162,79 @@ const BusinessProfile = () => {
           {activeTab === 'general' && (
             <section className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-6 animate-in slide-in-from-right-4">
               <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <Building size={20} className="text-brand-500" /> Basic Information
+                <Building size={20} className="text-brand-500" /> {t('settings.profile.basicInformation')}
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('systemLanguage')}</label>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('nav.systemLanguage')}</label>
                   <div className="relative">
                     <Languages size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                     <select
                       value={language}
                       onChange={(event) => setLanguage(event.target.value)}
                       className="w-full appearance-none bg-slate-50 py-2.5 pl-11 pr-4 text-sm font-medium outline-none transition-all focus:ring-2 focus:ring-brand-500 dark:bg-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 rounded-xl"
-                      aria-label={t('systemLanguage')}
+                      aria-label={t('nav.systemLanguage')}
                     >
-                      <option value="en">English</option>
-                      <option value="so">Soomaali</option>
-                      <option value="ar">العربية</option>
+                      <option value="en">{t('nav.english')}</option>
+                      <option value="so">{t('nav.somali')}</option>
+                      <option value="ar">{t('nav.arabic')}</option>
                     </select>
                   </div>
-                  <p className="text-[10px] text-slate-500">Select English or Soomaali to change the interface language.</p>
+                  <p className="text-[10px] text-slate-500">{t('settings.profile.languageHint')}</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Magaca Machadka / Display Business Name</label>
-                  <input type="text" value={tenant.name} onChange={e => setTenant({ ...tenant, name: e.target.value })} placeholder="Tusaale: Machadka Waxbarashada" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none transition-all dark:text-white" />
-                  <p className="text-[10px] text-brand-600 dark:text-brand-400 font-semibold">Kani waa magaca rasmiga ah ee ka muuqanaya bogga Login-ka, browser-ka, iyo nidaamka oo dhan.</p>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('settings.profile.displayName')}</label>
+                  <input type="text" value={tenant.name} onChange={e => setTenant({ ...tenant, name: e.target.value })} placeholder={t('settings.profile.displayNamePlaceholder')} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none transition-all dark:text-white" />
+                  <p className="text-[10px] text-brand-600 dark:text-brand-400 font-semibold">{t('settings.profile.displayNameHint')}</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Qoraalka Hoose / System Subtitle</label>
-                  <input type="text" value={tenant.systemSubtitle || ''} onChange={e => setTenant({ ...tenant, systemSubtitle: e.target.value })} placeholder="Ku soo dhowow nidaamka maamulka machadka" className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none transition-all dark:text-white" />
-                  <p className="text-[10px] text-slate-500">Qoraalka yar ee ka hooseeya magaca machadka ee bogga Login-ka iyo Sidebar-ka.</p>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('settings.profile.subtitle')}</label>
+                  <input type="text" value={tenant.systemSubtitle || ''} onChange={e => setTenant({ ...tenant, systemSubtitle: e.target.value })} placeholder={t('settings.profile.subtitlePlaceholder')} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none transition-all dark:text-white" />
+                  <p className="text-[10px] text-slate-500">{t('settings.profile.subtitleHint')}</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Legal Entity Name</label>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('settings.profile.legalName')}</label>
                   <input type="text" value={tenant.legalName || ''} onChange={e => setTenant({ ...tenant, legalName: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none transition-all dark:text-white" />
-                  <p className="text-[10px] text-slate-500">Permanent legal name (used by System Admins for identification).</p>
+                  <p className="text-[10px] text-slate-500">{t('settings.profile.legalNameHint')}</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">System Identifier (Read-only)</label>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('settings.profile.systemIdentifier')}</label>
                   <div className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono text-slate-500 cursor-not-allowed">
                     {tenant.subdomain}.Dugsi.so
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Industry / Qeybta Shaqada</label>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('settings.profile.industry')}</label>
                   <input 
                     type="text" 
                     list="industry-options" 
                     value={tenant.industry || ''} 
                     onChange={e => setTenant({ ...tenant, industry: e.target.value })} 
-                    placeholder="tusaale: Waxbarasho & Machad (Education)" 
+                    placeholder={t('settings.profile.industryPlaceholder')} 
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 outline-none transition-all dark:text-white" 
                   />
                   <datalist id="industry-options">
-                    <option value="Waxbarasho & Machad (Education & Training)" />
-                    <option value="Machad Diini & Quraan (Islamic Institute)" />
-                    <option value="Dugsi Sare & Dhexe (Secondary & Primary School)" />
-                    <option value="Kulliyad / Jaamacad (College / University)" />
+                    {t('settings.profile.industryOptions').map((option) => <option key={option} value={option} />)}
                   </datalist>
-                  <p className="text-[10px] text-slate-500">Qeybta ama takhasuska machadka (waad qori kartaa ama beddeli kartaa).</p>
+                  <p className="text-[10px] text-slate-500">{t('settings.profile.industryHint')}</p>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Base Currency</label>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('settings.profile.baseCurrency')}</label>
                   <select value={tenant.currency || 'USD'} onChange={e => setTenant({ ...tenant, currency: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium outline-none dark:text-white">
-                    <option value="USD">USD - US Dollar</option>
-                    <option value="EUR">EUR - Euro</option>
+                    <option value="USD">{t('settings.profile.usd')}</option>
+                    <option value="EUR">{t('settings.profile.eur')}</option>
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">System Timezone</label>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('settings.profile.systemTimezone')}</label>
                   <select value={tenant.timezone || 'Africa/Nairobi'} onChange={e => setTenant({ ...tenant, timezone: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium outline-none dark:text-white">
-                    <option value="Africa/Nairobi">East Africa Time (EAT)</option>
-                    <option value="Africa/Mogadishu">Mogadishu (EAT)</option>
+                    <option value="Africa/Nairobi">{t('settings.profile.eat')}</option>
+                    <option value="Africa/Mogadishu">{t('settings.profile.mogadishu')}</option>
                   </select>
                 </div>
                 <div className="md:col-span-2 space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Description</label>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('settings.profile.description')}</label>
                   <textarea rows={3} value={tenant.description} onChange={e => setTenant({ ...tenant, description: e.target.value })} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium outline-none dark:text-white resize-none" />
                 </div>
               </div>
@@ -248,12 +245,12 @@ const BusinessProfile = () => {
           {activeTab === 'branding' && (
             <section className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-6 animate-in slide-in-from-right-4">
               <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <Camera size={20} className="text-violet-500" /> Branding & Assets
+                <Camera size={20} className="text-violet-500" /> {t('settings.profile.brandingAssets')}
               </h3>
 
               <div className="flex flex-col md:flex-row items-start gap-8">
                 <div className="space-y-4">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Business Logo</label>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('settings.profile.businessLogo')}</label>
                   <label className="relative group cursor-pointer block w-32 h-32">
                     <input 
                       type="file" 
@@ -277,20 +274,20 @@ const BusinessProfile = () => {
                       <Upload size={24} />
                     </div>
                   </label>
-                  <p className="text-[10px] text-slate-500 max-w-[128px]">Min 500x500px, PNG or JPG supported.</p>
+                  <p className="text-[10px] text-slate-500 max-w-[128px]">{t('settings.profile.logoHint')}</p>
                 </div>
 
                 <div className="flex-1 space-y-6 w-full">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Brand Color</label>
+                      <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('settings.profile.brandColor')}</label>
                       <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
                         <input type="color" value={tenant.settings?.brandColor} onChange={e => setTenant({ ...tenant, settings: { ...tenant.settings, brandColor: e.target.value } })} className="w-8 h-8 rounded-lg bg-transparent border-none outline-none cursor-pointer" />
                         <span className="text-sm font-mono font-bold dark:text-slate-300">{tenant.settings?.brandColor}</span>
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Accent Color</label>
+                      <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t('settings.profile.accentColor')}</label>
                       <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
                         <input type="color" value={tenant.settings?.accentColor} onChange={e => setTenant({ ...tenant, settings: { ...tenant.settings, accentColor: e.target.value } })} className="w-8 h-8 rounded-lg bg-transparent border-none outline-none cursor-pointer" />
                         <span className="text-sm font-mono font-bold dark:text-slate-300">{tenant.settings?.accentColor}</span>
@@ -306,24 +303,24 @@ const BusinessProfile = () => {
           {activeTab === 'contact' && (
             <section className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-6 animate-in slide-in-from-right-4">
               <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <Globe size={20} className="text-sky-500" /> Contact & Social Presence
+                <Globe size={20} className="text-sky-500" /> {t('settings.profile.contactSocial')}
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><Mail size={12} /> Email Address</label>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><Mail size={12} /> {t('settings.profile.email')}</label>
                   <input type="email" value={tenant.contactInfo?.email} onChange={e => setTenant({ ...tenant, contactInfo: { ...tenant.contactInfo, email: e.target.value } })} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium outline-none dark:text-white" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><Phone size={12} /> Phone Number</label>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><Phone size={12} /> {t('settings.profile.phone')}</label>
                   <input type="text" value={tenant.contactInfo?.phone} onChange={e => setTenant({ ...tenant, contactInfo: { ...tenant.contactInfo, phone: e.target.value } })} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium outline-none dark:text-white" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={12} /> Main Address</label>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><MapPin size={12} /> {t('settings.profile.address')}</label>
                   <input type="text" value={tenant.contactInfo?.address} onChange={e => setTenant({ ...tenant, contactInfo: { ...tenant.contactInfo, address: e.target.value } })} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium outline-none dark:text-white" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><Globe size={12} /> Website</label>
+                  <label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5"><Globe size={12} /> {t('settings.profile.website')}</label>
                   <input type="text" value={tenant.contactInfo?.website} onChange={e => setTenant({ ...tenant, contactInfo: { ...tenant.contactInfo, website: e.target.value } })} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium outline-none dark:text-white" />
                 </div>
               </div>
@@ -355,7 +352,7 @@ const BusinessProfile = () => {
           {activeTab === 'hours' && (
             <section className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-6 animate-in slide-in-from-right-4">
               <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <Clock size={20} className="text-amber-500" /> Operating Hours
+                <Clock size={20} className="text-amber-500" /> {t('settings.profile.operatingHours')}
               </h3>
 
               <div className="space-y-3">
@@ -363,13 +360,13 @@ const BusinessProfile = () => {
                   <div key={item.day} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800/50">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-700 flex items-center justify-center text-xs font-black text-slate-400">
-                        {item.day.substring(0, 2)}
+                        {t(`settings.profile.days.${item.day}`, { defaultValue: item.day }).substring(0, 2)}
                       </div>
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{item.day}</span>
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{t(`settings.profile.days.${item.day}`, { defaultValue: item.day })}</span>
                     </div>
                     <div className="flex items-center gap-4">
                       {item.isClosed ? (
-                        <span className="text-xs font-black text-rose-500 uppercase">Closed</span>
+                        <span className="text-xs font-black text-rose-500 uppercase">{t('settings.profile.closed')}</span>
                       ) : (
                         <div className="flex items-center gap-2">
                           <input type="text" value={item.open} onChange={e => {

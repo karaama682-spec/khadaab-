@@ -13,6 +13,7 @@ import { jsPDF } from 'jspdf';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { currentCycle, cycleRangeISO } from '../utils/billingCycle';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const fmtMoney = (n) =>
   Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -23,6 +24,7 @@ const currentPeriod = () => cycleRangeISO(currentCycle());
 
 const CashbookCategoryReport = () => {
   const { showAlert } = useAlert();
+  const { t, tv, locale } = useLanguage();
 
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,7 +41,7 @@ const CashbookCategoryReport = () => {
         setEntries(data || []);
       } catch (error) {
         console.error('Failed to load cashbook entries', error);
-        showAlert({ type: 'danger', title: 'Error', message: 'Failed to load report data.' });
+        showAlert({ type: 'danger', title: t('common.error'), message: t('reports.common.loadFailed') });
       } finally {
         setLoading(false);
       }
@@ -64,7 +66,7 @@ const CashbookCategoryReport = () => {
     const map = new Map();
     for (const e of filteredEntries) {
       const cat = e.categoryId;
-      const title = cat?.title || 'Uncategorised';
+      const title = cat?.title || t('reports.category.uncategorised');
       const type = cat?.type || 'Income';
       const key = `${type}::${title}`;
       const prev = map.get(key) || { name: title, type, total: 0, count: 0 };
@@ -85,11 +87,11 @@ const CashbookCategoryReport = () => {
       totalIncome: incomeRows.reduce((s, r) => s + r.total, 0),
       totalExpense: expenseRows.reduce((s, r) => s + r.total, 0)
     };
-  }, [filteredEntries]);
+  }, [filteredEntries, t]);
 
   const netIncome = totalIncome - totalExpense;
 
-  const rangeLabel = dateFrom || dateTo ? `${dateFrom || '…'}  →  ${dateTo || '…'}` : 'All Time';
+  const rangeLabel = dateFrom || dateTo ? `${dateFrom || '…'}  →  ${dateTo || '…'}` : t('reports.common.allTime');
 
   const applyPeriod = (p) => {
     setDateFrom(p.from);
@@ -109,10 +111,10 @@ const CashbookCategoryReport = () => {
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
-    doc.text('MACHAD INSTITUTE - CATEGORY SUMMARY REPORT', 14, 12);
+    doc.text(t('reports.category.pdf.title'), 14, 12);
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Generated: ${new Date().toLocaleString()}   |   Period: ${rangeLabel}`, 14, 20);
+    doc.text(`${t('payers.pdf.generated')}: ${new Date().toLocaleString(locale)}   |   ${t('reports.common.period')}: ${rangeLabel}`, 14, 20);
 
     let y = 34;
 
@@ -133,10 +135,10 @@ const CashbookCategoryReport = () => {
       doc.rect(10, y, pageW - 20, 8, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(8);
-      doc.text('CATEGORY NAME', 14, y + 5.5);
-      doc.text('TYPE', 110, y + 5.5);
-      doc.text('ENTRIES', 140, y + 5.5);
-      doc.text('TOTAL ($)', pageW - 40, y + 5.5);
+      doc.text(t('reports.category.pdf.categoryName'), 14, y + 5.5);
+      doc.text(t('reports.category.pdf.type'), 110, y + 5.5);
+      doc.text(t('reports.category.pdf.entries'), 140, y + 5.5);
+      doc.text(t('payers.pdf.total'), pageW - 40, y + 5.5);
       y += 8;
 
       if (rows.length === 0) {
@@ -144,7 +146,7 @@ const CashbookCategoryReport = () => {
         doc.rect(10, y, pageW - 20, 8, 'F');
         doc.setTextColor(148, 163, 184);
         doc.setFont('helvetica', 'normal');
-        doc.text('No records in this period', 14, y + 5.5);
+        doc.text(t('reports.category.noRecords'), 14, y + 5.5);
         y += 8;
       }
 
@@ -161,7 +163,7 @@ const CashbookCategoryReport = () => {
         doc.text(String(r.name).slice(0, 55), 14, y + 5.5);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(71, 85, 105);
-        doc.text(r.type, 110, y + 5.5);
+        doc.text(tv(r.type), 110, y + 5.5);
         doc.text(String(r.count), 140, y + 5.5);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(15, 23, 42);
@@ -175,14 +177,14 @@ const CashbookCategoryReport = () => {
       doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(9);
-      doc.text(`${heading} TOTAL`, 14, y + 6);
+      doc.text(t('reports.category.pdf.sectionTotal', { heading }), 14, y + 6);
       doc.setTextColor(accent[0], accent[1], accent[2]);
       doc.text(`$${fmtMoney(total)}`, pageW - 40, y + 6);
       y += 16;
     };
 
-    drawTable('INCOME SUMMARY', incomeRows, totalIncome, [74, 222, 128]);
-    drawTable('EXPENSE SUMMARY', expenseRows, totalExpense, [248, 113, 113]);
+    drawTable(t('reports.category.pdf.income'), incomeRows, totalIncome, [74, 222, 128]);
+    drawTable(t('reports.category.pdf.expense'), expenseRows, totalExpense, [248, 113, 113]);
 
     // Net income
     if (y > pageH - 25) {
@@ -194,14 +196,14 @@ const CashbookCategoryReport = () => {
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
-    doc.text('NET INCOME (Income - Expense)', 14, y + 7);
+    doc.text(t('reports.category.pdf.net'), 14, y + 7);
     doc.text(`$${fmtMoney(netIncome)}`, pageW - 45, y + 7);
 
-    doc.save(`Machad_Category_Summary_${new Date().toISOString().slice(0, 10)}.pdf`);
+    doc.save(`${t('reports.category.pdf.file')}_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   if (loading) {
-    return <div className="p-10 text-center text-slate-500 font-bold">Loading Category Summary Report...</div>;
+    return <div className="p-10 text-center text-slate-500 font-bold">{t('reports.category.loading')}</div>;
   }
 
   const SummaryTable = ({ title, rows, total, tone }) => (
@@ -230,17 +232,17 @@ const CashbookCategoryReport = () => {
           </h3>
         </div>
         <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">
-          {rows.length} categor{rows.length === 1 ? 'y' : 'ies'}
+          {t('reports.category.categoryCount', { count: rows.length })}
         </span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest">
-              <th className="px-8 py-4">Category Name</th>
-              <th className="px-8 py-4">Type</th>
-              <th className="px-8 py-4 text-center">Entries</th>
-              <th className="px-8 py-4 text-right">Total Amount ($)</th>
+              <th className="px-8 py-4">{t('reports.category.categoryName')}</th>
+              <th className="px-8 py-4">{t('common.type')}</th>
+              <th className="px-8 py-4 text-center">{t('reports.category.entries')}</th>
+              <th className="px-8 py-4 text-right">{t('reports.category.totalAmount')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -255,7 +257,7 @@ const CashbookCategoryReport = () => {
                         : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
                     }`}
                   >
-                    {r.type}
+                    {tv(r.type)}
                   </span>
                 </td>
                 <td className="px-8 py-4 text-sm text-center font-semibold text-slate-500 dark:text-slate-400">
@@ -269,7 +271,7 @@ const CashbookCategoryReport = () => {
             {rows.length === 0 && (
               <tr>
                 <td colSpan={4} className="px-8 py-10 text-center text-slate-400 text-sm">
-                  No {tone} records in this period.
+                  {t(`reports.category.noToneRecords.${tone}`)}
                 </td>
               </tr>
             )}
@@ -281,7 +283,7 @@ const CashbookCategoryReport = () => {
               }`}
             >
               <td colSpan={3} className="px-8 py-5 text-right uppercase tracking-wider">
-                {title} Total
+                {t('reports.category.sectionTotal', { title })}
               </td>
               <td className="px-8 py-5 text-right text-xl">${fmtMoney(total)}</td>
             </tr>
@@ -301,10 +303,10 @@ const CashbookCategoryReport = () => {
           </div>
           <div>
             <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">
-              Category Summary Report
+              {t('nav.categorySummaryReport')}
             </h1>
             <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-1.5 uppercase tracking-[0.2em]">
-              Income &amp; Expense totals grouped by category
+              {t('reports.category.subtitle')}
             </p>
           </div>
         </div>
@@ -314,13 +316,13 @@ const CashbookCategoryReport = () => {
             onClick={handleExportPDF}
             className="flex items-center gap-2 px-5 py-3.5 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
           >
-            <FileDown size={16} /> Export PDF
+            <FileDown size={16} /> {t('exams.results.exportPdf')}
           </button>
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 px-6 py-3.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-brand-600/30 active:scale-95"
           >
-            <Printer size={16} /> Print Report
+            <Printer size={16} /> {t('reports.common.printReport')}
           </button>
         </div>
       </div>
@@ -329,11 +331,11 @@ const CashbookCategoryReport = () => {
       <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 shadow-sm p-6 print:hidden">
         <div className="flex items-center gap-2 mb-4">
           <Calendar size={16} className="text-slate-400" />
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Report period</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('reports.common.reportPeriod')}</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
           <div>
-            <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">From date</label>
+            <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">{t('cashbook.fromDate')}</label>
             <input
               type="date"
               value={dateFrom}
@@ -342,7 +344,7 @@ const CashbookCategoryReport = () => {
             />
           </div>
           <div>
-            <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">To date</label>
+            <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">{t('cashbook.toDate')}</label>
             <input
               type="date"
               value={dateTo}
@@ -359,14 +361,14 @@ const CashbookCategoryReport = () => {
               }}
               className="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-black uppercase tracking-wider"
             >
-              All Time
+              {t('reports.common.allTime')}
             </button>
             <button
               type="button"
               onClick={() => applyPeriod(currentPeriod())}
               className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800"
             >
-              Current Period (25→24)
+              {t('reports.common.currentPeriod')}
             </button>
             <button
               type="button"
@@ -376,7 +378,7 @@ const CashbookCategoryReport = () => {
               }}
               className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-1"
             >
-              <RotateCcw size={13} /> Reset
+              <RotateCcw size={13} /> {t('common.reset')}
             </button>
           </div>
         </div>
@@ -385,16 +387,16 @@ const CashbookCategoryReport = () => {
       {/* Printable document */}
       <div className="space-y-8 print:space-y-4">
         {/* Income table (top) */}
-        <SummaryTable title="Income Summary" rows={incomeRows} total={totalIncome} tone="income" />
+        <SummaryTable title={t('reports.category.incomeSummary')} rows={incomeRows} total={totalIncome} tone="income" />
 
         {/* Expense table (bottom) */}
-        <SummaryTable title="Expense Summary" rows={expenseRows} total={totalExpense} tone="expense" />
+        <SummaryTable title={t('reports.category.expenseSummary')} rows={expenseRows} total={totalExpense} tone="expense" />
 
         {/* Net income banner */}
         <div className="bg-brand-600 text-white rounded-[28px] px-8 py-6 flex items-center justify-between shadow-lg print:rounded-none">
           <div className="flex items-center gap-3">
             <Scale size={26} />
-            <span className="text-lg font-black uppercase tracking-wide">Net Income (Income − Expense)</span>
+            <span className="text-lg font-black uppercase tracking-wide">{t('reports.category.netIncomeFull')}</span>
           </div>
           <span className="text-3xl font-black">${fmtMoney(netIncome)}</span>
         </div>
@@ -407,33 +409,33 @@ const CashbookCategoryReport = () => {
         <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">
-              Income Summary
+              {t('reports.category.incomeSummary')}
             </span>
             <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
               <TrendingUp size={18} />
             </div>
           </div>
           <p className="text-3xl font-black text-slate-900 dark:text-white">${fmtMoney(totalIncome)}</p>
-          <p className="text-xs text-slate-500 mt-1 font-semibold">{incomeRows.length} income categories</p>
+          <p className="text-xs text-slate-500 mt-1 font-semibold">{t('reports.category.incomeCategories', { count: incomeRows.length })}</p>
         </div>
 
         <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-600 dark:text-rose-400">
-              Expense Summary
+              {t('reports.category.expenseSummary')}
             </span>
             <div className="w-9 h-9 rounded-xl bg-rose-500/20 flex items-center justify-center text-rose-600 dark:text-rose-400">
               <TrendingDown size={18} />
             </div>
           </div>
           <p className="text-3xl font-black text-slate-900 dark:text-white">${fmtMoney(totalExpense)}</p>
-          <p className="text-xs text-slate-500 mt-1 font-semibold">{expenseRows.length} expense categories</p>
+          <p className="text-xs text-slate-500 mt-1 font-semibold">{t('reports.category.expenseCategories', { count: expenseRows.length })}</p>
         </div>
 
         <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-600 dark:text-brand-400">
-              Net Income
+              {t('reports.category.netIncome')}
             </span>
             <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center text-brand-600 dark:text-brand-400">
               <Scale size={18} />
@@ -442,7 +444,7 @@ const CashbookCategoryReport = () => {
           <p className={`text-3xl font-black ${netIncome >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600'}`}>
             ${fmtMoney(netIncome)}
           </p>
-          <p className="text-xs text-slate-500 mt-1 font-semibold">Income minus Expense</p>
+          <p className="text-xs text-slate-500 mt-1 font-semibold">{t('reports.category.incomeMinusExpense')}</p>
         </div>
       </div>
     </div>

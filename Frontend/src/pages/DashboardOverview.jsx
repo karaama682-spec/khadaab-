@@ -8,9 +8,12 @@ import {
 import KPICard from './KPICard';
 import api, { clearApiCache } from '../services/api';
 import { currentCycle, previousCycle, cycleLabel } from '../utils/billingCycle';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
+import { translateApiMessage } from '../i18n/core.js';
 
 const DashboardOverview = () => {
     const navigate = useNavigate();
+    const { t, tv, locale, months } = useLanguage();
     const [dashboardData, setDashboardData] = useState(() => {
         try {
             const cached = sessionStorage.getItem('cachedDashboardData');
@@ -67,7 +70,7 @@ const DashboardOverview = () => {
         return (
             <div className="flex h-[calc(100vh-100px)] flex-col items-center justify-center">
                 <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
-                <span className="text-xs font-black uppercase tracking-widest text-slate-400">Loading Institute Analytics...</span>
+                <span className="text-xs font-black uppercase tracking-widest text-slate-400">{t('dashboard.loading')}</span>
             </div>
         );
     }
@@ -80,254 +83,211 @@ const DashboardOverview = () => {
     const balance = (kpis.totalIncome || 0) - (kpis.totalExpenses || 0);
     const fmtSignedMoney = (n) => `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString()}`;
 
+    const money = (n) => `$${(n || 0).toLocaleString()}`;
+    const otherIncome = Math.max(0, (kpis.totalIncome || 0) - (kpis.studentFeesCollected || 0));
+    const otherExpenses = Math.max(0, (kpis.totalExpenses || 0) - (kpis.totalSalaries || 0));
+    // Card texts live under dashboard.cards.<textKey>.* in the locale files.
+    const cardText = (textKey, field, vars) => t(`dashboard.cards.${textKey}.${field}`, vars);
+
     const quickActions = [
-        { title: 'Add Student', subtitle: 'Register new student', icon: Plus, path: '/academic/students' },
-        { title: 'Student Attendance', subtitle: 'Mark daily attendance', icon: CalendarCheck, path: '/attendance/students' },
-        { title: 'Record Payment', subtitle: 'Collect fee payment', icon: Receipt, path: '/finance/monthly-payments' },
-        { title: 'Create Class', subtitle: 'Add new class', icon: BookOpen, path: '/academic/classes' },
-    ];
+        { key: 'addStudent', icon: Plus, path: '/academic/students' },
+        { key: 'studentAttendance', icon: CalendarCheck, path: '/attendance/students' },
+        { key: 'recordPayment', icon: Receipt, path: '/finance/monthly-payments' },
+        { key: 'createClass', icon: BookOpen, path: '/academic/classes' },
+    ].map((action) => ({
+        ...action,
+        title: t(`dashboard.quickActions.${action.key}.title`),
+        subtitle: t(`dashboard.quickActions.${action.key}.subtitle`)
+    }));
 
     const cardsConfig = [
         {
             id: 'total-students',
+            textKey: 'totalStudents',
             category: 'academic',
-            label: 'Total Students',
-            somaliLabel: 'Ardayda Guud ee Firfircoon',
             value: (kpis.totalStudents || 0).toLocaleString(),
             rawValue: kpis.totalStudents || 0,
             icon: <Users size={20} />,
             color: 'bg-emerald-500',
-            badge: 'Academic',
             badgeColor: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
             path: '/academic/students',
-            description: 'Ardayda firfircoon ee diiwaangashan',
-            explanation: 'Tirada guud ee ardayda hadda firfircoon (Active) ee dhigata dhammaan fasallada iyo heerarka kala duwan ee machadka.',
-            statLabel: 'Fasallada Firfircoon',
-            statValue: `${kpis.totalClasses || 0} Fasal`,
-            actionText: 'Fur Maamulka Ardayda'
+            statValue: cardText('totalStudents', 'statValue', { count: kpis.totalClasses || 0 })
         },
         {
             id: 'total-teachers',
+            textKey: 'totalTeachers',
             category: 'academic',
-            label: 'Total Teachers',
-            somaliLabel: 'Macallimiinta Machadka',
             value: (kpis.totalTeachers || 0).toLocaleString(),
             rawValue: kpis.totalTeachers || 0,
             icon: <UserCheck size={20} />,
             color: 'bg-violet-600',
-            badge: 'Academic',
             badgeColor: 'bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300',
             path: '/academic/teachers',
-            description: 'Macallimiinta machadka',
-            explanation: 'Wadarta guud ee macallimiinta ka diiwaangashan machadka ee casharrada bixiya.',
-            statLabel: 'Imaanshaha Maanta',
-            statValue: `${kpis.todayTeacherAttendance || 0} Xaadir`,
-            actionText: 'Eeg Liiska Macallimiinta'
+            statValue: cardText('totalTeachers', 'statValue', { count: kpis.todayTeacherAttendance || 0 })
         },
         {
             id: 'total-classes',
+            textKey: 'totalClasses',
             category: 'academic',
-            label: 'Total Classes',
-            somaliLabel: 'Fasallada Waxbarashada',
             value: (kpis.totalClasses || 0).toLocaleString(),
             rawValue: kpis.totalClasses || 0,
             icon: <BookOpen size={20} />,
             color: 'bg-blue-600',
-            badge: 'Academic',
             badgeColor: 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300',
             path: '/academic/classes',
-            description: 'Dhammaan fasallada waxbarashada',
-            explanation: 'Tirada dhammaan fasallada iyo qaybaha ardaydu ku qoran yihiin.',
-            statLabel: 'Celceliska Ardayda/Fasalkii',
-            statValue: kpis.totalClasses ? Math.round((kpis.totalStudents || 0) / kpis.totalClasses) : 0,
-            actionText: 'Maamul Fasallada'
+            statValue: kpis.totalClasses ? Math.round((kpis.totalStudents || 0) / kpis.totalClasses) : 0
         },
         {
             id: 'total-guardians',
+            textKey: 'totalGuardians',
             category: 'academic',
-            label: 'Total Guardians',
-            somaliLabel: 'Waalidiinta & Masuuliyiinta',
             value: (kpis.totalGuardians || 0).toLocaleString(),
             rawValue: kpis.totalGuardians || 0,
             icon: <Users size={20} />,
             color: 'bg-amber-500',
-            badge: 'Academic',
             badgeColor: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
             path: '/academic/guardians',
-            description: 'Waalidiinta ardayda',
-            explanation: 'Waalidiinta iyo wakiillada ardayda ee xiriirka tooska ah lala leeyahay ee nidaamka ka diiwaangashan.',
-            statLabel: 'Wadar Qoys/Waalid',
-            statValue: `${kpis.totalGuardians || 0} Qof`,
-            actionText: 'Maamul Waalidiinta'
+            statValue: cardText('totalGuardians', 'statValue', { count: kpis.totalGuardians || 0 })
         },
         {
             id: 'total-fees-due',
+            textKey: 'totalFeesDue',
             category: 'finance',
-            label: 'Total Fees Due',
-            somaliLabel: 'Wadarta Lacagaha Ardayda La Filayo',
-            value: `$${(kpis.expectedStudentFees || 0).toLocaleString()}`,
+            value: money(kpis.expectedStudentFees),
             rawValue: kpis.expectedStudentFees || 0,
             icon: <DollarSign size={20} />,
             color: 'bg-blue-600',
-            badge: 'Billing Cycle',
             badgeColor: 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300',
             path: '/finance/monthly-payments',
             description: billingCycleName,
-            explanation: `Wadarta lacagaha waxbarashada ee laga filayo dhammaan ardayda firfircoon wareeggan (${billingCycleName}) — isku-darka khidmadda bishii ee arday kasta. Waa isla tirada Monthly Payments.`,
-            statLabel: 'La Qaaday / Ku Dhiman',
-            statValue: `$${(kpis.studentFeesCollected || 0).toLocaleString()} / $${(kpis.pendingStudentFees || 0).toLocaleString()}`,
-            actionText: 'Fur Monthly Payments'
+            explanationVars: { cycle: billingCycleName },
+            statValue: `${money(kpis.studentFeesCollected)} / ${money(kpis.pendingStudentFees)}`
         },
         {
             id: 'fees-collected',
+            textKey: 'feesCollected',
             category: 'finance',
-            label: 'Student Fees Collected',
-            somaliLabel: 'Lacagaha Ardayda laga Qaaday',
-            value: `$${(kpis.studentFeesCollected || 0).toLocaleString()}`,
+            value: money(kpis.studentFeesCollected),
             rawValue: kpis.studentFeesCollected || 0,
             icon: <Receipt size={20} />,
             color: 'bg-teal-500',
-            badge: 'Billing Cycle',
             badgeColor: 'bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300',
             path: '/finance/monthly-payments?status=paid',
             description: billingCycleName,
-            explanation: `Wadarta lacagaha waxbarashada ee ardayda laga soo ururiyey bishan (${billingCycleName}). Boggan wuxuu kuu soo saarayaa KELIYA dadka bishan lacagta bixiyey, wuxuuna ka reebayaa dadka aan weli bixin.`,
-            statLabel: 'Wadarta La Filayo (Expected)',
-            statValue: `$${(kpis.expectedStudentFees || 0).toLocaleString()}`,
-            progress: kpis.expectedStudentFees ? ((kpis.studentFeesCollected || 0) / kpis.expectedStudentFees) * 100 : undefined,
-            actionText: 'Eeg Dadka Bixiyey (Only Paid)'
+            explanationVars: { cycle: billingCycleName },
+            statValue: money(kpis.expectedStudentFees),
+            progress: kpis.expectedStudentFees ? ((kpis.studentFeesCollected || 0) / kpis.expectedStudentFees) * 100 : undefined
         },
         {
             id: 'pending-fees',
+            textKey: 'pendingFees',
             category: 'finance',
-            label: 'Pending Student Fees',
-            somaliLabel: 'Lacagaha Ardayda Ku Dhiman',
-            value: `$${(kpis.pendingStudentFees || 0).toLocaleString()}`,
+            value: money(kpis.pendingStudentFees),
             rawValue: kpis.pendingStudentFees || 0,
             icon: <CreditCard size={20} />,
             color: 'bg-purple-600',
-            badge: 'Uncollected',
             badgeColor: 'bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300',
             path: '/finance/monthly-payments?status=pending',
             description: billingCycleName,
-            explanation: `Lacagaha waxbarashada ee ardayda lagu leeyahay wareeggan socda ee aan weli la bixin. Boggan wuxuu ku tusayaa KELIYA dadka weli deyntu ku dhiman tahay, wuxuuna ka reebayaa kuwa lacagta wada bixiyey.`,
-            statLabel: 'Isku-darka La Filayo',
-            statValue: `$${(kpis.expectedStudentFees || 0).toLocaleString()}`,
-            actionText: 'Eeg Dadka aan Bixin (Only Pending)'
+            statValue: money(kpis.expectedStudentFees)
         },
         {
             id: 'total-income',
+            textKey: 'totalIncome',
             category: 'finance',
-            label: 'Total Income',
-            somaliLabel: 'Dakhliga Guud ee Soo Galay',
-            value: `$${(kpis.totalIncome || 0).toLocaleString()}`,
+            value: money(kpis.totalIncome),
             rawValue: kpis.totalIncome || 0,
             icon: <DollarSign size={20} />,
             color: 'bg-emerald-600',
-            badge: 'Finance Truth',
             badgeColor: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
             path: '/finance/cashbook',
             description: billingCycleName,
-            explanation: `Dhammaan lacagaha dakhliga ah ee soo galay nidaamka wareeggan (${billingCycleName}): Lacagaha ardayda ($${(kpis.studentFeesCollected || 0).toLocaleString()}) + Dakhliyada kale ($${Math.max(0, (kpis.totalIncome || 0) - (kpis.studentFeesCollected || 0)).toLocaleString()}).`,
-            statLabel: 'Dakhliga Kale',
-            statValue: `$${Math.max(0, (kpis.totalIncome || 0) - (kpis.studentFeesCollected || 0)).toLocaleString()}`,
-            actionText: 'Fur Diiwaanka Cashbook-ka'
+            explanationVars: { cycle: billingCycleName, fees: money(kpis.studentFeesCollected), other: money(otherIncome) },
+            statValue: money(otherIncome)
         },
         {
             id: 'total-expenses',
+            textKey: 'totalExpenses',
             category: 'finance',
-            label: 'Total Expenses',
-            somaliLabel: 'Kharashaadka Guud',
-            value: `$${(kpis.totalExpenses || 0).toLocaleString()}`,
+            value: money(kpis.totalExpenses),
             rawValue: kpis.totalExpenses || 0,
             icon: <ArrowRightLeft size={20} />,
             color: 'bg-rose-500',
-            badge: 'Outflows',
             badgeColor: 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300',
             path: '/finance/expenses',
             description: billingCycleName,
-            explanation: `Wadarta dhammaan kharashaadka baxay wareeggan (${billingCycleName}), oo isugu jira Mushaharka la bixiyay ($${(kpis.totalSalaries || 0).toLocaleString()}) iyo kharashaadka kale ee hawlgalka ($${Math.max(0, (kpis.totalExpenses || 0) - (kpis.totalSalaries || 0)).toLocaleString()}).`,
-            statLabel: 'Kharashka Caadiga ah',
-            statValue: `$${Math.max(0, (kpis.totalExpenses || 0) - (kpis.totalSalaries || 0)).toLocaleString()}`,
-            actionText: 'Maamul Kharashaadka'
+            explanationVars: { cycle: billingCycleName, salaries: money(kpis.totalSalaries), other: money(otherExpenses) },
+            statValue: money(otherExpenses)
         },
         {
             id: 'balance',
+            textKey: 'balance',
             category: 'finance',
-            label: 'Balance',
-            somaliLabel: 'Haraaga (Dakhli − Kharash)',
             value: fmtSignedMoney(balance),
             rawValue: balance,
             icon: <Wallet size={20} />,
             color: balance < 0 ? 'bg-rose-600' : 'bg-emerald-700',
-            badge: balance < 0 ? 'Deficit' : 'Net',
+            badge: balance < 0 ? t('dashboard.cards.balance.badgeDeficit') : t('dashboard.cards.balance.badge'),
             badgeColor: balance < 0
                 ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
                 : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
             path: '/finance/cashbook',
             description: billingCycleName,
-            explanation: `Haraaga wareeggan (${billingCycleName}): Dakhliga Guud ($${(kpis.totalIncome || 0).toLocaleString()}) oo laga jaray Kharashaadka Guud ($${(kpis.totalExpenses || 0).toLocaleString()}).`,
-            statLabel: 'Dakhli / Kharash',
-            statValue: `$${(kpis.totalIncome || 0).toLocaleString()} / $${(kpis.totalExpenses || 0).toLocaleString()}`,
-            actionText: 'Fur Diiwaanka Cashbook-ka'
+            explanationVars: { cycle: billingCycleName, income: money(kpis.totalIncome), expenses: money(kpis.totalExpenses) },
+            statValue: `${money(kpis.totalIncome)} / ${money(kpis.totalExpenses)}`
         },
         {
             id: 'previous-debt',
+            textKey: 'previousDebt',
             category: 'finance',
-            label: 'Deyn Hore',
-            somaliLabel: 'Deynta Wareegyadii Hore (Previous Debt)',
-            value: `$${(kpis.previousDebt || 0).toLocaleString()}`,
+            value: money(kpis.previousDebt),
             rawValue: kpis.previousDebt || 0,
             icon: <AlertCircle size={20} />,
             color: 'bg-red-600',
-            badge: 'Previous Cycles',
             badgeColor: 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300',
             path: '/finance/monthly-payments?status=pending',
-            description: `Ka hor ${billingCycleName}`,
-            explanation: `Lacagaha waxbarashada ee aan la bixin ee ka soo haray dhammaan wareegyadii hore (ka hor ${billingCycleName}). Marka wareeg dhammaado, lacagta ku dhiman waxay ka baxdaa "Pending Student Fees" waxayna halkan ku soo biirtaa. Monthly Payments dooro bishii aad rabto si aad u aragto dadka.`,
-            statLabel: 'Wareeggii u dambeeyay',
-            statValue: previousCycleName,
-            actionText: 'Eeg Dadka aan Bixin (Only Pending)'
+            description: cardText('previousDebt', 'description', { cycle: billingCycleName }),
+            explanationVars: { cycle: billingCycleName },
+            statValue: previousCycleName
         },
         {
             id: 'today-student-attendance',
+            textKey: 'todayStudentAttendance',
             category: 'attendance',
-            label: 'Student Attendance Today',
-            somaliLabel: 'Imaanshaha Ardayda Maanta',
             value: (kpis.todayStudentAttendance || 0).toLocaleString(),
             rawValue: kpis.todayStudentAttendance || 0,
             icon: <CalendarCheck size={20} />,
             color: 'bg-brand-500',
-            badge: 'Today',
             badgeColor: 'bg-brand-50 text-brand-700 dark:bg-brand-950/50 dark:text-brand-300',
             path: '/attendance/students',
-            description: 'Ardayda xaadirka ah maanta',
-            explanation: `Tirada ardayda maanta la xaqiijiyay inay soo xaadireen (Present). Guud ahaan ardayda firfircooni waa ${kpis.totalStudents || 0}.`,
-            statLabel: 'Heerka Xaadirka',
+            explanationVars: { total: kpis.totalStudents || 0 },
             statValue: kpis.totalStudents ? `${Math.round(((kpis.todayStudentAttendance || 0) / kpis.totalStudents) * 100)}%` : '0%',
-            progress: kpis.totalStudents ? ((kpis.todayStudentAttendance || 0) / kpis.totalStudents) * 100 : undefined,
-            actionText: 'Qaado Xaadirka Ardayda'
+            progress: kpis.totalStudents ? ((kpis.todayStudentAttendance || 0) / kpis.totalStudents) * 100 : undefined
         },
         {
             id: 'today-teacher-attendance',
+            textKey: 'todayTeacherAttendance',
             category: 'attendance',
-            label: 'Teacher Attendance Today',
-            somaliLabel: 'Imaanshaha Macallimiinta Maanta',
             value: (kpis.todayTeacherAttendance || 0).toLocaleString(),
             rawValue: kpis.todayTeacherAttendance || 0,
             icon: <CalendarCheck size={20} />,
             color: 'bg-pink-500',
-            badge: 'Today',
             badgeColor: 'bg-pink-50 text-pink-700 dark:bg-pink-950/50 dark:text-pink-300',
             path: '/attendance/teachers',
-            description: 'Macallimiinta xaadirka ah maanta',
-            explanation: `Tirada macallimiinta maanta xarunta soo xaadiray (Present). Guud ahaan macallimiinta machadku waa ${kpis.totalTeachers || 0}.`,
-            statLabel: 'Heerka Xaadirka',
+            explanationVars: { total: kpis.totalTeachers || 0 },
             statValue: kpis.totalTeachers ? `${Math.round(((kpis.todayTeacherAttendance || 0) / kpis.totalTeachers) * 100)}%` : '0%',
-            progress: kpis.totalTeachers ? ((kpis.todayTeacherAttendance || 0) / kpis.totalTeachers) * 100 : undefined,
-            actionText: 'Qaado Xaadirka Macallimiinta'
+            progress: kpis.totalTeachers ? ((kpis.todayTeacherAttendance || 0) / kpis.totalTeachers) * 100 : undefined
         }
-    ];
+    ].map((card) => ({
+        ...card,
+        label: cardText(card.textKey, 'label'),
+        subtitle: cardText(card.textKey, 'subtitle'),
+        badge: card.badge || cardText(card.textKey, 'badge'),
+        description: card.description || cardText(card.textKey, 'description'),
+        explanation: cardText(card.textKey, 'explanation', card.explanationVars),
+        statLabel: cardText(card.textKey, 'statLabel'),
+        actionText: cardText(card.textKey, 'actionText')
+    }));
 
     const filteredCards = activeCategory === 'all'
         ? cardsConfig
@@ -335,8 +295,8 @@ const DashboardOverview = () => {
 
     const activityRows = activities.length > 0
         ? activities.slice(0, 6).map((item) => ({
-            title: `${item.module || 'System'} - ${item.detail || item.action || 'Transaction'}`,
-            time: item.date ? new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+            title: `${tv(item.module) || t('dashboard.activity.system')} - ${item.detail || tv(item.action) || t('dashboard.activity.transaction')}`,
+            time: item.date ? new Date(item.date).toLocaleTimeString(locale || [], { hour: '2-digit', minute: '2-digit' }) : t('dashboard.activity.justNow'),
             color: item.action === 'Expense' ? 'bg-rose-500' : item.action === 'Income' ? 'bg-emerald-500' : 'bg-blue-500',
         }))
         : [];
@@ -355,32 +315,31 @@ const DashboardOverview = () => {
                                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-300" />
                             </span>
-                            <ShieldCheck size={15} /> Nidaamka Machadka Waa Firfircoon yahay
+                            <ShieldCheck size={15} /> {t('dashboard.hero.systemActive')}
                         </div>
                         <h1 className="text-3xl font-extrabold tracking-tight md:text-5xl text-white">
-                            Ku soo dhowow, Maamul!
+                            {t('dashboard.hero.welcome')}
                         </h1>
                         <p className="mt-3 max-w-2xl text-sm font-medium text-white/85 md:text-base leading-relaxed">
-                            Halkan waxaad ka arki kartaa xogta dhabta ah ee ardayda, macallimiinta, iyo dhaqdhaqaaqa maaliyadeed. 
-                            Guji kaar kasta si aad toos ugu tagto boggiisa ama u aragto faahfaahinta xogta.
+                            {t('dashboard.hero.intro')}
                         </p>
                         <div className="mt-6 flex flex-wrap items-center gap-3">
                             <div className="rounded-2xl bg-white/12 px-4 py-3 ring-1 ring-white/20 backdrop-blur-md">
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">Taariikhda Maanta</p>
-                                <p className="text-sm font-extrabold text-white mt-0.5">{today.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">{t('dashboard.hero.today')}</p>
+                                <p className="text-sm font-extrabold text-white mt-0.5">{locale ? `${today.getDate()} ${months[today.getMonth()]} ${today.getFullYear()}` : today.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</p>
                             </div>
                             <div className="rounded-2xl bg-white/12 px-4 py-3 ring-1 ring-white/20 backdrop-blur-md">
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">Wareegga Maaliyadda</p>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">{t('dashboard.hero.financialCycle')}</p>
                                 <p className="text-sm font-extrabold text-white mt-0.5">{billingCycleName}</p>
                             </div>
                             <button
                                 onClick={() => fetchDashboardData(true)}
                                 disabled={isRefreshing}
                                 className="flex items-center gap-2 rounded-2xl bg-white/15 px-4 py-3 text-xs font-bold text-white ring-1 ring-white/25 backdrop-blur-md transition-all hover:bg-white/25 active:scale-95"
-                                title="Dib u cusboonaysii xogta hadda"
+                                title={t('dashboard.hero.refreshTitle')}
                             >
                                 <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
-                                <span>{isRefreshing ? 'Cusboonaysiinaya...' : 'Cusboonaysii'}</span>
+                                <span>{isRefreshing ? t('dashboard.hero.refreshing') : t('dashboard.hero.refresh')}</span>
                             </button>
                         </div>
                     </div>
@@ -409,24 +368,24 @@ const DashboardOverview = () => {
                     <div>
                         <div className="flex items-center gap-2">
                             <h2 className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-white md:text-2xl">
-                                Kaararka Xogta Nidaamka
+                                {t('dashboard.cardsTitle')}
                             </h2>
                             <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-black text-brand-700 dark:bg-brand-950/60 dark:text-brand-300">
-                                {filteredCards.length} Kaar
+                                {t('dashboard.cardsCount', { count: filteredCards.length })}
                             </span>
                         </div>
                         <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">
-                            Guji kaar kasta si aad toos ugu gasho bogga xogta, ama guji astaanta ilbiriqsiga si aad u aragto faahfaahin degdeg ah.
+                            {t('dashboard.cardsHint')}
                         </p>
                     </div>
 
                     {/* Filter Pills */}
                     <div className="flex items-center gap-1.5 overflow-x-auto rounded-2xl bg-slate-100/90 p-1.5 dark:bg-slate-800/90">
                         {[
-                            { id: 'all', label: 'Dhammaan', count: cardsConfig.length },
-                            { id: 'academic', label: 'Waxbarasho', count: cardsConfig.filter(c => c.category === 'academic').length },
-                            { id: 'finance', label: 'Maaliyad', count: cardsConfig.filter(c => c.category === 'finance').length },
-                            { id: 'attendance', label: 'Imaanasho', count: cardsConfig.filter(c => c.category === 'attendance').length },
+                            { id: 'all', label: t('dashboard.filters.all'), count: cardsConfig.length },
+                            { id: 'academic', label: t('dashboard.filters.academic'), count: cardsConfig.filter(c => c.category === 'academic').length },
+                            { id: 'finance', label: t('dashboard.filters.finance'), count: cardsConfig.filter(c => c.category === 'finance').length },
+                            { id: 'attendance', label: t('dashboard.filters.attendance'), count: cardsConfig.filter(c => c.category === 'attendance').length },
                         ].map(tab => (
                             <button
                                 key={tab.id}
@@ -471,14 +430,14 @@ const DashboardOverview = () => {
                 <div className="rounded-[30px] bg-white p-6 shadow-sm border border-slate-100 dark:bg-slate-900 dark:border-slate-800">
                     <div className="mb-6 flex items-start justify-between">
                         <div>
-                            <h3 className="font-black uppercase tracking-tight text-slate-900 dark:text-white">Recent Transactions</h3>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Financial Activity</p>
+                            <h3 className="font-black uppercase tracking-tight text-slate-900 dark:text-white">{t('dashboard.recentTransactions')}</h3>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('dashboard.financialActivity')}</p>
                         </div>
                         <button
                             onClick={() => navigate('/finance/cashbook')}
                             className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1 transition-colors"
                         >
-                            <span>Eeg Dhammaan</span>
+                            <span>{t('dashboard.viewAll')}</span>
                             <ArrowRight size={14} />
                         </button>
                     </div>
@@ -496,7 +455,7 @@ const DashboardOverview = () => {
                                 </div>
                             ))
                         ) : (
-                            <div className="py-8 text-center text-sm font-medium text-slate-400">No recent transactions.</div>
+                            <div className="py-8 text-center text-sm font-medium text-slate-400">{t('dashboard.noTransactions')}</div>
                         )}
                     </div>
                 </div>
@@ -504,20 +463,20 @@ const DashboardOverview = () => {
                 <div className="rounded-[30px] bg-white p-6 shadow-sm border border-slate-100 dark:bg-slate-900 dark:border-slate-800">
                     <div className="mb-6 flex items-start justify-between">
                         <div>
-                            <h3 className="font-black uppercase tracking-tight text-slate-900 dark:text-white">System Notifications</h3>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Alerts & Fee Reminders</p>
+                            <h3 className="font-black uppercase tracking-tight text-slate-900 dark:text-white">{t('dashboard.systemNotifications')}</h3>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('dashboard.alertsReminders')}</p>
                         </div>
                     </div>
                     <div className="space-y-3">
                         {notifications.length > 0 ? (
                             notifications.slice(0, 5).map((note) => (
                                 <div key={note._id || note.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50">
-                                    <p className="text-sm font-bold text-slate-900 dark:text-white">{note.title}</p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{note.message}</p>
+                                    <p className="text-sm font-bold text-slate-900 dark:text-white">{translateApiMessage(note.title)}</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{translateApiMessage(note.message)}</p>
                                 </div>
                             ))
                         ) : (
-                            <div className="py-8 text-center text-sm font-medium text-slate-400">No notifications found.</div>
+                            <div className="py-8 text-center text-sm font-medium text-slate-400">{t('dashboard.noNotifications')}</div>
                         )}
                     </div>
                 </div>
@@ -556,7 +515,7 @@ const DashboardOverview = () => {
                                     {selectedCardForModal.label}
                                 </h3>
                                 <p className="text-xs font-semibold text-brand-600 dark:text-brand-400">
-                                    {selectedCardForModal.somaliLabel}
+                                    {selectedCardForModal.subtitle}
                                 </p>
                             </div>
                         </div>
@@ -564,7 +523,7 @@ const DashboardOverview = () => {
                         {/* Metric Value Card */}
                         <div className="mb-6 rounded-3xl bg-slate-50 p-5 border border-slate-100 dark:bg-slate-800/50 dark:border-slate-800">
                             <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">
-                                Qiimaha Nidaamka Hadda (Live System Value)
+                                {t('dashboard.modal.liveValue')}
                             </p>
                             <div className="text-3xl font-black text-slate-900 dark:text-white tabular-nums">
                                 {selectedCardForModal.value}
@@ -578,7 +537,7 @@ const DashboardOverview = () => {
                         <div className="space-y-4 mb-6">
                             <div>
                                 <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-1.5">
-                                    Sharaxaadda Xogta (Data Explanation)
+                                    {t('dashboard.modal.explanation')}
                                 </h4>
                                 <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-relaxed bg-brand-50/50 dark:bg-brand-950/20 p-4 rounded-2xl border border-brand-100/60 dark:border-brand-900/30">
                                     {selectedCardForModal.explanation}
@@ -605,7 +564,7 @@ const DashboardOverview = () => {
                                 onClick={() => setSelectedCardForModal(null)}
                                 className="flex-1 rounded-2xl border border-slate-200 py-3.5 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
                             >
-                                Xir
+                                {t('dashboard.modal.close')}
                             </button>
                             <button
                                 type="button"
@@ -616,7 +575,7 @@ const DashboardOverview = () => {
                                 }}
                                 className="flex-[1.5] flex items-center justify-center gap-2 rounded-2xl bg-brand-600 py-3.5 text-xs font-bold text-white shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95 transition-all"
                             >
-                                <span>{selectedCardForModal.actionText || 'Tag Bogga Xogta'}</span>
+                                <span>{selectedCardForModal.actionText || t('dashboard.modal.goToPage')}</span>
                                 <ExternalLink size={15} />
                             </button>
                         </div>

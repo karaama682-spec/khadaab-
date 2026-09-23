@@ -15,6 +15,8 @@ import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { digitsOnly, isValidSomaliMobile } from '../utils/somaliPhone';
 import { currentCycle, addCycles, cycleShortLabel, cycleKeyForDate } from '../utils/billingCycle';
+import { useLanguage, translate } from '../i18n/LanguageContext.jsx';
+import { monthNames } from '../i18n/core.js';
 
 const PAYMENT_METHODS = ['Mobile Money', 'Bank'];
 
@@ -24,8 +26,8 @@ const METHODS_WITH_PARTIES = ['Mobile Money', 'Bank'];
 //  • Bank account number: 6–7 digits.
 //  • Mobile Money: 9 or 10 digits numeric value.
 const PHONE_RULES = {
-  Bank: { label: 'Bank number must be 6 to 7 digits' },
-  'Mobile Money': { label: 'Number must be 9 or 10 digits' }
+  Bank: { labelKey: 'cashbook.phone.bankRule' },
+  'Mobile Money': { labelKey: 'cashbook.phone.mobileRule' }
 };
 
 // Returns an error string if the value is present but does not match the
@@ -34,9 +36,9 @@ const phoneError = (method, value) => {
   if (!value) return '';
   if (method === 'Bank') {
     const d = digitsOnly(value);
-    return d.length >= 6 && d.length <= 7 ? '' : PHONE_RULES.Bank.label;
+    return d.length >= 6 && d.length <= 7 ? '' : translate(PHONE_RULES.Bank.labelKey);
   }
-  return isValidSomaliMobile(value) ? '' : 'Number must be 9 or 10 digits';
+  return isValidSomaliMobile(value) ? '' : translate('cashbook.phone.mobileRule');
 };
 
 const emptyCategoryForm = () => ({
@@ -45,22 +47,18 @@ const emptyCategoryForm = () => ({
   description: ''
 });
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
-
 // Advance options are BILLING CYCLES (25th→24th): the current cycle plus the next
 // six. Each value is a cycle key; the label shows the cycle's date range.
 const getMonthOptions = () => {
   const options = [];
   const base = currentCycle();
+  const MONTH_NAMES = monthNames();
   for (let i = 0; i <= 6; i++) {
     const key = addCycles(base, i);
     const [y, m] = key.split('-').map(Number);
     const mName = MONTH_NAMES[m - 1];
-    let label = `${mName} ${y} cycle · ${cycleShortLabel(key)}`;
-    label += i === 0 ? ' (Bisha Hadda)' : ' (Hormarin / Advance)';
+    let label = translate('cashbook.cycleOption', { month: mName, year: y, range: cycleShortLabel(key) });
+    label += i === 0 ? ` (${translate('cashbook.currentMonth')})` : ` (${translate('cashbook.advance')})`;
     options.push({ value: key, label, monthName: mName, year: y, isAdvance: i > 0 });
   }
   return options;
@@ -71,7 +69,7 @@ const getPayerMonthLabel = (baseKey, offset = 0) => {
   const key = addCycles(baseKey || currentCycle(), offset);
   const [y, m] = key.split('-').map(Number);
   return {
-    name: MONTH_NAMES[m - 1],
+    name: monthNames()[m - 1],
     year: y,
     ym: key
   };
@@ -98,6 +96,7 @@ const emptyTransactionForm = () => ({
 
 const CashbookManagement = () => {
   const { showAlert, showConfirm } = useAlert();
+  const { t, tv, locale } = useLanguage();
   const [activePanel, setActivePanel] = useState('category');
 
   const [categories, setCategories] = useState([]);
@@ -206,7 +205,7 @@ const CashbookManagement = () => {
       }
     } catch (error) {
       console.error('Failed to load cashbook', error);
-      showAlert({ type: 'danger', title: 'Error', message: 'Failed to load cashbook data.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: t('cashbook.loadFailed') });
     } finally {
       setLoading(false);
     }
@@ -412,25 +411,25 @@ const CashbookManagement = () => {
   const handleCategorySubmit = async (e) => {
     e.preventDefault();
     if (!categoryForm.title.trim()) {
-      showAlert({ type: 'warning', title: 'Validation', message: 'Category title is required.' });
+      showAlert({ type: 'warning', title: t('exams.manage.validation'), message: t('cashbook.categoryTitleRequired') });
       return;
     }
     try {
       if (editingCategory) {
         const res = await api.put(`/cashbook/categories/${editingCategory._id}`, categoryForm);
         setCategories((prev) => prev.map((c) => (c._id === editingCategory._id ? res.data : c)));
-        showAlert({ type: 'success', title: 'Updated', message: 'Category updated.' });
+        showAlert({ type: 'success', title: t('finance.updatedTitle'), message: t('cashbook.categoryUpdated') });
       } else {
         const res = await api.post('/cashbook/categories', categoryForm);
         setCategories((prev) => [...prev, res.data].sort((a, b) => a.title.localeCompare(b.title)));
-        showAlert({ type: 'success', title: 'Saved', message: 'Category created.' });
+        showAlert({ type: 'success', title: t('exams.marks.savedTitle'), message: t('cashbook.categoryCreated') });
       }
       resetCategoryForm();
     } catch (error) {
       showAlert({
         type: 'danger',
-        title: 'Error',
-        message: error.response?.data?.message || 'Failed to save category.'
+        title: t('common.error'),
+        message: error.response?.data?.message || t('cashbook.categorySaveFailed')
       });
     }
   };
@@ -448,49 +447,49 @@ const CashbookManagement = () => {
   const handleCategoryDelete = async (item) => {
     const ok = await showConfirm({
       type: 'warning',
-      title: 'Delete category?',
-      message: 'Categories used by transactions cannot be deleted.',
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
+      title: t('cashbook.deleteCategoryTitle'),
+      message: t('cashbook.deleteCategoryMsg'),
+      confirmText: t('common.delete'),
+      cancelText: t('common.cancel'),
       danger: true
     });
     if (!ok) return;
     try {
       await api.delete(`/cashbook/categories/${item._id}`);
       setCategories((prev) => prev.filter((c) => c._id !== item._id));
-      showAlert({ type: 'success', title: 'Deleted', message: 'Category removed.' });
+      showAlert({ type: 'success', title: t('common.deleted'), message: t('cashbook.categoryRemoved') });
     } catch (error) {
       showAlert({
         type: 'danger',
-        title: 'Error',
-        message: error.response?.data?.message || 'Failed to delete category.'
+        title: t('common.error'),
+        message: error.response?.data?.message || t('cashbook.categoryDeleteFailed')
       });
     }
   };
 
   const validateTransaction = () => {
     if (!transactionForm.categoryId) {
-      showAlert({ type: 'warning', title: 'Validation', message: 'Select a category.' });
+      showAlert({ type: 'warning', title: t('exams.manage.validation'), message: t('cashbook.selectCategoryRequired') });
       return false;
     }
     if (!transactionForm.amount || Number(transactionForm.amount) <= 0) {
-      showAlert({ type: 'warning', title: 'Validation', message: 'Enter a valid amount.' });
+      showAlert({ type: 'warning', title: t('exams.manage.validation'), message: t('cashbook.validAmountRequired') });
       return false;
     }
     // A fee payer may never pay more than they owe (current month + any pre-paid months).
     if (maxPayable !== null && Number(transactionForm.amount) > maxPayable + 0.001) {
       showAlert({
         type: 'warning',
-        title: 'Amount too high',
+        title: t('cashbook.amountTooHighTitle'),
         message: maxPayable > 0
-          ? `This payer only owes ${fmtMoney(maxPayable)} for ${monthsToPay} month(s). Reduce the amount, or increase the months to pay ahead.`
-          : `This payer has no outstanding balance for the current month. Increase the months to pre-pay future fees.`
+          ? t('cashbook.amountTooHigh', { amount: fmtMoney(maxPayable), months: monthsToPay })
+          : t('cashbook.noOutstanding')
       });
       return false;
     }
     const senderErr = phoneError(transactionForm.method, transactionForm.senderPhone);
     if (senderErr && walletDirection !== 'sender') {
-      showAlert({ type: 'warning', title: 'Sender number', message: senderErr });
+      showAlert({ type: 'warning', title: t('cashbook.senderNumber'), message: senderErr });
       return false;
     }
     // Institute account numbers assigned from the wallet are not held to the
@@ -498,7 +497,7 @@ const CashbookManagement = () => {
     if (walletDirection !== 'receiver') {
       const receiverErr = phoneError(transactionForm.method, transactionForm.receiverPhone);
       if (receiverErr) {
-        showAlert({ type: 'warning', title: 'Receiver number', message: receiverErr });
+        showAlert({ type: 'warning', title: t('cashbook.receiverNumber'), message: receiverErr });
         return false;
       }
     }
@@ -520,19 +519,19 @@ const CashbookManagement = () => {
       if (editingEntry) {
         const res = await api.put(`/cashbook/entries/${editingEntry._id}`, payload);
         setEntries((prev) => prev.map((x) => (x._id === editingEntry._id ? res.data : x)));
-        showAlert({ type: 'success', title: 'Updated', message: 'Transaction updated.' });
+        showAlert({ type: 'success', title: t('finance.updatedTitle'), message: t('finance.transactions.updated') });
       } else {
         const res = await api.post('/cashbook/entries', payload);
         setEntries((prev) => [res.data, ...prev]);
-        showAlert({ type: 'success', title: 'Saved', message: 'Transaction recorded.' });
+        showAlert({ type: 'success', title: t('exams.marks.savedTitle'), message: t('cashbook.transactionRecorded') });
       }
       resetTransactionForm();
       fetchAll();
     } catch (error) {
       showAlert({
         type: 'danger',
-        title: 'Error',
-        message: error.response?.data?.message || 'Failed to save transaction.'
+        title: t('common.error'),
+        message: error.response?.data?.message || t('cashbook.transactionSaveFailed')
       });
     }
   };
@@ -575,19 +574,19 @@ const CashbookManagement = () => {
   const handleTransactionDelete = async (item) => {
     const ok = await showConfirm({
       type: 'warning',
-      title: 'Delete transaction?',
-      message: 'This cannot be undone.',
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
+      title: t('cashbook.deleteTransactionTitle'),
+      message: t('finance.transactions.deleteConfirm'),
+      confirmText: t('common.delete'),
+      cancelText: t('common.cancel'),
       danger: true
     });
     if (!ok) return;
     try {
       await api.delete(`/cashbook/entries/${item._id}`);
       setEntries((prev) => prev.filter((x) => x._id !== item._id));
-      showAlert({ type: 'success', title: 'Deleted', message: 'Transaction removed.' });
+      showAlert({ type: 'success', title: t('common.deleted'), message: t('cashbook.transactionRemoved') });
     } catch (error) {
-      showAlert({ type: 'danger', title: 'Error', message: 'Failed to delete transaction.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: t('finance.transactions.deleteFailed') });
     }
   };
 
@@ -617,12 +616,12 @@ const CashbookManagement = () => {
   const selectedWallet = wallets.find((w) => w._id === transactionForm.walletId);
   const senderPhoneErr = walletDirection === 'sender' ? '' : phoneError(transactionForm.method, transactionForm.senderPhone);
   const receiverPhoneErr = walletDirection === 'receiver' ? '' : phoneError(transactionForm.method, transactionForm.receiverPhone);
-  const phoneHint = PHONE_RULES[transactionForm.method]?.label || '';
+  const phoneHint = PHONE_RULES[transactionForm.method] ? t(PHONE_RULES[transactionForm.method].labelKey) : '';
 
   const fmtMoney = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   if (loading) {
-    return <div className="p-10 text-center text-slate-500">Loading Cashbook...</div>;
+    return <div className="p-10 text-center text-slate-500">{t('cashbook.loading')}</div>;
   }
 
   return (
@@ -634,10 +633,10 @@ const CashbookManagement = () => {
           </div>
           <div>
             <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">
-              Cashbook
+              {t('cashbook.title')}
             </h1>
             <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">
-              Categories &amp; all money movements
+              {t('cashbook.subtitle')}
             </p>
           </div>
         </div>
@@ -652,7 +651,7 @@ const CashbookManagement = () => {
                 : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
           >
-            <Tags size={16} /> Category
+            <Tags size={16} /> {t('common.category')}
           </button>
           <button
             type="button"
@@ -663,7 +662,7 @@ const CashbookManagement = () => {
                 : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
           >
-            <ArrowLeftRight size={16} /> Transaction
+            <ArrowLeftRight size={16} /> {t('cashbook.transaction')}
           </button>
         </div>
       </div>
@@ -675,38 +674,38 @@ const CashbookManagement = () => {
             className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm p-8 space-y-6"
           >
             <h2 className="text-lg font-black uppercase tracking-wide text-slate-800 dark:text-white">
-              {editingCategory ? 'Edit category' : 'New category'}
+              {editingCategory ? t('cashbook.editCategory') : t('cashbook.newCategory')}
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Title</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('finance.expenses.colTitle')}</label>
                 <input
                   type="text"
                   value={categoryForm.title}
                   onChange={(e) => setCategoryForm({ ...categoryForm, title: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                  placeholder="e.g. Student fee, Salary, Rent"
+                  placeholder={t('cashbook.categoryPlaceholder')}
                 />
               </div>
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Type</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.type')}</label>
                 <select
                   value={categoryForm.type}
                   onChange={(e) => setCategoryForm({ ...categoryForm, type: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                 >
-                  <option value="Income">Income</option>
-                  <option value="Expense">Expense</option>
+                  <option value="Income">{tv('Income')}</option>
+                  <option value="Expense">{tv('Expense')}</option>
                 </select>
               </div>
               <div className="md:col-span-1">
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Description</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.description')}</label>
                 <input
                   type="text"
                   value={categoryForm.description}
                   onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                  placeholder="Optional notes"
+                  placeholder={t('cashbook.optionalNotes')}
                 />
               </div>
             </div>
@@ -715,7 +714,7 @@ const CashbookManagement = () => {
                 type="submit"
                 className="flex items-center gap-2 px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-black text-xs uppercase tracking-wider"
               >
-                <Save size={16} /> {editingCategory ? 'Update category' : 'Save category'}
+                <Save size={16} /> {editingCategory ? t('cashbook.updateCategory') : t('cashbook.saveCategory')}
               </button>
               {editingCategory && (
                 <button
@@ -723,7 +722,7 @@ const CashbookManagement = () => {
                   onClick={resetCategoryForm}
                   className="flex items-center gap-2 px-6 py-3 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-xs uppercase text-slate-600 dark:text-slate-300"
                 >
-                  <RotateCcw size={16} /> Cancel edit
+                  <RotateCcw size={16} /> {t('cashbook.cancelEdit')}
                 </button>
               )}
             </div>
@@ -733,7 +732,7 @@ const CashbookManagement = () => {
             <Search size={18} className="text-slate-400 mr-3" />
             <input
               type="text"
-              placeholder="Search categories..."
+              placeholder={t('cashbook.searchCategories')}
               value={categorySearch}
               onChange={(e) => setCategorySearch(e.target.value)}
               className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white"
@@ -744,10 +743,10 @@ const CashbookManagement = () => {
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                  <th className="px-8 py-5">Title</th>
-                  <th className="px-8 py-5">Type</th>
-                  <th className="px-8 py-5">Description</th>
-                  <th className="px-8 py-5 text-right">Actions</th>
+                  <th className="px-8 py-5">{t('finance.expenses.colTitle')}</th>
+                  <th className="px-8 py-5">{t('common.type')}</th>
+                  <th className="px-8 py-5">{t('common.description')}</th>
+                  <th className="px-8 py-5 text-right">{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -762,7 +761,7 @@ const CashbookManagement = () => {
                             : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
                         }`}
                       >
-                        {item.type}
+                        {tv(item.type)}
                       </span>
                     </td>
                     <td className="px-8 py-6 text-sm text-slate-500">{item.description || '—'}</td>
@@ -789,7 +788,7 @@ const CashbookManagement = () => {
                 {filteredCategories.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-8 py-10 text-center text-slate-400 text-sm">
-                      No categories yet. Add one above (e.g. Student payment, Salary, Expense).
+                      {t('cashbook.noCategories')}
                     </td>
                   </tr>
                 )}
@@ -803,7 +802,7 @@ const CashbookManagement = () => {
         <div className="space-y-8">
           {categories.length === 0 && (
             <p className="text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl px-6 py-4 text-sm font-medium">
-              Create at least one category first (use the Category tab).
+              {t('cashbook.createCategoryFirst')}
             </p>
           )}
 
@@ -812,12 +811,12 @@ const CashbookManagement = () => {
             className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm p-8 space-y-6"
           >
             <h2 className="text-lg font-black uppercase tracking-wide text-slate-800 dark:text-white">
-              {editingEntry ? 'Edit transaction' : 'New transaction'}
+              {editingEntry ? t('cashbook.editTransaction') : t('cashbook.newTransaction')}
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Type</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.type')}</label>
                 <select
                   value={transactionForm.type}
                   onChange={(e) => {
@@ -831,12 +830,12 @@ const CashbookManagement = () => {
                       : 'border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300'
                   }`}
                 >
-                  <option value="Income">Income</option>
-                  <option value="Expense">Expense</option>
+                  <option value="Income">{tv('Income')}</option>
+                  <option value="Expense">{tv('Expense')}</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Category</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.category')}</label>
                 <select
                   required
                   value={transactionForm.categoryId}
@@ -845,8 +844,8 @@ const CashbookManagement = () => {
                 >
                   <option value="">
                     {categoriesForType.length === 0
-                      ? `No ${transactionForm.type} categories yet`
-                      : `Select ${transactionForm.type} category`}
+                      ? t('cashbook.noTypeCategories', { type: tv(transactionForm.type) })
+                      : t('cashbook.selectTypeCategory', { type: tv(transactionForm.type) })}
                   </option>
                   {categoriesForType.map((c) => (
                     <option key={c._id} value={c._id}>
@@ -856,7 +855,7 @@ const CashbookManagement = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Method</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.method')}</label>
                 <select
                   value={transactionForm.method}
                   onChange={(e) => setTransactionForm({ ...transactionForm, method: e.target.value })}
@@ -864,13 +863,13 @@ const CashbookManagement = () => {
                 >
                   {PAYMENT_METHODS.map((m) => (
                     <option key={m} value={m}>
-                      {m}
+                      {tv(m)}
                     </option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Institute Wallet / Account</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('cashbook.instituteWallet')}</label>
                 <select
                   value={transactionForm.walletId}
                   onChange={(e) => {
@@ -879,7 +878,7 @@ const CashbookManagement = () => {
                   }}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
                 >
-                  <option value="">Auto (active wallet)</option>
+                  <option value="">{t('cashbook.autoWallet')}</option>
                   {wallets.map((w) => (
                     <option key={w._id} value={w._id}>
                       {w.name}{w.accountNumber ? ` · ${w.accountNumber}` : ''}
@@ -888,7 +887,7 @@ const CashbookManagement = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Date</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.date')}</label>
                 <input
                   type="date"
                   value={transactionForm.date}
@@ -904,12 +903,12 @@ const CashbookManagement = () => {
                 <div>
                   <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                     <ArrowLeftRight size={14} className="text-brand-500" />
-                    Doorka Wallet-ka / Transaction Direction
+                    {t('cashbook.direction')}
                   </span>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     {transactionForm.type === 'Expense'
-                      ? 'Expense: Wallet-ka machadka waa Lacag Dire (Sender).'
-                      : 'Income: Wallet-ka machadka waa Lacag Qaate (Receiver).'}
+                      ? t('cashbook.directionExpense')
+                      : t('cashbook.directionIncome')}
                   </p>
                 </div>
                 {selectedWallet && (
@@ -932,7 +931,7 @@ const CashbookManagement = () => {
                   }`}
                 >
                   <ArrowUpRight size={14} className={walletDirection === 'sender' ? 'text-rose-600' : 'text-slate-400'} />
-                  Wallet = Lacag Dire (Sender)
+                  {t('cashbook.walletSender')}
                 </button>
 
                 {/* 2. Wallet as Receiver */}
@@ -946,7 +945,7 @@ const CashbookManagement = () => {
                   }`}
                 >
                   <ArrowDownLeft size={14} className={walletDirection === 'receiver' ? 'text-emerald-600' : 'text-slate-400'} />
-                  Wallet = Lacag Qaate (Receiver)
+                  {t('cashbook.walletReceiver')}
                 </button>
               </div>
             </div>
@@ -955,11 +954,11 @@ const CashbookManagement = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                      {walletDirection === 'sender' ? 'Sender (Institute Wallet)' : 'Payer / Sender'}
+                      {walletDirection === 'sender' ? t('cashbook.senderInstitute') : t('cashbook.payerSender')}
                     </p>
                     {walletDirection === 'sender' ? (
                       <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-800">
-                        Wallet Assigned
+                        {t('cashbook.walletAssigned')}
                       </span>
                     ) : (
                       <button
@@ -967,13 +966,13 @@ const CashbookManagement = () => {
                         onClick={() => handleDirectionChange('sender')}
                         className="text-[10px] font-bold text-slate-500 hover:text-brand-600 dark:text-slate-400 hover:underline"
                       >
-                        + Set Wallet as Sender (Expense)
+                        + {t('cashbook.setSender')}
                       </button>
                     )}
                   </div>
                   <div>
                     <label className="block text-xs font-black uppercase text-slate-500 mb-1">
-                      {walletDirection === 'sender' ? 'Institute Account Number' : 'Payer phone'}
+                      {walletDirection === 'sender' ? t('cashbook.instituteAccountNumber') : t('cashbook.payerPhone')}
                     </label>
                     <input
                       type="text"
@@ -991,7 +990,7 @@ const CashbookManagement = () => {
                           senderEntityId: ''
                         });
                       }}
-                      placeholder={walletDirection === 'sender' ? '' : transactionForm.method === 'Bank' ? 'Select a payer or type a bank number' : 'Select a payer or type a 9 or 10-digit number'}
+                      placeholder={walletDirection === 'sender' ? '' : transactionForm.method === 'Bank' ? t('cashbook.payerBankPlaceholder') : t('cashbook.payerMobilePlaceholder')}
                       className={`w-full px-4 py-3 rounded-xl border text-slate-900 dark:text-white ${
                         walletDirection === 'sender'
                           ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800 font-mono'
@@ -1011,7 +1010,7 @@ const CashbookManagement = () => {
                     )}
                     {walletDirection === 'sender' ? (
                       <p className="text-[10px] text-rose-600 dark:text-rose-400 mt-1 font-semibold">
-                        Wallet-ka machadka ayaa ah lacag diraha (Sender)
+                        {t('cashbook.walletIsSender')}
                       </p>
                     ) : senderPhoneErr ? (
                       <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1 font-bold">{senderPhoneErr}</p>
@@ -1021,7 +1020,7 @@ const CashbookManagement = () => {
                   </div>
                   <div>
                     <label className="block text-xs font-black uppercase text-slate-500 mb-1">
-                      {walletDirection === 'sender' ? 'Institute Account Name' : 'Payer name'}
+                      {walletDirection === 'sender' ? t('cashbook.instituteAccountName') : t('cashbook.payerName')}
                     </label>
                     <input
                       type="text"
@@ -1035,7 +1034,7 @@ const CashbookManagement = () => {
                           senderEntityId: ''
                         })
                       }
-                      placeholder={senderLocked || walletDirection === 'sender' ? '' : 'Type name if not in system'}
+                      placeholder={senderLocked || walletDirection === 'sender' ? '' : t('cashbook.typeName')}
                       className={`w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 ${
                         walletDirection === 'sender'
                           ? 'bg-rose-50 dark:bg-rose-950/30 text-rose-900 dark:text-rose-100'
@@ -1046,7 +1045,7 @@ const CashbookManagement = () => {
                     />
                     {senderLocked && walletDirection !== 'sender' && (
                       <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
-                        Matched from institute records
+                        {t('cashbook.matched')}
                       </p>
                     )}
                   </div>
@@ -1056,11 +1055,11 @@ const CashbookManagement = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                      {walletDirection === 'receiver' ? 'Receiver (Institute Wallet)' : 'Receiver (teacher / vendor / other)'}
+                      {walletDirection === 'receiver' ? t('cashbook.receiverInstitute') : t('cashbook.receiverOther')}
                     </p>
                     {walletDirection === 'receiver' ? (
                       <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                        Wallet Assigned
+                        {t('cashbook.walletAssigned')}
                       </span>
                     ) : (
                       <button
@@ -1068,13 +1067,13 @@ const CashbookManagement = () => {
                         onClick={() => handleDirectionChange('receiver')}
                         className="text-[10px] font-bold text-slate-500 hover:text-brand-600 dark:text-slate-400 hover:underline"
                       >
-                        + Set Wallet as Receiver (Income)
+                        + {t('cashbook.setReceiver')}
                       </button>
                     )}
                   </div>
                   <div>
                     <label className="block text-xs font-black uppercase text-slate-500 mb-1">
-                      {walletDirection === 'receiver' ? 'Institute Account Number' : 'Phone / Account number'}
+                      {walletDirection === 'receiver' ? t('cashbook.instituteAccountNumber') : t('cashbook.phoneOrAccount')}
                     </label>
                     <input
                       type="text"
@@ -1091,7 +1090,7 @@ const CashbookManagement = () => {
                           receiverEntityId: ''
                         });
                       }}
-                      placeholder={walletDirection === 'receiver' ? '' : transactionForm.method === 'Bank' ? 'Bank number (6–7 digits)' : '9 or 10-digit number'}
+                      placeholder={walletDirection === 'receiver' ? '' : transactionForm.method === 'Bank' ? t('cashbook.bankNumberPlaceholder') : t('cashbook.mobileNumberPlaceholder')}
                       className={`w-full px-4 py-3 rounded-xl border text-slate-900 dark:text-white ${
                         walletDirection === 'receiver'
                           ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 font-mono'
@@ -1102,7 +1101,7 @@ const CashbookManagement = () => {
                     />
                     {walletDirection === 'receiver' ? (
                       <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
-                        Wallet-ka machadka ayaa ah lacag qaataha (Receiver)
+                        {t('cashbook.walletIsReceiver')}
                       </p>
                     ) : receiverPhoneErr ? (
                       <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1 font-bold">{receiverPhoneErr}</p>
@@ -1112,7 +1111,7 @@ const CashbookManagement = () => {
                   </div>
                   <div>
                     <label className="block text-xs font-black uppercase text-slate-500 mb-1">
-                      {walletDirection === 'receiver' ? 'Institute Account Name' : 'Name'}
+                      {walletDirection === 'receiver' ? t('cashbook.instituteAccountName') : t('common.name')}
                     </label>
                     <input
                       type="text"
@@ -1126,7 +1125,7 @@ const CashbookManagement = () => {
                           receiverEntityId: ''
                         })
                       }
-                      placeholder={receiverLocked || walletDirection === 'receiver' ? '' : 'Type name if not in system'}
+                      placeholder={receiverLocked || walletDirection === 'receiver' ? '' : t('cashbook.typeName')}
                       className={`w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 ${
                         walletDirection === 'receiver' || receiverLocked
                           ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-100'
@@ -1135,7 +1134,7 @@ const CashbookManagement = () => {
                     />
                     {receiverLocked && walletDirection !== 'receiver' && (
                       <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
-                        Matched from institute records (e.g. teacher)
+                        {t('cashbook.matchedTeacher')}
                       </p>
                     )}
                   </div>
@@ -1150,16 +1149,16 @@ const CashbookManagement = () => {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-black uppercase text-slate-500">
-                      Monthly Pay / Bisha &amp; Bilaha Hormarinta (Advance)
+                      {t('cashbook.monthlyPay')}
                     </label>
                     {monthsToPay > 1 ? (
                       <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                        {monthsToPay - 1} Month{monthsToPay > 2 ? 's' : ''} Advance
+                        {t('cashbook.monthsAdvance', { count: monthsToPay - 1 })}
                       </span>
                     ) : (
                       <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                        {currentMonthObj.name} (Current Month)
+                        {currentMonthObj.name} ({t('cashbook.currentMonth')})
                       </span>
                     )}
                   </div>
@@ -1185,8 +1184,8 @@ const CashbookManagement = () => {
                       return (
                         <option key={m} value={m}>
                           {m === 1
-                            ? `${currentMonthObj.name} ${currentMonthObj.year} (Current Month) · ${fmtMoney(amountForM)}`
-                            : `${targetObj.name} ${targetObj.year} (Advance · ${m - 1} bilood oo hormarin ah) · ${fmtMoney(amountForM)}`}
+                            ? `${currentMonthObj.name} ${currentMonthObj.year} (${t('cashbook.currentMonth')}) · ${fmtMoney(amountForM)}`
+                            : `${targetObj.name} ${targetObj.year} (${t('cashbook.advanceMonths', { count: m - 1 })}) · ${fmtMoney(amountForM)}`}
                         </option>
                       );
                     })}
@@ -1198,9 +1197,9 @@ const CashbookManagement = () => {
                       <div className="flex items-center justify-between font-black text-amber-900 dark:text-amber-200">
                         <span className="flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                          Lacagta Hormarinta ah ({monthsToPay - 1} bilood):
+                          {t('cashbook.advanceAmount', { count: monthsToPay - 1 })}:
                         </span>
-                        <span>Wadarta Advance: {fmtMoney(maxPayable)}</span>
+                        <span>{t('cashbook.advanceTotal')}: {fmtMoney(maxPayable)}</span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                         {Array.from({ length: monthsToPay - 1 }).map((_, idx) => {
@@ -1214,7 +1213,7 @@ const CashbookManagement = () => {
                               <div className="flex items-center justify-between gap-1">
                                 <span className="font-black text-slate-900 dark:text-white">{mo.name}</span>
                                 <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100">
-                                  Advance
+                                  {t('cashbook.advance')}
                                 </span>
                               </div>
                               <p className="text-sm font-black text-slate-800 dark:text-slate-200 mt-1">
@@ -1225,7 +1224,7 @@ const CashbookManagement = () => {
                         })}
                       </div>
                       <p className="text-[11px] text-amber-800 dark:text-amber-300 font-medium pt-1 border-t border-amber-200/60 dark:border-amber-900/40">
-                        * Bisha/bilaha mustaqbalka (tusaale {getPayerMonthLabel(payerInfo.month, 1).name}) marka la gaaro, system-ku wuxuu si toos ah u ogaanayaa in horay loo hormariyay (Amount = $0).
+                        * {t('cashbook.advanceNote', { month: getPayerMonthLabel(payerInfo.month, 1).name })}
                       </p>
                     </div>
                   )}
@@ -1238,11 +1237,11 @@ const CashbookManagement = () => {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-black uppercase text-slate-500">
-                    Bisha lacagta loo hormarinayo / bixinayo (Target Month)
+                    {t('cashbook.targetMonth')}
                   </label>
                   {(transactionForm.targetMonth || currentMonthStr) > currentMonthStr && (
                     <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
-                      Hormarin (Advance)
+                      {t('cashbook.advance')}
                     </span>
                   )}
                 </div>
@@ -1258,13 +1257,13 @@ const CashbookManagement = () => {
                   ))}
                 </select>
                 <p className="text-[10px] text-slate-400 mt-1">
-                  Dooro bisha lacagta loo bixinayo ama loo hormarinayo. Marka bisha la doorto, Amount-ku si toos ah ayuu u noqonayaa inta bishaas ku hartay.
+                  {t('cashbook.targetMonthHint')}
                 </p>
               </div>
             )}
 
             <div>
-              <label className="block text-xs font-black uppercase text-slate-500 mb-1">Amount</label>
+              <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.amount')}</label>
               <input
                 type="number"
                 min="0"
@@ -1277,7 +1276,7 @@ const CashbookManagement = () => {
               />
               {payerInfo && payerInfo.kind === 'responsible' && maxPayable !== null && (
                 <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
-                  Max payable for {monthsToPay} month{monthsToPay > 1 ? 's' : ''}: {fmtMoney(maxPayable)}. The payer cannot pay more than they owe.
+                  {t('cashbook.maxPayable', { count: monthsToPay, amount: fmtMoney(maxPayable) })}
                 </p>
               )}
             </div>
@@ -1286,29 +1285,29 @@ const CashbookManagement = () => {
               <div className="rounded-2xl border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-950/30 p-5 space-y-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">
-                    Diiwaanka Qofka · {payerInfo.role || 'Macallin / Shaqaale'}
+                    {t('cashbook.personRecord')} · {payerInfo.role ? tv(payerInfo.role) : t('cashbook.teacherOrStaff')}
                   </p>
                   <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
                     (transactionForm.targetMonth || payerInfo.month) > currentMonthStr
                       ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                       : 'bg-brand-100 dark:bg-brand-900/50 text-brand-700 dark:text-brand-300'
                   }`}>
-                    Bisha: {transactionForm.targetMonth || payerInfo.month} {(transactionForm.targetMonth || payerInfo.month) > currentMonthStr ? '· Hormarin' : ''}
+                    {t('common.month')}: {transactionForm.targetMonth || payerInfo.month} {(transactionForm.targetMonth || payerInfo.month) > currentMonthStr ? `· ${t('cashbook.advance')}` : ''}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400">Mushaharka Bisha</p>
+                    <p className="text-[10px] font-black uppercase text-slate-400">{t('cashbook.monthSalary')}</p>
                     <p className="text-xl font-black text-brand-600 dark:text-brand-300">{fmtMoney(payerInfo.salary)}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400">Horay loo bixiyay ({transactionForm.targetMonth || payerInfo.month})</p>
+                    <p className="text-[10px] font-black uppercase text-slate-400">{t('cashbook.alreadyPaid', { month: transactionForm.targetMonth || payerInfo.month })}</p>
                     <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{fmtMoney(payerInfo.totalPaid)}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400">Hadda ku hartay (Remaining)</p>
+                    <p className="text-[10px] font-black uppercase text-slate-400">{t('cashbook.remainingNow')}</p>
                     <p className={`text-xl font-black ${Number(payerInfo.remainingBalance ?? payerInfo.totalBalance) > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                      {Number(payerInfo.remainingBalance ?? payerInfo.totalBalance) > 0 ? fmtMoney(payerInfo.remainingBalance ?? payerInfo.totalBalance) : 'Fully Paid ($0)'}
+                      {Number(payerInfo.remainingBalance ?? payerInfo.totalBalance) > 0 ? fmtMoney(payerInfo.remainingBalance ?? payerInfo.totalBalance) : t('cashbook.fullyPaid')}
                     </p>
                   </div>
                 </div>
@@ -1316,7 +1315,7 @@ const CashbookManagement = () => {
                 {payerInfo.totalBalance === 0 && Number(payerInfo.salary || 0) > 0 && (transactionForm.targetMonth || payerInfo.month) <= currentMonthStr && (
                   <div className="pt-3 border-t border-brand-200/70 dark:border-brand-800/70 flex items-center justify-between flex-wrap gap-2">
                     <p className="text-xs text-brand-700 dark:text-brand-300 font-semibold">
-                      Bisha hadda waa la wada bixiyay ($0 haraa). Ma rabtaa inaad u hormariso bisha soo socota?
+                      {t('cashbook.currentPaidAskAdvance')}
                     </p>
                     {monthOptions.length > 1 && (
                       <button
@@ -1324,7 +1323,7 @@ const CashbookManagement = () => {
                         onClick={() => handleTargetMonthChange(monthOptions[1].value)}
                         className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black tracking-wide shadow-sm"
                       >
-                        + Hormari Bisha Soo Socota ({monthOptions[1].monthName} · {fmtMoney(payerInfo.salary)})
+                        + {t('cashbook.advanceNextMonth')} ({monthOptions[1].monthName} · {fmtMoney(payerInfo.salary)})
                       </button>
                     )}
                   </div>
@@ -1332,9 +1331,9 @@ const CashbookManagement = () => {
 
                 {payerInfo.lastSalary && (
                   <div className="pt-2 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
-                    <span>Mushaharkii ugu dambeeyay:</span>
+                    <span>{t('cashbook.lastSalary')}:</span>
                     <span className="font-bold text-slate-700 dark:text-slate-300">
-                      {fmtMoney(payerInfo.lastSalary.amount)} ({payerInfo.lastSalary.month}) · {payerInfo.lastSalary.status}
+                      {fmtMoney(payerInfo.lastSalary.amount)} ({payerInfo.lastSalary.month}) · {tv(payerInfo.lastSalary.status)}
                     </span>
                   </div>
                 )}
@@ -1345,29 +1344,29 @@ const CashbookManagement = () => {
               <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-5 space-y-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    Diiwaanka Account-ka / Kiro · {payerInfo.name}
+                    {t('cashbook.accountRecord')} · {payerInfo.name}
                   </p>
                   <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
                     (transactionForm.targetMonth || payerInfo.month) > currentMonthStr
                       ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                       : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                   }`}>
-                    Bisha: {transactionForm.targetMonth || payerInfo.month} {(transactionForm.targetMonth || payerInfo.month) > currentMonthStr ? '· Hormarin' : ''}
+                    {t('common.month')}: {transactionForm.targetMonth || payerInfo.month} {(transactionForm.targetMonth || payerInfo.month) > currentMonthStr ? `· ${t('cashbook.advance')}` : ''}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400">Lacagta Guud (Total/Balance)</p>
+                    <p className="text-[10px] font-black uppercase text-slate-400">{t('cashbook.totalBalance')}</p>
                     <p className="text-xl font-black text-slate-700 dark:text-slate-200">{fmtMoney(payerInfo.baseBalance ?? payerInfo.totalBalance)}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400">Horay loo bixiyay ({transactionForm.targetMonth || payerInfo.month})</p>
+                    <p className="text-[10px] font-black uppercase text-slate-400">{t('cashbook.alreadyPaid', { month: transactionForm.targetMonth || payerInfo.month })}</p>
                     <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{fmtMoney(payerInfo.paidThisMonth || 0)}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-black uppercase text-slate-400">Hadda ku hartay (Remaining)</p>
+                    <p className="text-[10px] font-black uppercase text-slate-400">{t('cashbook.remainingNow')}</p>
                     <p className={`text-xl font-black ${Number(payerInfo.remainingBalance ?? payerInfo.totalBalance) > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                      {Number(payerInfo.remainingBalance ?? payerInfo.totalBalance) > 0 ? fmtMoney(payerInfo.remainingBalance ?? payerInfo.totalBalance) : 'Fully Paid ($0)'}
+                      {Number(payerInfo.remainingBalance ?? payerInfo.totalBalance) > 0 ? fmtMoney(payerInfo.remainingBalance ?? payerInfo.totalBalance) : t('cashbook.fullyPaid')}
                     </p>
                   </div>
                 </div>
@@ -1383,25 +1382,25 @@ const CashbookManagement = () => {
               <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 p-5">
                 <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
                   <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500">
-                    {transactionForm.senderName ? `${transactionForm.senderName} · ` : ''}Responsible payer
+                    {transactionForm.senderName ? `${transactionForm.senderName} · ` : ''}{t('cashbook.responsiblePayer')}
                   </p>
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    {payerInfo.count} student{payerInfo.count === 1 ? '' : 's'} · {payerInfo.month}
+                    {t('students.studentCount', { count: payerInfo.count })} · {payerInfo.month}
                   </span>
                 </div>
 
                 {/* Money summary — total fee, paid, remaining. */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="rounded-xl bg-white/70 dark:bg-slate-900/50 border border-emerald-100 dark:border-emerald-900/50 px-4 py-3">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Total fee</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{t('cashbook.totalFee')}</p>
                     <p className="text-xl font-black text-slate-800 dark:text-slate-100">{fmtMoney(payerInfo.totalMonthlyFee)}</p>
                   </div>
                   <div className="rounded-xl bg-white/70 dark:bg-slate-900/50 border border-emerald-100 dark:border-emerald-900/50 px-4 py-3">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Paid ({payerInfo.month})</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{t('common.paid')} ({payerInfo.month})</p>
                     <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{fmtMoney(payerInfo.totalPaid)}</p>
                   </div>
                   <div className="rounded-xl bg-white/70 dark:bg-slate-900/50 border border-emerald-100 dark:border-emerald-900/50 px-4 py-3">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Remaining</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{t('common.remaining')}</p>
                     <p className="text-xl font-black text-rose-600 dark:text-rose-400">{fmtMoney(payerInfo.totalBalance)}</p>
                   </div>
                 </div>
@@ -1410,7 +1409,7 @@ const CashbookManagement = () => {
                 {payerInfo.totalMonthlyFee > 0 && (
                   <div className="mt-4">
                     <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                      <span>Collected {fmtMoney(payerInfo.totalPaid)}</span>
+                      <span>{t('cashbook.collectedAmount', { amount: fmtMoney(payerInfo.totalPaid) })}</span>
                       <span>{Math.round((payerInfo.totalPaid / payerInfo.totalMonthlyFee) * 100)}%</span>
                     </div>
                     <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
@@ -1428,10 +1427,10 @@ const CashbookManagement = () => {
                     <table className="w-full text-left text-sm">
                       <thead>
                         <tr className="text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-emerald-100 dark:border-emerald-900/50">
-                          <th className="px-4 py-2">Student</th>
-                          <th className="px-4 py-2 text-right">Fee</th>
-                          <th className="px-4 py-2 text-right">Paid</th>
-                          <th className="px-4 py-2 text-right">Remaining</th>
+                          <th className="px-4 py-2">{t('common.student')}</th>
+                          <th className="px-4 py-2 text-right">{t('cashbook.fee')}</th>
+                          <th className="px-4 py-2 text-right">{t('common.paid')}</th>
+                          <th className="px-4 py-2 text-right">{t('common.remaining')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-emerald-50 dark:divide-emerald-900/30">
@@ -1448,7 +1447,7 @@ const CashbookManagement = () => {
                       </tbody>
                       <tfoot>
                         <tr className="border-t-2 border-emerald-200 dark:border-emerald-800 font-black text-slate-900 dark:text-white">
-                          <td className="px-4 py-2 uppercase text-[10px] text-slate-500">Total</td>
+                          <td className="px-4 py-2 uppercase text-[10px] text-slate-500">{t('common.total')}</td>
                           <td className="px-4 py-2 text-right">{fmtMoney(payerInfo.totalMonthlyFee)}</td>
                           <td className="px-4 py-2 text-right text-emerald-600 dark:text-emerald-400">{fmtMoney(payerInfo.totalPaid)}</td>
                           <td className="px-4 py-2 text-right text-rose-600 dark:text-rose-400">{fmtMoney(payerInfo.totalBalance)}</td>
@@ -1460,7 +1459,7 @@ const CashbookManagement = () => {
 
                 {isPartial && (
                   <p className="mt-3 text-[11px] font-bold text-amber-600 dark:text-amber-400">
-                    Partial payment — {fmtMoney(remainingAfter)} will still be owed and can be paid another day.
+                    {t('cashbook.partialPayment', { amount: fmtMoney(remainingAfter) })}
                   </p>
                 )}
 
@@ -1471,7 +1470,7 @@ const CashbookManagement = () => {
                       onClick={() => setTransactionForm((prev) => ({ ...prev, amount: payerInfo.totalBalance }))}
                       className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-black uppercase tracking-wider"
                     >
-                      Pay full remaining ({fmtMoney(payerInfo.totalBalance)})
+                      {t('cashbook.payFull', { amount: fmtMoney(payerInfo.totalBalance) })}
                     </button>
                   )}
                   {payerInfo.totalBalance > 0 && entered > 0 && entered !== payerInfo.totalBalance && (
@@ -1480,7 +1479,7 @@ const CashbookManagement = () => {
                       onClick={() => setTransactionForm((prev) => ({ ...prev, amount: '' }))}
                       className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-500 text-[11px] font-black uppercase tracking-wider hover:bg-slate-100 dark:hover:bg-slate-800"
                     >
-                      Clear amount
+                      {t('cashbook.clearAmount')}
                     </button>
                   )}
                 </div>
@@ -1489,13 +1488,13 @@ const CashbookManagement = () => {
             })()}
 
             <div>
-              <label className="block text-xs font-black uppercase text-slate-500 mb-1">Description</label>
+              <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.description')}</label>
               <textarea
                 rows={2}
                 value={transactionForm.description}
                 onChange={(e) => setTransactionForm({ ...transactionForm, description: e.target.value })}
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white"
-                placeholder="Notes about this payment or expense"
+                placeholder={t('cashbook.notesPlaceholder')}
               />
             </div>
 
@@ -1505,7 +1504,7 @@ const CashbookManagement = () => {
                 disabled={categories.length === 0}
                 className="flex items-center gap-2 px-6 py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white rounded-xl font-black text-xs uppercase tracking-wider"
               >
-                <Save size={16} /> {editingEntry ? 'Update transaction' : 'Save transaction'}
+                <Save size={16} /> {editingEntry ? t('cashbook.updateTransaction') : t('cashbook.saveTransaction')}
               </button>
               {editingEntry && (
                 <button
@@ -1513,7 +1512,7 @@ const CashbookManagement = () => {
                   onClick={resetTransactionForm}
                   className="flex items-center gap-2 px-6 py-3 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-xs uppercase text-slate-600 dark:text-slate-300"
                 >
-                  <RotateCcw size={16} /> Cancel edit
+                  <RotateCcw size={16} /> {t('cashbook.cancelEdit')}
                 </button>
               )}
             </div>
@@ -1522,11 +1521,11 @@ const CashbookManagement = () => {
           <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 shadow-sm p-6">
             <div className="flex items-center gap-2 mb-4">
               <Search size={16} className="text-slate-400" />
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filter transactions</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('cashbook.filterTransactions')}</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Type</label>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">{t('common.type')}</label>
                 <select
                   value={filterType}
                   onChange={(e) => {
@@ -1535,28 +1534,28 @@ const CashbookManagement = () => {
                   }}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
                 >
-                  <option value="All">All types</option>
-                  <option value="Income">Income</option>
-                  <option value="Expense">Expense</option>
+                  <option value="All">{t('access.logs.allTypes')}</option>
+                  <option value="Income">{tv('Income')}</option>
+                  <option value="Expense">{tv('Expense')}</option>
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Category</label>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">{t('common.category')}</label>
                 <select
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
                 >
-                  <option value="All">All categories</option>
+                  <option value="All">{t('cashbook.allCategories')}</option>
                   {filterCategoryOptions.map((c) => (
                     <option key={c._id} value={c._id}>
-                      {c.title} · {c.type}
+                      {c.title} · {tv(c.type)}
                     </option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">From date</label>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">{t('cashbook.fromDate')}</label>
                 <input
                   type="date"
                   value={dateFrom}
@@ -1565,7 +1564,7 @@ const CashbookManagement = () => {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">To date</label>
+                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">{t('cashbook.toDate')}</label>
                 <input
                   type="date"
                   value={dateTo}
@@ -1583,7 +1582,7 @@ const CashbookManagement = () => {
                 }}
                 className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-black uppercase tracking-wider"
               >
-                Today
+                {t('common.today')}
               </button>
               <button
                 type="button"
@@ -1593,7 +1592,7 @@ const CashbookManagement = () => {
                 }}
                 className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-black uppercase tracking-wider"
               >
-                All dates
+                {t('cashbook.allDates')}
               </button>
               <button
                 type="button"
@@ -1605,10 +1604,10 @@ const CashbookManagement = () => {
                 }}
                 className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-black uppercase tracking-wider"
               >
-                Reset
+                {t('common.reset')}
               </button>
               <span className="ml-auto text-[11px] font-bold text-slate-400">
-                {filteredEntries.length} result{filteredEntries.length === 1 ? '' : 's'}
+                {t('cashbook.results', { count: filteredEntries.length })}
               </span>
             </div>
           </div>
@@ -1618,16 +1617,16 @@ const CashbookManagement = () => {
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                    <th className="px-6 py-5">Date</th>
-                    <th className="px-6 py-5">Category</th>
-                    <th className="px-6 py-5">Type</th>
-                    <th className="px-6 py-5">Payer</th>
-                    <th className="px-6 py-5">Sender</th>
-                    <th className="px-6 py-5">Receiver</th>
-                    <th className="px-6 py-5">Method</th>
-                    <th className="px-6 py-5 text-right">Amount</th>
-                    <th className="px-6 py-5 text-right">Remaining</th>
-                    <th className="px-6 py-5 text-right">Actions</th>
+                    <th className="px-6 py-5">{t('common.date')}</th>
+                    <th className="px-6 py-5">{t('common.category')}</th>
+                    <th className="px-6 py-5">{t('common.type')}</th>
+                    <th className="px-6 py-5">{t('students.payer')}</th>
+                    <th className="px-6 py-5">{t('cashbook.sender')}</th>
+                    <th className="px-6 py-5">{t('cashbook.receiver')}</th>
+                    <th className="px-6 py-5">{t('common.method')}</th>
+                    <th className="px-6 py-5 text-right">{t('common.amount')}</th>
+                    <th className="px-6 py-5 text-right">{t('common.remaining')}</th>
+                    <th className="px-6 py-5 text-right">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1637,7 +1636,7 @@ const CashbookManagement = () => {
                     return (
                       <tr key={item._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                         <td className="px-6 py-5 text-sm text-slate-500 whitespace-nowrap">
-                          {item.date ? new Date(item.date).toLocaleDateString() : '—'}
+                          {item.date ? new Date(item.date).toLocaleDateString(locale) : '—'}
                         </td>
                         <td className="px-6 py-5 text-sm font-bold text-slate-900 dark:text-white">
                           {cat?.title || '—'}
@@ -1650,7 +1649,7 @@ const CashbookManagement = () => {
                                 : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
                             }`}
                           >
-                            {cat?.type || '—'}
+                            {tv(cat?.type) || '—'}
                           </span>
                         </td>
                         <td className="px-6 py-5 text-sm font-semibold text-slate-800 dark:text-slate-200">
@@ -1658,7 +1657,7 @@ const CashbookManagement = () => {
                         </td>
                         <td className="px-6 py-5 text-sm text-slate-500 whitespace-nowrap">{item.senderPhone || '—'}</td>
                         <td className="px-6 py-5 text-sm text-slate-500 whitespace-nowrap">{item.receiverPhone || '—'}</td>
-                        <td className="px-6 py-5 text-sm text-slate-500">{item.method}</td>
+                        <td className="px-6 py-5 text-sm text-slate-500">{tv(item.method)}</td>
                         <td
                           className={`px-6 py-5 text-sm font-black text-right whitespace-nowrap ${
                             isIncome ? 'text-emerald-600' : 'text-rose-600'
@@ -1699,7 +1698,7 @@ const CashbookManagement = () => {
                   {filteredEntries.length === 0 && (
                     <tr>
                       <td colSpan={10} className="px-8 py-10 text-center text-slate-400 text-sm">
-                        No transactions yet. Record income, expenses, fees, salaries, and more here.
+                        {t('cashbook.noTransactions')}
                       </td>
                     </tr>
                   )}

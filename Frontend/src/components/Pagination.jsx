@@ -1,7 +1,9 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const Pagination = ({ currentPage, totalPages, onPageChange }) => {
+    const { t } = useLanguage();
     if (totalPages <= 1) return null;
 
     const pages = [];
@@ -66,7 +68,7 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
             </button>
 
             <div className="ml-4 pl-4 border-l border-slate-100 dark:border-slate-800 text-[9px] font-black text-slate-400 uppercase tracking-widest hidden sm:block">
-                Page {currentPage} of {totalPages}
+                {t('common.pageOf', { page: currentPage, total: totalPages })}
             </div>
         </div>
     );

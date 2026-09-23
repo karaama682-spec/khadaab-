@@ -1,6 +1,7 @@
 import React from 'react';
 import { TrendingUp, TrendingDown, ArrowUpRight, Eye } from 'lucide-react';
 import { currentCycle, cycleLabel } from '../utils/billingCycle';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const KPICard = ({
   label,
@@ -15,6 +16,7 @@ const KPICard = ({
   badge,
   badgeColor = 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
 }) => {
+  const { t } = useLanguage();
   const isPositive = trend >= 0;
   const hasTrend = Number.isFinite(trend);
   const desc = description || cycleLabel(currentCycle());
@@ -70,7 +72,7 @@ const KPICard = ({
           {onPreview && (
             <button
               type="button"
-              title="Faahfaahin Degdeg ah / Quick Preview"
+              title={t('dashboard.kpi.quickPreview')}
               onClick={(e) => {
                 e.stopPropagation();
                 onPreview();
@@ -107,7 +109,7 @@ const KPICard = ({
       {typeof progress === 'number' ? (
         <div className="relative z-10 mt-4">
           <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-1">
-            <span>Heerka</span>
+            <span>{t('dashboard.kpi.progress')}</span>
             <span>{Math.round(progress)}%</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
@@ -136,9 +138,9 @@ const KPICard = ({
       {/* Bottom Subtle Action Hint */}
       {onClick && (
         <div className="relative z-10 mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5 text-[11px] font-semibold text-slate-400 transition-colors group-hover:text-brand-600 dark:border-slate-800/80 dark:group-hover:text-brand-400">
-          <span>Guji si aad u furto</span>
+          <span>{t('dashboard.kpi.clickToOpen')}</span>
           <span className="flex items-center gap-0.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 font-bold">
-            Tag Bogga &rarr;
+            {t('dashboard.kpi.goToPage')} &rarr;
           </span>
         </div>
       )}

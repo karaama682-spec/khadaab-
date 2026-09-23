@@ -3,9 +3,11 @@ import { X, Edit2, Trash2, ArrowUpRight, Search, Info } from 'lucide-react';
 import api from '../services/api';
 import { walletNameOf } from '../utils/wallet';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const TransactionsManagement = () => {
   const { showAlert, showConfirm } = useAlert();
+  const { t, tv, locale } = useLanguage();
   const [data, setData] = useState([]);
   const [wallets, setWallets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -61,7 +63,7 @@ const TransactionsManagement = () => {
     e.preventDefault();
     if (!editingItem) return;
     if (!formData.amount) {
-      showAlert({ type: 'warning', title: 'Validation Error', message: 'Amount is required.' });
+      showAlert({ type: 'warning', title: t('common.validationError'), message: t('finance.transactions.amountRequired') });
       return;
     }
     // An empty wallet selection is omitted rather than sent as '', which would
@@ -72,23 +74,23 @@ const TransactionsManagement = () => {
     try {
       const res = await api.put(`/transactions/${editingItem._id}`, payload);
       setData(prev => prev.map(i => i._id === editingItem._id ? (res.data || { ...i, ...payload }) : i));
-      showAlert({ type: 'success', title: 'Updated', message: 'Transaction updated.' });
+      showAlert({ type: 'success', title: t('finance.updatedTitle'), message: t('finance.transactions.updated') });
       setIsModalOpen(false);
       fetchData();
     } catch (error) {
-      showAlert({ type: 'danger', title: 'Error', message: error.response?.data?.message || 'Failed to update transaction.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: error.response?.data?.message || t('finance.transactions.updateFailed') });
     }
   };
 
   const handleDelete = async (item) => {
-    const ok = await showConfirm({ type: 'warning', title: 'Delete Transaction?', message: 'This cannot be undone.', confirmText: 'Yes, delete', cancelText: 'Cancel', danger: true });
+    const ok = await showConfirm({ type: 'warning', title: t('finance.transactions.deleteTitle'), message: t('finance.transactions.deleteConfirm'), confirmText: t('common.yesDelete'), cancelText: t('common.cancel'), danger: true });
     if (!ok) return;
     try {
       await api.delete(`/transactions/${item._id}`);
       setData(prev => prev.filter(i => i._id !== item._id));
-      showAlert({ type: 'success', title: 'Deleted', message: 'Transaction deleted.' });
+      showAlert({ type: 'success', title: t('common.deleted'), message: t('finance.transactions.deletedMsg') });
     } catch (error) {
-      showAlert({ type: 'danger', title: 'Error', message: 'Failed to delete transaction.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: t('finance.transactions.deleteFailed') });
     }
   };
 
@@ -97,7 +99,7 @@ const TransactionsManagement = () => {
     (item.type || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (loading) return <div className="p-10 text-center text-slate-500">Loading Transactions...</div>;
+  if (loading) return <div className="p-10 text-center text-slate-500">{t('finance.transactions.loading')}</div>;
 
   return (
     <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24">
@@ -107,8 +109,8 @@ const TransactionsManagement = () => {
             <ArrowUpRight size={32} strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Transactions</h1>
-            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">Financial Ledger</p>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">{t('finance.transactions.title')}</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">{t('finance.transactions.subtitle')}</p>
           </div>
         </div>
         {/* No "add" action: the ledger is derived. Every transaction is written
@@ -117,14 +119,14 @@ const TransactionsManagement = () => {
         <div className="flex items-center gap-2 px-5 py-3 rounded-[20px] bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
           <Info size={15} className="text-slate-400 shrink-0" />
           <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Generated from Cashbook, Payments, Salaries &amp; Expenses
+            {t('finance.transactions.generatedFrom')}
           </p>
         </div>
       </div>
 
       <div className="flex items-center bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm max-w-md">
         <Search size={18} className="text-slate-400 mr-3" />
-        <input type="text" placeholder="Search by description or type..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400" />
+        <input type="text" placeholder={t('finance.transactions.searchPlaceholder')} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400" />
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
@@ -132,21 +134,21 @@ const TransactionsManagement = () => {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                <th className="px-8 py-5">Date</th>
-                <th className="px-8 py-5">Description</th>
-                <th className="px-8 py-5">Type</th>
-                <th className="px-8 py-5">Amount</th>
-                <th className="px-8 py-5">Wallet</th>
-                <th className="px-8 py-5 text-right">Actions</th>
+                <th className="px-8 py-5">{t('common.date')}</th>
+                <th className="px-8 py-5">{t('common.description')}</th>
+                <th className="px-8 py-5">{t('common.type')}</th>
+                <th className="px-8 py-5">{t('common.amount')}</th>
+                <th className="px-8 py-5">{t('common.wallet')}</th>
+                <th className="px-8 py-5 text-right">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredData.map((item) => (
                 <tr key={item._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
-                  <td className="px-8 py-6 text-sm font-semibold text-slate-500 dark:text-slate-400">{new Date(item.date || item.createdAt).toLocaleDateString()}</td>
+                  <td className="px-8 py-6 text-sm font-semibold text-slate-500 dark:text-slate-400">{new Date(item.date || item.createdAt).toLocaleDateString(locale)}</td>
                   <td className="px-8 py-6 text-sm font-bold text-slate-900 dark:text-slate-100">{item.description || '-'}</td>
                   <td className="px-8 py-6">
-                    <span className={`px-3 py-1 text-[10px] font-black uppercase rounded-full ${item.type === 'Income' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'}`}>{item.type}</span>
+                    <span className={`px-3 py-1 text-[10px] font-black uppercase rounded-full ${item.type === 'Income' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'}`}>{tv(item.type)}</span>
                   </td>
                   <td className={`px-8 py-6 text-sm font-black ${item.type === 'Income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>${item.amount}</td>
                   <td className="px-8 py-6 text-sm font-semibold text-slate-700 dark:text-slate-300">
@@ -164,7 +166,7 @@ const TransactionsManagement = () => {
                 </tr>
               ))}
               {filteredData.length === 0 && (
-                <tr><td colSpan="6" className="px-8 py-10 text-center text-slate-400 text-sm font-medium">No transactions yet. They appear here automatically when a cashbook entry, payment, salary or expense is recorded.</td></tr>
+                <tr><td colSpan="6" className="px-8 py-10 text-center text-slate-400 text-sm font-medium">{t('finance.transactions.empty')}</td></tr>
               )}
             </tbody>
           </table>
@@ -176,21 +178,21 @@ const TransactionsManagement = () => {
           <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 max-w-lg w-full shadow-2xl border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
-                Edit Transaction
+                {t('finance.transactions.editTitle')}
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-full"><X size={20} /></button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Transaction Type</label>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('finance.transactions.typeLabel')}</label>
                   <select value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value })} className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white">
-                    <option value="Income">Income</option>
-                    <option value="Expense">Expense</option>
+                    <option value="Income">{tv('Income')}</option>
+                    <option value="Expense">{tv('Expense')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Amount ($) *</label>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('finance.amountLabel')}</label>
                   <input type="number" min="1" required value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })} className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white" />
                 </div>
               </div>
@@ -199,33 +201,33 @@ const TransactionsManagement = () => {
                   and no wallet is hard-coded. Leaving it unselected keeps the
                   transaction without a wallet, which reports show as N/A. */}
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Wallet</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.wallet')}</label>
                 <select
                   value={formData.walletId}
                   onChange={(e) => setFormData({ ...formData, walletId: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
                 >
-                  <option value="">-- Select Wallet --</option>
+                  <option value="">{t('finance.selectWallet')}</option>
                   {wallets.map(w => (
                     <option key={w._id} value={w._id}>
-                      {w.name} ({w.type} - Balance: ${w.balance || 0})
+                      {w.name} ({tv(w.type)} - {t('common.balance')}: ${w.balance || 0})
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Date</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.date')}</label>
                 <input type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white" />
               </div>
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Description</label>
-                <input type="text" placeholder="Optional description..." value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white" />
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.description')}</label>
+                <input type="text" placeholder={t('finance.optionalDescription')} value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white" />
               </div>
               <div className="flex justify-end gap-3 pt-4">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs uppercase">Cancel</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs uppercase">{t('common.cancel')}</button>
                 <button type="submit" className="px-6 py-3 rounded-xl bg-blue-600 text-white font-bold text-xs uppercase shadow-lg hover:bg-blue-700">
-                  Save Changes
+                  {t('common.saveChanges')}
                 </button>
               </div>
             </form>

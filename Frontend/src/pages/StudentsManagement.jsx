@@ -9,6 +9,7 @@ import { useAlert } from '../components/common/alerts/useAlert';
 import IdCard from '../components/IdCard.jsx';
 import { classLabel, classSearchText } from '../utils/classLabel';
 import { isValidSomaliMobile } from '../utils/somaliPhone';
+import { useLanguage, translate, translateValue } from '../i18n/LanguageContext.jsx';
 
 // The workbook columns mirror the registration form exactly. Student ID is
 // exported for reference but never imported — the server issues it (1001, 1002…)
@@ -29,6 +30,31 @@ const SHEET_COLUMNS = [
 ];
 
 const SHEET_NAME = 'Students';
+
+// Column headers in the selected language. Import accepts the English and the
+// Somali header for every column, so a file exported in either language (or an
+// older English template) can always be imported.
+const localizedColumns = () => SHEET_COLUMNS.map(c => ({ ...c, header: translate(`students.sheet.${c.key}`) }));
+const headerAliases = (column) => [column.header, translate(`students.sheet.${column.key}`, undefined, 'en'), translate(`students.sheet.${column.key}`, undefined, 'so')]
+  .map(h => String(h).toLowerCase());
+
+// Stored values written into a sheet in Somali are mapped back to the stored
+// English value on import, so the database only ever receives valid values.
+const STORED_VALUES = {
+  gender: ['Male', 'Female', 'Other'],
+  status: ['Active', 'Inactive', 'Graduated'],
+  relationship: ['Father', 'Mother', 'Guardian', 'Responsible', 'Other']
+};
+const valueLabel = (field, value, language) => (field === 'relationship'
+  ? translate(`academic.guardians.relationships.${value}`, { defaultValue: translateValue(value, language) }, language)
+  : translateValue(value, language));
+const toStoredValue = (field, text) => {
+  if (!text || !STORED_VALUES[field]) return text;
+  const lower = String(text).trim().toLowerCase();
+  const hit = STORED_VALUES[field].find(v => v.toLowerCase() === lower
+    || String(valueLabel(field, v, 'so')).toLowerCase() === lower);
+  return hit || text;
+};
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 // ExcelJS is large and only needed when someone actually imports or exports, so
@@ -113,10 +139,10 @@ const getClassInfo = (c) => {
 // 4. Normalizes all whitespace, Unicode spaces, and case differences
 const resolveClassFromCell = (cell, classes = []) => {
   const rawCell = String(cell ?? '').replace(/\u00A0/g, ' ').trim();
-  const known = () => classes.map(c => classLabel(c)).filter(Boolean).join(', ') || '(no classes exist yet)';
+  const known = () => classes.map(c => classLabel(c)).filter(Boolean).join(', ') || translate('students.import.noClassesYet');
 
   if (!rawCell) {
-    return { error: 'Class is blank in this row' };
+    return { error: translate('students.import.classBlank') };
   }
 
   const cleanCell = cleanStr(rawCell);
@@ -165,14 +191,14 @@ const resolveClassFromCell = (cell, classes = []) => {
       });
       if (branchMatch.length === 1) return { cls: branchMatch[0] };
       if (branchMatch.length > 1) {
-        return { error: `"${rawCell}" matches multiple classes in branch "${inputBranch}".` };
+        return { error: translate('students.import.multipleInBranch', { cell: rawCell, branch: inputBranch }) };
       }
       // If branch didn't strictly match, but only 1 candidate class with that name exists, accept it
       if (candidates.length === 1) {
         return { cls: candidates[0] };
       }
       const options = candidates.map(c => classLabel(c)).join(', ');
-      return { error: `No class "${inputBase}" in branch "${inputBranch}". Did you mean: ${options}?` };
+      return { error: translate('students.import.noClassInBranch', { base: inputBase, branch: inputBranch, options }) };
     }
 
     // If no branch was specified in the Excel cell:
@@ -184,7 +210,7 @@ const resolveClassFromCell = (cell, classes = []) => {
     // If multiple branches have a class with the same name, ask user to disambiguate:
     const options = candidates.map(c => classLabel(c)).join(', ');
     return {
-      error: `Class "${inputBase}" exists in multiple branches: ${options}. Please write it as "Class Name (Branch)", e.g. "${classLabel(candidates[0])}"`
+      error: translate('students.import.multipleBranches', { base: inputBase, options, example: classLabel(candidates[0]) })
     };
   }
 
@@ -204,7 +230,7 @@ const resolveClassFromCell = (cell, classes = []) => {
   }
 
   return {
-    error: `Class "${rawCell}" does not exist. Available: ${known()}`
+    error: translate('students.import.classMissing', { cell: rawCell, available: known() })
   };
 };
 
@@ -222,6 +248,7 @@ const phoneVariants = (value) => {
 
 const StudentsManagement = () => {
   const { showAlert, showConfirm } = useAlert();
+  const { t, tv, language } = useLanguage();
   const [data, setData] = useState(() => {
     try {
       const cached = sessionStorage.getItem('cachedStudentsData');
@@ -264,10 +291,10 @@ const StudentsManagement = () => {
   // date part rather than through a locale conversion, so the day shown is
   // always the day that was saved and can never shift by a timezone offset.
   const fmtRegDate = (value) => {
-    if (!value) return 'N/A';
+    if (!value) return t('common.notAvailable');
     const iso = typeof value === 'string' ? value : new Date(value).toISOString();
     const parts = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-    if (!parts) return 'N/A';
+    if (!parts) return t('common.notAvailable');
     const [, y, m, d] = parts;
     return `${d}/${m}/${y}`;
   };
@@ -376,57 +403,37 @@ const StudentsManagement = () => {
   const handleDownloadTemplate = async () => {
     const ExcelJS = await loadExcelJS();
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet(SHEET_NAME);
-    sheet.columns = SHEET_COLUMNS;
+    const sheet = workbook.addWorksheet(t('students.sheet.sheetName'));
+    sheet.columns = localizedColumns();
     styleHeaderRow(sheet);
 
     sheet.addRow({
-      studentId: '(leave blank)',
-      fullName: 'Ahmed Ali',
+      studentId: t('students.sheet.leaveBlank'),
+      fullName: t('students.sheet.exampleName'),
       className: classes[0] ? classLabel(classes[0]) : 'Tamhiid 3 (FR1)',
-      gender: 'Male',
+      gender: valueLabel('gender', 'Male', language),
       monthlyFee: 20,
-      fatherName: 'Ali Hassan',
+      fatherName: t('students.sheet.exampleFather'),
       fatherPhone: '0615551234',
-      payerName: 'Ali Hassan',
+      payerName: t('students.sheet.exampleFather'),
       payerPhone: '0615551234',
       payerAltPhone: '',
-      relationship: 'Father',
-      status: 'Active'
+      relationship: valueLabel('relationship', 'Father', language),
+      status: valueLabel('status', 'Active', language)
     });
     sheet.getRow(2).font = { italic: true, color: { argb: 'FF94A3B8' } };
 
-    const notes = workbook.addWorksheet('Instructions');
+    const notes = workbook.addWorksheet(t('students.sheet.instructionsName'));
     notes.columns = [{ width: 96 }];
     [
-      'HOW TO USE THIS TEMPLATE',
-      '',
-      'One row = one student. Delete the grey example row before uploading.',
-      '',
-      'Student ID  — leave blank. The system issues it automatically (1001, 1002, …).',
-      '              Any value typed here is ignored.',
-      'Full Name   — required.',
-      'Class       — required. Write either "Class Name" or "Class Name (Branch)", e.g. Tamhiid 3 or Tamhiid 3 (FR1).',
-      '              If multiple branches have a class with the same name, specify the branch.',
-      `              Existing classes: ${classes.map(c => classLabel(c)).filter(Boolean).join(', ') || '(none yet)'}`,
-      'Gender      — Male, Female or Other. Defaults to Male.',
-      'Monthly Fee — number. Defaults to 0.',
-      'Father Name / Father Phone — both required.',
-      '',
-      'Fee Payer Phone — this is how a payer is identified.',
-      '  · If the number already exists, the student is linked to that payer.',
-      '  · If not, a new payer is created once and reused for later rows.',
-      '  · Leaving it blank creates a student with no payer.',
-      '',
-      'Fee Payer Name / Alt Phone / Relationship — used only when creating a new payer.',
-      'An existing payer is never renamed, because that name is shared by all their students.',
-      '',
-      'Status — Active, Inactive or Graduated. Defaults to Active.'
+      ...t('students.sheet.instructionsTop'),
+      t('students.sheet.existingClasses', { classes: classes.map(c => classLabel(c)).filter(Boolean).join(', ') || t('students.sheet.noneYet') }),
+      ...t('students.sheet.instructionsBottom')
     ].forEach(line => notes.addRow([line]));
     notes.getRow(1).font = { bold: true, size: 13 };
 
-    await downloadWorkbook(workbook, 'Student_Import_Template.xlsx');
-    showAlert({ type: 'success', title: 'Template downloaded', message: 'Fill in one row per student, then use Import Excel.' });
+    await downloadWorkbook(workbook, t('students.sheet.templateFile'));
+    showAlert({ type: 'success', title: t('students.alerts.templateTitle'), message: t('students.alerts.templateMsg') });
   };
 
   // ── Export ────────────────────────────────────────────────────────────────
@@ -435,8 +442,8 @@ const StudentsManagement = () => {
   const handleExport = async () => {
     const ExcelJS = await loadExcelJS();
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet(SHEET_NAME);
-    sheet.columns = SHEET_COLUMNS;
+    const sheet = workbook.addWorksheet(t('students.sheet.sheetName'));
+    sheet.columns = localizedColumns();
     styleHeaderRow(sheet);
 
     data.forEach((item) => {
@@ -446,7 +453,7 @@ const StudentsManagement = () => {
         studentId: item.studentCode || '',
         fullName: item.fullName || '',
         className: cls ? classLabel(cls, '') : '',
-        gender: item.gender || '',
+        gender: item.gender ? valueLabel('gender', item.gender, language) : '',
         monthlyFee: Number(item.monthlyFee ?? item.fee ?? 0),
         fatherName: item.fatherName || '',
         // Phones are written as text so a leading zero is never dropped.
@@ -454,8 +461,8 @@ const StudentsManagement = () => {
         payerName: guardian?.fullName || '',
         payerPhone: guardian?.phone || '',
         payerAltPhone: guardian?.alternatePhone || '',
-        relationship: guardian?.relationship || '',
-        status: item.status || 'Active'
+        relationship: guardian?.relationship ? valueLabel('relationship', guardian.relationship, language) : '',
+        status: valueLabel('status', item.status || 'Active', language)
       });
     });
 
@@ -463,11 +470,11 @@ const StudentsManagement = () => {
       sheet.getColumn(key).numFmt = '@';
     });
 
-    await downloadWorkbook(workbook, `Students_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    await downloadWorkbook(workbook, `${t('students.sheet.exportFile')}_${new Date().toISOString().slice(0, 10)}.xlsx`);
     showAlert({
       type: 'success',
-      title: 'Export complete',
-      message: `${data.length} student${data.length === 1 ? '' : 's'} exported to Excel.`
+      title: t('students.alerts.exportTitle'),
+      message: t('students.alerts.exportMsg', { count: data.length })
     });
   };
 
@@ -496,7 +503,7 @@ const StudentsManagement = () => {
       fullName: row.payerName || row.fatherName || 'Fee Payer',
       phone,
       alternatePhone: row.payerAltPhone || '',
-      relationship: row.relationship || 'Father'
+      relationship: toStoredValue('relationship', row.relationship) || 'Father'
     });
     const id = created?._id || created?.id || null;
     if (id) cache.set(cacheKey, id);
@@ -510,7 +517,7 @@ const StudentsManagement = () => {
     `${String(name).trim().toLowerCase()}|${String(classId)}|${digitsOnly(fatherPhone)}`;
 
   const importRow = async (row, existingKeys, cache) => {
-    if (!row.fullName) throw new Error('Full Name is required');
+    if (!row.fullName) throw new Error(t('students.import.fullNameRequired'));
 
     // Matched on class name AND branch together, so "Tamhiid 3 (FR1)" and
     // "Tamhiid 3 (FR2)" land on their own class rather than whichever was
@@ -526,7 +533,7 @@ const StudentsManagement = () => {
     // Key on the value that actually gets stored, so an exported file re-imports
     // as "already registered" even when the sheet's Father Phone cell was blank.
     const key = studentKey(row.fullName, cls._id, fatherPhone);
-    if (existingKeys.has(key)) throw new Error('already registered in this class');
+    if (existingKeys.has(key)) throw new Error(t('students.import.alreadyRegistered'));
 
     const guardianId = await resolveGuardian(row, cache);
 
@@ -534,13 +541,13 @@ const StudentsManagement = () => {
     await api.post('/students', {
       fullName: row.fullName,
       classId: cls._id,
-      gender: row.gender || 'Male',
+      gender: toStoredValue('gender', row.gender) || 'Male',
       monthlyFee: Number(row.monthlyFee) || 0,
       fee: Number(row.monthlyFee) || 0,
       fatherName,
       fatherPhone,
       guardianId: guardianId || undefined,
-      status: row.status || 'Active'
+      status: toStoredValue('status', row.status) || 'Active'
     });
 
     existingKeys.add(key);
@@ -558,19 +565,19 @@ const StudentsManagement = () => {
       const ExcelJS = await loadExcelJS();
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(await file.arrayBuffer());
-      const sheet = workbook.getWorksheet(SHEET_NAME) || workbook.worksheets[0];
-      if (!sheet) throw new Error('The workbook contains no sheets.');
+      const sheet = workbook.getWorksheet(SHEET_NAME) || workbook.getWorksheet(translate('students.sheet.sheetName', undefined, 'so')) || workbook.worksheets[0];
+      if (!sheet) throw new Error(t('students.import.noSheets'));
 
       // Map by header text so column order does not matter.
       const headerRow = sheet.getRow(1);
       const indexByHeader = {};
       headerRow.eachCell((cell, col) => {
-        const match = SHEET_COLUMNS.find(c => c.header.toLowerCase() === cellText(cell.value).toLowerCase());
+        const match = SHEET_COLUMNS.find(c => headerAliases(c).includes(cellText(cell.value).toLowerCase()));
         if (match) indexByHeader[match.key] = col;
       });
 
       if (indexByHeader.fullName === undefined) {
-        throw new Error('No "Full Name" column found. Use the downloaded template.');
+        throw new Error(t('students.import.noFullNameColumn'));
       }
 
       const rows = [];
@@ -582,13 +589,13 @@ const StudentsManagement = () => {
           row[key] = col ? cellText(excelRow.getCell(col).value) : '';
         });
         // Skip the template's grey example row and any blank line.
-        if (!row.fullName || row.studentId === '(leave blank)') return;
+        if (!row.fullName || [translate('students.sheet.leaveBlank', undefined, 'en'), translate('students.sheet.leaveBlank', undefined, 'so')].includes(row.studentId)) return;
         rows.push({ ...row, rowNumber });
       });
 
       if (!rows.length) {
         setImporting(false);
-        showAlert({ type: 'warning', title: 'Nothing to import', message: 'No student rows were found in the file.' });
+        showAlert({ type: 'warning', title: t('students.alerts.nothingTitle'), message: t('students.alerts.nothingMsg') });
         return;
       }
 
@@ -603,11 +610,11 @@ const StudentsManagement = () => {
       for (const row of rows) {
         try {
           await importRow(row, existingKeys, cache);
-          results.push({ row: row.rowNumber, name: row.fullName, ok: true, message: 'Imported' });
+          results.push({ row: row.rowNumber, name: row.fullName, ok: true, message: t('students.import.imported') });
         } catch (error) {
           results.push({
             row: row.rowNumber,
-            name: row.fullName || `Row ${row.rowNumber}`,
+            name: row.fullName || t('students.import.rowLabel', { row: row.rowNumber }),
             ok: false,
             message: error.response?.data?.message || error.message
           });
@@ -619,8 +626,8 @@ const StudentsManagement = () => {
     } catch (error) {
       showAlert({
         type: 'danger',
-        title: 'Could not read the file',
-        message: error.message || 'Please upload an .xlsx file created from the template.'
+        title: t('students.alerts.readFailedTitle'),
+        message: error.message || t('students.alerts.readFailedMsg')
       });
     } finally {
       setImporting(false);
@@ -674,7 +681,7 @@ const StudentsManagement = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.fullName) {
-      showAlert({ type: 'warning', title: 'Validation Error', message: 'Student full name is required.' });
+      showAlert({ type: 'warning', title: t('common.validationError'), message: t('students.alerts.nameRequired') });
       return;
     }
 
@@ -716,26 +723,26 @@ const StudentsManagement = () => {
 
       if (editingItem) {
         await api.put(`/students/${editingItem._id}`, payload);
-        showAlert({ type: 'success', title: 'Success', message: 'Student updated successfully.' });
+        showAlert({ type: 'success', title: t('common.success'), message: t('students.alerts.updated') });
       } else {
         await api.post('/students', payload);
-        showAlert({ type: 'success', title: 'Success', message: 'New student registered successfully.' });
+        showAlert({ type: 'success', title: t('common.success'), message: t('students.alerts.registered') });
       }
       setIsModalOpen(false);
       fetchData();
     } catch (error) {
       console.error('Failed to save student', error);
-      showAlert({ type: 'danger', title: 'Error', message: error.response?.data?.message || 'Failed to save student.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: error.response?.data?.message || t('students.alerts.saveFailed') });
     }
   };
 
   const handleDelete = async (item) => {
     const ok = await showConfirm({
       type: 'warning',
-      title: 'Delete Student?',
-      message: `Are you sure you want to delete "${item.fullName}"? This cannot be undone.`,
-      confirmText: 'Yes, delete',
-      cancelText: 'Cancel',
+      title: t('students.alerts.deleteTitle'),
+      message: t('students.alerts.deleteConfirm', { name: item.fullName }),
+      confirmText: t('common.yesDelete'),
+      cancelText: t('common.cancel'),
       danger: true
     });
     if (!ok) return;
@@ -743,10 +750,10 @@ const StudentsManagement = () => {
     try {
       await api.delete(`/students/${item._id}`);
       setData(prev => prev.filter(i => i._id !== item._id));
-      showAlert({ type: 'success', title: 'Deleted', message: 'Student deleted successfully.' });
+      showAlert({ type: 'success', title: t('common.deleted'), message: t('students.alerts.deletedMsg') });
     } catch (error) {
       console.error("Failed to delete student", error);
-      showAlert({ type: 'danger', title: 'Error', message: 'Failed to delete student.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: t('students.alerts.deleteFailed') });
     }
   };
 
@@ -776,13 +783,13 @@ const StudentsManagement = () => {
       setData(prev => prev.filter(i => i._id !== exitingStudent._id));
       showAlert({
         type: 'success',
-        title: 'Student exited',
-        message: `${exitingStudent.fullName} moved to Exit Students. Their history and fees are preserved.`
+        title: t('students.alerts.exitedTitle'),
+        message: t('students.alerts.exitedMsg', { name: exitingStudent.fullName })
       });
       setExitingStudent(null);
     } catch (error) {
       console.error('Failed to exit student', error);
-      showAlert({ type: 'danger', title: 'Could not exit student', message: error.response?.data?.message || 'Please try again.' });
+      showAlert({ type: 'danger', title: t('students.alerts.exitFailed'), message: error.response?.data?.message || t('attendance.student.tryAgain') });
     } finally {
       setExitSaving(false);
     }
@@ -831,7 +838,7 @@ const StudentsManagement = () => {
     return map;
   }, [data]);
 
-  if (loading) return <div className="p-10 text-center text-slate-500">Loading Students...</div>;
+  if (loading) return <div className="p-10 text-center text-slate-500">{t('students.loading')}</div>;
 
   return (
     <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24">
@@ -842,8 +849,8 @@ const StudentsManagement = () => {
             <Users size={32} strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Students</h1>
-            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">Student Directory & Fee Management</p>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">{t('students.title')}</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">{t('students.subtitle')}</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -858,7 +865,7 @@ const StudentsManagement = () => {
             onClick={handleDownloadTemplate}
             className="flex items-center gap-2 px-6 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all active:scale-95"
           >
-            <FileSpreadsheet size={16} strokeWidth={3} /> Excel Template
+            <FileSpreadsheet size={16} strokeWidth={3} /> {t('students.excelTemplate')}
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -866,20 +873,20 @@ const StudentsManagement = () => {
             className="flex items-center gap-2 px-6 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {importing
-              ? <><Loader2 size={16} className="animate-spin" /> Importing…</>
-              : <><Upload size={16} strokeWidth={3} /> Import Excel</>}
+              ? <><Loader2 size={16} className="animate-spin" /> {t('students.importing')}</>
+              : <><Upload size={16} strokeWidth={3} /> {t('students.importExcel')}</>}
           </button>
           <button
             onClick={handleExport}
             className="flex items-center gap-2 px-6 py-4 bg-slate-900 dark:bg-slate-800 text-white rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-md hover:bg-slate-800 transition-all active:scale-95"
           >
-            <Download size={16} strokeWidth={3} /> Export Excel
+            <Download size={16} strokeWidth={3} /> {t('students.exportExcel')}
           </button>
           <button
             onClick={openAddModal}
             className="flex items-center gap-3 px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95"
           >
-            <Plus size={18} strokeWidth={3} /> Add New Student
+            <Plus size={18} strokeWidth={3} /> {t('students.addNew')}
           </button>
         </div>
       </div>
@@ -891,17 +898,16 @@ const StudentsManagement = () => {
             <div className="flex items-center gap-3">
               <FileSpreadsheet className="text-brand-500" size={20} />
               <div>
-                <h3 className="font-black text-slate-900 dark:text-white uppercase text-sm tracking-tight">Import Result</h3>
+                <h3 className="font-black text-slate-900 dark:text-white uppercase text-sm tracking-tight">{t('students.importResult')}</h3>
                 <p className="mt-0.5 text-xs font-semibold text-slate-500">
-                  {importResults.filter(r => r.ok).length} imported ·{' '}
-                  {importResults.filter(r => !r.ok).length} skipped · {importResults.length} rows read
+                  {t('students.importSummary', { imported: importResults.filter(r => r.ok).length, skipped: importResults.filter(r => !r.ok).length, total: importResults.length })}
                 </p>
               </div>
             </div>
             <button
               onClick={() => setImportResults(null)}
               className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              aria-label="Dismiss import result"
+              aria-label={t('students.dismissImport')}
             >
               <X size={18} />
             </button>
@@ -914,7 +920,7 @@ const StudentsManagement = () => {
                   : <AlertCircle size={16} className="text-rose-500 mt-0.5 shrink-0" />}
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                    Row {r.row} — {r.name}
+                    {t('students.import.rowLabel', { row: r.row })} — {r.name}
                   </p>
                   <p className={`text-xs font-semibold ${r.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                     {r.message}
@@ -933,7 +939,7 @@ const StudentsManagement = () => {
           <Search size={18} className="text-slate-400 mr-3 shrink-0" />
           <input
             type="text"
-            placeholder="Search students by name, roll no, fee payer..."
+            placeholder={t('students.searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400 border-none p-0 focus:ring-0 font-medium"
@@ -953,13 +959,13 @@ const StudentsManagement = () => {
             onChange={(e) => setSelectedClass(e.target.value)}
             className="w-full bg-transparent outline-none text-sm font-bold text-slate-800 dark:text-slate-200 cursor-pointer border-none p-0 focus:ring-0"
           >
-            <option value="ALL">All Classes / Dhammaan ({data.length})</option>
+            <option value="ALL">{t('students.allClassesCount', { count: data.length })}</option>
             {classes.map(c => {
               const count = classCounts[String(c._id)] || 0;
-              const label = classLabel(c, c.name || c.className || 'Class');
+              const label = classLabel(c, c.name || c.className || t('common.class'));
               return (
                 <option key={c._id} value={c._id}>
-                  {label} ({count} {count === 1 ? 'student' : 'students'})
+                  {label} ({t('students.studentCount', { count })})
                 </option>
               );
             })}
@@ -967,7 +973,7 @@ const StudentsManagement = () => {
           {selectedClass !== 'ALL' && (
             <button 
               onClick={() => setSelectedClass('ALL')}
-              title="Reset Filter"
+              title={t('students.resetFilter')}
               className="ml-2 text-slate-400 hover:text-rose-500 transition-colors p-1"
             >
               <X size={14} />
@@ -978,10 +984,10 @@ const StudentsManagement = () => {
         {/* Right side: Count Badge & View Mode Switcher */}
         <div className="flex items-center justify-between sm:justify-end gap-3 sm:ml-auto">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-400 px-4 py-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-            <span>Showing:</span>
+            <span>{t('students.showing')}</span>
             <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">{filteredStudentsCount}</span>
-            <span>of</span>
-            <span>{totalStudentsCount} Students</span>
+            <span>{t('students.of')}</span>
+            <span>{t('students.totalStudents', { count: totalStudentsCount })}</span>
           </div>
 
           <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
@@ -992,10 +998,10 @@ const StudentsManagement = () => {
                   ? 'bg-emerald-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
               }`}
-              title="Table View"
+              title={t('students.tableView')}
             >
               <List size={15} />
-              <span className="hidden md:inline">Table</span>
+              <span className="hidden md:inline">{t('students.table')}</span>
             </button>
             <button
               onClick={() => { setViewMode('grid'); localStorage.setItem('studentsViewMode', 'grid'); }}
@@ -1004,10 +1010,10 @@ const StudentsManagement = () => {
                   ? 'bg-emerald-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
               }`}
-              title="Cards View"
+              title={t('students.cardsView')}
             >
               <LayoutGrid size={15} />
-              <span className="hidden md:inline">Cards</span>
+              <span className="hidden md:inline">{t('students.cards')}</span>
             </button>
           </div>
         </div>
@@ -1034,7 +1040,7 @@ const StudentsManagement = () => {
                       <span className={`absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase tracking-tighter ${
                         item.gender === 'Female' ? 'bg-pink-500 text-white' : 'bg-blue-600 text-white'
                       }`}>
-                        {item.gender === 'Female' ? 'F' : 'M'}
+                        {item.gender === 'Female' ? t('students.femaleShort') : t('students.maleShort')}
                       </span>
                     </div>
                     <div className="min-w-0 flex-1">
@@ -1042,7 +1048,7 @@ const StudentsManagement = () => {
                         {item.fullName}
                       </h4>
                       <span className="inline-block mt-1 font-mono text-xs font-black text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-lg border border-emerald-500/20">
-                        {item.studentCode || 'No ID'}
+                        {item.studentCode || t('attendance.student.noId')}
                       </span>
                     </div>
                   </div>
@@ -1051,7 +1057,7 @@ const StudentsManagement = () => {
                   <div className="space-y-2.5 my-3 pt-3 border-t border-slate-100 dark:border-slate-800/80">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400 font-semibold flex items-center gap-1.5">
-                        <BookOpen size={14} className="text-emerald-500" /> Class:
+                        <BookOpen size={14} className="text-emerald-500" /> {t('common.class')}:
                       </span>
                       <span className="font-extrabold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-xl truncate max-w-[150px]">
                         {cls?.name || cls?.className || '-'}
@@ -1060,7 +1066,7 @@ const StudentsManagement = () => {
 
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-400 font-semibold flex items-center gap-1.5">
-                        <DollarSign size={14} className="text-emerald-500" /> Student Fee:
+                        <DollarSign size={14} className="text-emerald-500" /> {t('students.studentFee')}:
                       </span>
                       <span className="font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-xl border border-emerald-500/20">
                         ${Number(studentFee).toLocaleString()}
@@ -1071,15 +1077,15 @@ const StudentsManagement = () => {
                     <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-2.5 space-y-1">
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                          <UserIcon size={11} /> Who Pays:
+                          <UserIcon size={11} /> {t('students.whoPays')}:
                         </span>
                         <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[130px]">
-                          {guardian?.fullName || item.fatherName || 'Not Linked'}
+                          {guardian?.fullName || item.fatherName || t('students.notLinked')}
                         </span>
                       </div>
                       {(guardian?.phone || item.fatherPhone) && (
                         <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
-                          <span className="text-slate-400 font-medium">Phone:</span>
+                          <span className="text-slate-400 font-medium">{t('common.phone')}:</span>
                           <a 
                             href={`tel:${guardian?.phone || item.fatherPhone}`}
                             className="font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
@@ -1097,33 +1103,33 @@ const StudentsManagement = () => {
                 <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
                   <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
                     <Calendar size={12} />
-                    {item.registrationDate ? fmtRegDate(item.registrationDate) : 'N/A'}
+                    {item.registrationDate ? fmtRegDate(item.registrationDate) : t('common.notAvailable')}
                   </span>
                   <div className="flex items-center gap-1.5">
                     <button 
                       onClick={() => setCardStudent(item)} 
-                      title="ID Card" 
+                      title={t('academic.teachers.idCard')} 
                       className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-600 dark:text-slate-300 hover:text-emerald-600 rounded-xl transition-colors"
                     >
                       <IdCardIcon size={15} />
                     </button>
                     <button 
                       onClick={() => openEditModal(item)} 
-                      title="Edit Student" 
+                      title={t('students.editTitle')} 
                       className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-slate-600 dark:text-slate-300 hover:text-blue-600 rounded-xl transition-colors"
                     >
                       <Edit2 size={15} />
                     </button>
                     <button
                       onClick={() => openExitModal(item)}
-                      title="Exit Student"
+                      title={t('students.exitStudent')}
                       className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-900/30 text-slate-600 dark:text-slate-300 hover:text-amber-600 rounded-xl transition-colors"
                     >
                       <LogOut size={15} />
                     </button>
                     <button
                       onClick={() => handleDelete(item)}
-                      title="Delete Student"
+                      title={t('students.deleteStudent')}
                       className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-900/30 text-slate-600 dark:text-slate-300 hover:text-rose-500 rounded-xl transition-colors"
                     >
                       <Trash2 size={15} />
@@ -1141,13 +1147,13 @@ const StudentsManagement = () => {
             <table className="w-full text-left border-collapse table-auto">
               <thead>
                 <tr className="bg-slate-50/70 dark:bg-slate-800/40 text-slate-400 text-[10px] font-black uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
-                  <th className="px-4 py-4 whitespace-nowrap">Full Name</th>
-                  <th className="px-3 py-4 whitespace-nowrap">Student ID</th>
-                  <th className="px-3 py-4 whitespace-nowrap">Class</th>
-                  <th className="px-3 py-4 whitespace-nowrap">Student Fee ($)</th>
-                  <th className="px-4 py-4 whitespace-nowrap">Who Pays the Fee</th>
-                  <th className="px-3 py-4 whitespace-nowrap">Registration Date</th>
-                  <th className="px-4 py-4 text-right whitespace-nowrap">Actions</th>
+                  <th className="px-4 py-4 whitespace-nowrap">{t('students.colFullName')}</th>
+                  <th className="px-3 py-4 whitespace-nowrap">{t('students.colStudentId')}</th>
+                  <th className="px-3 py-4 whitespace-nowrap">{t('common.class')}</th>
+                  <th className="px-3 py-4 whitespace-nowrap">{t('students.colFee')}</th>
+                  <th className="px-4 py-4 whitespace-nowrap">{t('students.colWhoPays')}</th>
+                  <th className="px-3 py-4 whitespace-nowrap">{t('students.colRegDate')}</th>
+                  <th className="px-4 py-4 text-right whitespace-nowrap">{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1167,7 +1173,7 @@ const StudentsManagement = () => {
                             <span className="font-bold text-sm text-slate-900 dark:text-white block truncate max-w-[200px]" title={item.fullName}>
                               {item.fullName}
                             </span>
-                            <span className="text-[10px] text-slate-400 font-semibold uppercase">{item.gender || 'Male'}</span>
+                            <span className="text-[10px] text-slate-400 font-semibold uppercase">{tv(item.gender || 'Male')}</span>
                           </div>
                         </div>
                       </td>
@@ -1198,34 +1204,34 @@ const StudentsManagement = () => {
                                 <span className="text-blue-600 dark:text-blue-400 font-semibold">• {guardian.alternatePhone}</span>
                               )}
                               {guardian.relationship && (
-                                <span className="text-[10px] uppercase font-semibold text-slate-400">({guardian.relationship})</span>
+                                <span className="text-[10px] uppercase font-semibold text-slate-400">({t(`academic.guardians.relationships.${guardian.relationship}`, { defaultValue: tv(guardian.relationship) })})</span>
                               )}
                             </div>
                           </div>
                         ) : (
                           <div className="min-w-0">
                             <span className="font-bold text-slate-900 dark:text-slate-100 block truncate max-w-[180px]">
-                              {item.fatherName || 'Not Linked'}
+                              {item.fatherName || t('students.notLinked')}
                             </span>
                             {item.fatherPhone && <span className="text-[11px] text-slate-400 block font-mono">{item.fatherPhone}</span>}
                           </div>
                         )}
                       </td>
                       <td className="px-3 py-3.5 text-xs font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                        {item.registrationDate ? fmtRegDate(item.registrationDate) : <span className="text-slate-400 opacity-60">N/A</span>}
+                        {item.registrationDate ? fmtRegDate(item.registrationDate) : <span className="text-slate-400 opacity-60">{t('common.notAvailable')}</span>}
                       </td>
                       <td className="px-4 py-3.5 text-right whitespace-nowrap">
                         <div className="flex justify-end items-center gap-1.5">
-                          <button onClick={() => setCardStudent(item)} title="ID Card" className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-all">
+                          <button onClick={() => setCardStudent(item)} title={t('academic.teachers.idCard')} className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-all">
                             <IdCardIcon size={15} />
                           </button>
-                          <button onClick={() => openEditModal(item)} title="Edit Student" className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-all">
+                          <button onClick={() => openEditModal(item)} title={t('students.editTitle')} className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-all">
                             <Edit2 size={15} />
                           </button>
-                          <button onClick={() => openExitModal(item)} title="Exit Student" className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-all">
+                          <button onClick={() => openExitModal(item)} title={t('students.exitStudent')} className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-all">
                             <LogOut size={15} />
                           </button>
-                          <button onClick={() => handleDelete(item)} title="Delete Student" className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all">
+                          <button onClick={() => handleDelete(item)} title={t('students.deleteStudent')} className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all">
                             <Trash2 size={15} />
                           </button>
                         </div>
@@ -1245,25 +1251,25 @@ const StudentsManagement = () => {
           <div className="w-16 h-16 rounded-3xl bg-slate-100 dark:bg-slate-800 text-slate-400 mx-auto flex items-center justify-center mb-4">
             <Users size={32} />
           </div>
-          <h3 className="text-lg font-black text-slate-900 dark:text-white">Arday lama helin</h3>
+          <h3 className="text-lg font-black text-slate-900 dark:text-white">{t('students.emptyTitle')}</h3>
           <p className="text-slate-400 text-sm mt-1 max-w-sm mx-auto">
             {searchTerm || selectedClass !== 'ALL'
-              ? 'Wax arday ah kuma jiraan shuruudaha aad dooratay. Isku day inaad fasal kale doorato ama raadinta tirtirto.'
-              : 'Wali wax arday ah kuma jiraan nidaamka. Guji "Add New Student" si aad arday cusub u diiwaangeliso.'}
+              ? t('students.emptyFiltered')
+              : t('students.emptyNone')}
           </p>
           {(searchTerm || selectedClass !== 'ALL') ? (
             <button
               onClick={() => { setSearchTerm(''); setSelectedClass('ALL'); }}
               className="mt-5 px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-brand-600/20"
             >
-              Nadiifi Shaandheynta (Reset Filters)
+              {t('students.resetFilters')}
             </button>
           ) : (
             <button
               onClick={openAddModal}
               className="mt-5 px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-brand-600/20"
             >
-              + Diiwaangeli Arday Cusub
+              + {t('students.registerNew')}
             </button>
           )}
         </div>
@@ -1275,7 +1281,7 @@ const StudentsManagement = () => {
           <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 max-w-xl w-full shadow-2xl border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
-                {editingItem ? 'Edit Student' : 'Add New Student'}
+                {editingItem ? t('students.editTitle') : t('students.addNew')}
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-full">
                 <X size={20} />
@@ -1285,15 +1291,15 @@ const StudentsManagement = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Student Details Section */}
               <div className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 pt-1">
-                Student Details
+                {t('students.studentDetails')}
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Student Full Name *</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('students.fullNameLabel')}</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Hassan Ahmed"
+                  placeholder={t('students.fullNamePlaceholder')}
                   value={formData.fullName}
                   onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
@@ -1302,21 +1308,21 @@ const StudentsManagement = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Student ID</label>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('students.colStudentId')}</label>
                   {/* Issued by the server on save and never editable, so this is a
                       display only — there is no input bound to it. */}
                   <div className="w-full px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 font-mono text-sm font-black text-brand-600 dark:text-brand-400">
-                    {editingItem?.studentCode || 'Assigned automatically'}
+                    {editingItem?.studentCode || t('students.assignedAutomatically')}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Class</label>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.class')}</label>
                   <select
                     value={formData.classId}
                     onChange={(e) => setFormData({ ...formData, classId: e.target.value })}
                     className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
                   >
-                    <option value="">-- Select Class --</option>
+                    <option value="">{t('common.selectClass')}</option>
                     {classes.map(c => (
                       <option key={c._id} value={c._id}>{classLabel(c)}</option>
                     ))}
@@ -1326,18 +1332,18 @@ const StudentsManagement = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Gender</label>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.gender')}</label>
                   <select
                     value={formData.gender}
                     onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                     className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
                   >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
+                    <option value="Male">{tv('Male')}</option>
+                    <option value="Female">{tv('Female')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Registration Date</label>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('students.colRegDate')}</label>
                   <input
                     type="date"
                     value={formData.registrationDate}
@@ -1346,7 +1352,7 @@ const StudentsManagement = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Student Fee ($) *</label>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('students.feeLabel')}</label>
                   <div className="relative">
                     <DollarSign size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
                     <input
@@ -1364,16 +1370,16 @@ const StudentsManagement = () => {
               {/* Who Pays the Fee Section */}
               <div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-2">
                 <div className="text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-3">
-                  Who Pays the Fee (Fee Payer)
+                  {t('students.whoPaysSection')}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-black uppercase text-slate-500 mb-1">Fee Payer Phone Number</label>
+                    <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('students.payerPhone')}</label>
                     <div className="relative">
                       <input
                         type="text"
-                        placeholder="Enter phone number..."
+                        placeholder={t('students.payerPhonePlaceholder')}
                         value={formData.guardianPhone}
                         onChange={(e) => setFormData({ ...formData, guardianPhone: e.target.value })}
                         className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
@@ -1385,10 +1391,10 @@ const StudentsManagement = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-black uppercase text-slate-500 mb-1">Fee Payer Second Phone Number</label>
+                    <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('students.payerAltPhone')}</label>
                     <input
                       type="text"
-                      placeholder="Optional second phone number..."
+                      placeholder={t('students.payerAltPlaceholder')}
                       value={formData.guardianAlternatePhone}
                       onChange={(e) => setFormData({ ...formData, guardianAlternatePhone: e.target.value })}
                       className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
@@ -1396,10 +1402,10 @@ const StudentsManagement = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-black uppercase text-slate-500 mb-1">Who Pays the Fee (Name)</label>
+                    <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('students.payerName')}</label>
                     <input
                       type="text"
-                      placeholder="Fee Payer Full Name"
+                      placeholder={t('students.payerNamePlaceholder')}
                       value={formData.guardianName}
                       onChange={(e) => setFormData({ ...formData, guardianName: e.target.value })}
                       className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
@@ -1408,15 +1414,15 @@ const StudentsManagement = () => {
                 </div>
 
                 <div className="mt-3">
-                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">Relationship</label>
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('academic.guardians.colRelationship')}</label>
                   <select
                     value={formData.guardianRelationship}
                     onChange={(e) => setFormData({ ...formData, guardianRelationship: e.target.value })}
                     className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
                   >
-                    <option value="Father">Father</option>
-                    <option value="Mother">Mother</option>
-                    <option value="Responsible">Responsible</option>
+                    <option value="Father">{t('academic.guardians.relationships.Father')}</option>
+                    <option value="Mother">{t('academic.guardians.relationships.Mother')}</option>
+                    <option value="Responsible">{t('academic.guardians.relationships.Responsible')}</option>
                   </select>
                 </div>
 
@@ -1426,14 +1432,14 @@ const StudentsManagement = () => {
                     <CheckCircle2 size={18} className="shrink-0 text-emerald-500" />
                     <div className="flex-1 min-w-0">
                       <div>
-                        <span className="font-bold">Existing Fee Payer Found:</span> {foundGuardian.fullName} ({foundGuardian.relationship || 'Payer'}). Reusing record & linking student.
+                        <span className="font-bold">{t('students.existingPayerFound')}</span> {foundGuardian.fullName} ({foundGuardian.relationship ? t(`academic.guardians.relationships.${foundGuardian.relationship}`, { defaultValue: tv(foundGuardian.relationship) }) : t('students.payer')}). {t('students.reusingRecord')}
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-[11px] font-mono text-emerald-700 dark:text-emerald-300 flex-wrap">
                         {foundGuardian.phone && (
-                          <span>Phone 1: <strong className="font-bold underline">{foundGuardian.phone}</strong></span>
+                          <span>{t('academic.guardians.phone1')}: <strong className="font-bold underline">{foundGuardian.phone}</strong></span>
                         )}
                         {foundGuardian.alternatePhone && (
-                          <span>Phone 2: <strong className="font-bold underline">{foundGuardian.alternatePhone}</strong></span>
+                          <span>{t('academic.guardians.phone2')}: <strong className="font-bold underline">{foundGuardian.alternatePhone}</strong></span>
                         )}
                       </div>
                     </div>
@@ -1444,7 +1450,7 @@ const StudentsManagement = () => {
                   <div className="mt-3 p-3.5 rounded-2xl bg-brand-500/10 border border-brand-500/30 flex items-center gap-3 text-xs font-semibold text-brand-700 dark:text-brand-300">
                     <UserPlus size={18} className="shrink-0 text-brand-500" />
                     <div>
-                      <span className="font-bold">New Fee Payer:</span> No existing fee payer found with this phone number. A new record will be created & linked.
+                      <span className="font-bold">{t('students.newPayer')}</span> {t('students.newPayerHint')}
                     </div>
                   </div>
                 )}
@@ -1456,13 +1462,13 @@ const StudentsManagement = () => {
                   onClick={() => setIsModalOpen(false)}
                   className="px-6 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs uppercase"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-bold text-xs uppercase shadow-lg hover:bg-emerald-700"
                 >
-                  {editingItem ? 'Save Changes' : 'Register Student'}
+                  {editingItem ? t('common.saveChanges') : t('students.register')}
                 </button>
               </div>
             </form>
@@ -1477,8 +1483,8 @@ const StudentsManagement = () => {
         name={cardStudent?.fullName}
         idNumber={cardStudent?.studentCode}
         rows={[
-          { label: 'Class', value: classLabel(cardStudent?.classId, '') },
-          { label: 'Guardian', value: cardStudent?.guardianId?.fullName || cardStudent?.fatherName || '' }
+          { label: t('common.class'), value: classLabel(cardStudent?.classId, '') },
+          { label: t('common.guardian'), value: cardStudent?.guardianId?.fullName || cardStudent?.fatherName || '' }
         ]}
       />
 
@@ -1491,25 +1497,25 @@ const StudentsManagement = () => {
                 <LogOut size={22} />
               </div>
               <div>
-                <h3 className="text-lg font-black text-slate-900 dark:text-white">Exit Student</h3>
-                <p className="text-xs font-semibold text-slate-400">Archive this student — history and fees are kept.</p>
+                <h3 className="text-lg font-black text-slate-900 dark:text-white">{t('students.exitStudent')}</h3>
+                <p className="text-xs font-semibold text-slate-400">{t('students.exitHint')}</p>
               </div>
             </div>
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800">
-                  <span className="text-[10px] font-black uppercase text-slate-400">Student Name</span>
+                  <span className="text-[10px] font-black uppercase text-slate-400">{t('students.studentName')}</span>
                   <p className="text-sm font-bold text-slate-900 dark:text-white">{exitingStudent.fullName}</p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800">
-                  <span className="text-[10px] font-black uppercase text-slate-400">Student ID</span>
+                  <span className="text-[10px] font-black uppercase text-slate-400">{t('students.colStudentId')}</span>
                   <p className="text-sm font-bold text-slate-900 dark:text-white font-mono">{exitingStudent.studentCode || exitingStudent.rollNumber || '—'}</p>
                 </div>
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[10px] font-black uppercase text-slate-400">Exit Date</label>
+                <label className="mb-1.5 block text-[10px] font-black uppercase text-slate-400">{t('academic.exit.exitDate')}</label>
                 <input
                   type="date"
                   value={exitDate}
@@ -1519,12 +1525,12 @@ const StudentsManagement = () => {
               </div>
 
               <div>
-                <label className="mb-1.5 block text-[10px] font-black uppercase text-slate-400">Exit Reason / Description</label>
+                <label className="mb-1.5 block text-[10px] font-black uppercase text-slate-400">{t('academic.exit.reason')}</label>
                 <textarea
                   rows={3}
                   value={exitReason}
                   onChange={e => setExitReason(e.target.value)}
-                  placeholder="e.g. Moved to another city, graduated early, withdrawn…"
+                  placeholder={t('students.exitPlaceholder')}
                   className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-amber-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 />
               </div>
@@ -1537,7 +1543,7 @@ const StudentsManagement = () => {
                 disabled={exitSaving}
                 className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black uppercase tracking-wider text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -1545,7 +1551,7 @@ const StudentsManagement = () => {
                 disabled={exitSaving}
                 className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-amber-600 px-4 py-3 text-sm font-black uppercase tracking-wider text-white shadow-md transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <LogOut size={15} /> {exitSaving ? 'Exiting…' : 'Confirm Exit'}
+                <LogOut size={15} /> {exitSaving ? t('students.exiting') : t('students.confirmExit')}
               </button>
             </div>
           </div>
