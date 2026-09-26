@@ -144,10 +144,9 @@ const CashbookManagement = () => {
   // When the number of pre-paid months changes, re-fill the amount with the target month(s) amount.
   useEffect(() => {
     if (editingEntryRef.current) return;
-    if (payerInfo && payerInfo.kind === 'responsible') {
-      const targetAmount = monthsToPay === 1
-        ? Number(payerInfo.totalBalance || 0)
-        : Number(payerInfo.totalMonthlyFee || 0) * (monthsToPay - 1);
+    if (payerInfo && payerInfo.kind === 'responsible' && monthsToPay > 1) {
+      const base = Number(payerInfo.totalDue ?? (Number(payerInfo.totalBalance || 0) + Number(payerInfo.previousBalance || 0)));
+      const targetAmount = base + Number(payerInfo.totalMonthlyFee || 0) * (monthsToPay - 1);
       setTransactionForm((prev) => ({ ...prev, amount: targetAmount }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -311,8 +310,12 @@ const CashbookManagement = () => {
 
       if (side === 'sender') {
         if (found) {
-          // Auto-fill the amount with the current remaining balance owed/payable only for new transactions.
-          const rem = info?.remainingBalance !== undefined
+          const hasArrears = Number(info?.previousBalance || 0) > 0;
+          const oldestArrears = info?.arrears?.[0]?.month;
+          // Auto-fill amount: if arrears exist, capture the full debt totalDue ($50), else current balance ($25).
+          const rem = hasArrears && info?.totalDue !== undefined
+            ? Number(info.totalDue)
+            : info?.remainingBalance !== undefined
             ? Number(info.remainingBalance)
             : info?.totalBalance !== undefined
             ? Number(info.totalBalance)
@@ -322,6 +325,7 @@ const CashbookManagement = () => {
             senderName: name,
             senderEntityType: entityType === 'teacher' ? 'user' : entityType,
             senderEntityId: entityId || '',
+            targetMonth: editingEntryRef.current ? prev.targetMonth : (hasArrears && oldestArrears ? oldestArrears : prev.targetMonth),
             amount: editingEntryRef.current ? prev.amount : (rem !== null && !isNaN(rem) ? rem : prev.amount)
           }));
           setSenderLocked(true);
@@ -368,7 +372,10 @@ const CashbookManagement = () => {
     setTransactionForm((prev) => ({ ...prev, targetMonth: newMonth }));
     const activePhone = walletDirection === 'sender' ? transactionForm.receiverPhone : transactionForm.senderPhone;
     const activeSide = walletDirection === 'sender' ? 'receiver' : 'sender';
-    if (activePhone) {
+    // For staff/teacher/accounts/expense, look up the target month's budget/salary.
+    // For responsible student fee payers, keep the comprehensive debt profile intact
+    // (do NOT re-query with a past month which would truncate current month fee data).
+    if (activePhone && activeSide !== 'sender') {
       lookupPhone(activePhone, activeSide, newMonth);
     }
   };
@@ -1149,125 +1156,54 @@ const CashbookManagement = () => {
                 )}
               </div>
 
-            {/* Monthly Pay — sits under the payer. Shows Current Month & Advance Months with clear breakdown. */}
-            {payerInfo && payerInfo.kind === 'responsible' && Number(payerInfo.totalMonthlyFee || 0) > 0 && (() => {
-              const currentMonthObj = getPayerMonthLabel(payerInfo.month, 0);
-              return (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-black uppercase text-slate-500">
-                      {t('cashbook.monthlyPay')}
-                    </label>
-                    {monthsToPay > 1 ? (
-                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                        {t('cashbook.monthsAdvance', { count: monthsToPay - 1 })}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                        {currentMonthObj.name} ({t('cashbook.currentMonth')})
-                      </span>
-                    )}
-                  </div>
-                  <select
-                    value={monthsToPay}
-                    onChange={(e) => {
-                      const m = Number(e.target.value);
-                      setMonthsToPay(m);
-                      if (payerInfo && payerInfo.kind === 'responsible') {
-                        const targetAmount = m === 1
-                          ? Number(payerInfo.totalBalance || 0)
-                          : Number(payerInfo.totalMonthlyFee || 0) * (m - 1);
-                        setTransactionForm((prev) => ({ ...prev, amount: targetAmount }));
-                      }
-                    }}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
-                  >
-                    {[1, 2, 3, 4, 5, 6].map((m) => {
-                      const targetObj = getPayerMonthLabel(payerInfo.month, m - 1);
-                      const amountForM = m === 1
-                        ? Number(payerInfo.totalBalance || 0)
-                        : Number(payerInfo.totalMonthlyFee || 0) * (m - 1);
-                      return (
-                        <option key={m} value={m}>
-                          {m === 1
-                            ? `${currentMonthObj.name} ${currentMonthObj.year} (${t('cashbook.currentMonth')}) · ${fmtMoney(amountForM)}`
-                            : `${targetObj.name} ${targetObj.year} (${t('cashbook.advanceMonths', { count: m - 1 })}) · ${fmtMoney(amountForM)}`}
-                        </option>
-                      );
-                    })}
-                  </select>
-
-                  {/* Advance breakdown detail card when monthsToPay > 1 */}
-                  {monthsToPay > 1 && (
-                    <div className="p-3.5 rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/30 text-xs space-y-2.5 animate-in fade-in duration-200">
-                      <div className="flex items-center justify-between font-black text-amber-900 dark:text-amber-200">
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                          {t('cashbook.advanceAmount', { count: monthsToPay - 1 })}:
-                        </span>
-                        <span>{t('cashbook.advanceTotal')}: {fmtMoney(maxPayable)}</span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                        {Array.from({ length: monthsToPay - 1 }).map((_, idx) => {
-                          const mo = getPayerMonthLabel(payerInfo.month, idx + 1);
-                          const moAmount = Number(payerInfo.totalMonthlyFee || 0);
-                          return (
-                            <div
-                              key={idx}
-                              className="px-3 py-2 rounded-lg border bg-amber-100/70 dark:bg-amber-900/40 border-amber-300 dark:border-amber-800 shadow-sm"
-                            >
-                              <div className="flex items-center justify-between gap-1">
-                                <span className="font-black text-slate-900 dark:text-white">{mo.name}</span>
-                                <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100">
-                                  {t('cashbook.advance')}
-                                </span>
-                              </div>
-                              <p className="text-sm font-black text-slate-800 dark:text-slate-200 mt-1">
-                                {fmtMoney(moAmount)}
-                              </p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <p className="text-[11px] text-amber-800 dark:text-amber-300 font-medium pt-1 border-t border-amber-200/60 dark:border-amber-900/40">
-                        * {t('cashbook.advanceNote', { month: getPayerMonthLabel(payerInfo.month, 1).name })}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Bisha lacagta loo hormarinayo / bixinayo — For Expense / Registered non-payers (Teachers, Staff, Rent, Accounts) */}
-            {walletDirection === 'sender' && (
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-black uppercase text-slate-500">
-                    {t('cashbook.targetMonth')}
-                  </label>
-                  {(transactionForm.targetMonth || currentMonthStr) > currentMonthStr && (
-                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
-                      {t('cashbook.advance')}
-                    </span>
-                  )}
-                </div>
-                <select
-                  value={transactionForm.targetMonth || currentMonthStr}
-                  onChange={(e) => handleTargetMonthChange(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
-                >
-                  {monthOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  {t('cashbook.targetMonthHint')}
-                </p>
+            {/* Target Billing Cycle — available for all transactions */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-black uppercase text-slate-500">
+                  {t('cashbook.targetMonth')}
+                </label>
+                {(transactionForm.targetMonth || currentMonthStr) > currentMonthStr ? (
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                    {t('cashbook.advance')}
+                  </span>
+                ) : (transactionForm.targetMonth || currentMonthStr) < currentMonthStr ? (
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                    {t('cashbook.arrearsTag')}
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                    {t('cashbook.currentMonth')}
+                  </span>
+                )}
               </div>
-            )}
+              <select
+                value={transactionForm.targetMonth || currentMonthStr}
+                onChange={(e) => handleTargetMonthChange(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
+              >
+                {monthOptions.map((opt) => {
+                  let extra = '';
+                  if (payerInfo && payerInfo.kind === 'responsible') {
+                    if (opt.value < currentMonthStr) {
+                      const arr = payerInfo.arrears?.find((a) => a.month === opt.value);
+                      extra = arr ? ` · ${t('cashbook.arrearsTag')}: ${fmtMoney(arr.balance)}` : ` · ${t('cashbook.fullyPaid')}`;
+                    } else if (opt.value === currentMonthStr) {
+                      extra = ` · ${t('cashbook.currentMonth')}: ${fmtMoney(payerInfo.totalBalance)}`;
+                    } else {
+                      extra = ` · ${t('cashbook.advance')}: ${fmtMoney(payerInfo.totalMonthlyFee)}`;
+                    }
+                  }
+                  return (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}{extra}
+                    </option>
+                  );
+                })}
+              </select>
+              <p className="text-[10px] text-slate-400 mt-1">
+                {t('cashbook.targetMonthHint')}
+              </p>
+            </div>
 
             {transactionForm.targetMonth && transactionForm.targetMonth < currentMonthStr && (() => {
               const [y, m] = transactionForm.targetMonth.split('-').map(Number);
@@ -1292,6 +1228,71 @@ const CashbookManagement = () => {
               );
             })()}
 
+            {/* Quick Action buttons for Responsible Payers */}
+            {payerInfo && payerInfo.kind === 'responsible' && (Number(payerInfo.previousBalance || 0) > 0 || Number(payerInfo.totalBalance || 0) > 0) && (() => {
+              const oldest = payerInfo.arrears?.[0]?.month || currentMonthStr;
+              const totalOwed = Number(payerInfo.totalDue ?? (Number(payerInfo.totalBalance || 0) + Number(payerInfo.previousBalance || 0)));
+              return (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {Number(payerInfo.previousBalance || 0) > 0 && totalOwed > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTransactionForm((prev) => ({
+                          ...prev,
+                          amount: totalOwed,
+                          targetMonth: oldest
+                        }));
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-[11px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1.5 transition-all"
+                    >
+                      <AlertCircle size={13} />
+                      {t('cashbook.payTotalDue', { amount: fmtMoney(totalOwed) })}
+                    </button>
+                  )}
+                  {Number(payerInfo.previousBalance || 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTransactionForm((prev) => ({
+                          ...prev,
+                          amount: payerInfo.previousBalance,
+                          targetMonth: oldest
+                        }));
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 dark:bg-rose-950/60 dark:hover:bg-rose-900/80 dark:text-rose-200 border border-rose-300 dark:border-rose-800 text-[11px] font-black uppercase tracking-wider transition-all"
+                    >
+                      {t('cashbook.payArrears', { amount: fmtMoney(payerInfo.previousBalance) })}
+                    </button>
+                  )}
+                  {Number(payerInfo.totalBalance || 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTransactionForm((prev) => ({
+                          ...prev,
+                          amount: payerInfo.totalBalance,
+                          targetMonth: currentMonthStr
+                        }));
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black uppercase tracking-wider shadow-sm transition-all"
+                    >
+                      {t('cashbook.payFull', { amount: fmtMoney(payerInfo.totalBalance) })}
+                    </button>
+                  )}
+                  {Number(transactionForm.amount || 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setTransactionForm((prev) => ({ ...prev, amount: '' }))}
+                      className="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-500 text-[11px] font-black uppercase tracking-wider hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                    >
+                      {t('cashbook.clearAmount')}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+
             <div>
               <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.amount')}</label>
               <input
@@ -1306,7 +1307,14 @@ const CashbookManagement = () => {
               />
               {payerInfo && payerInfo.kind === 'responsible' && maxPayable !== null && (
                 <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
-                  {t('cashbook.maxPayable', { count: monthsToPay, amount: fmtMoney(maxPayable) })}
+                  {Number(payerInfo.previousBalance || 0) > 0 ? (
+                    <>
+                      {t('cashbook.totalDueAll')}: <span className="font-black text-rose-600 dark:text-rose-400">{fmtMoney(payerTotalOutstanding)}</span>
+                      {' '}({t('cashbook.previousArrearsTotal')}: {fmtMoney(payerInfo.previousBalance)} + {t('cashbook.currentMonth')}: {fmtMoney(payerInfo.totalBalance)})
+                    </>
+                  ) : (
+                    t('cashbook.maxPayable', { count: monthsToPay, amount: fmtMoney(maxPayable) })
+                  )}
                 </p>
               )}
             </div>
