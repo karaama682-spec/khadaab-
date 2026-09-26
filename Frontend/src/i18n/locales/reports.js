@@ -7,7 +7,7 @@ export default {
       reportDate: 'Report Date', accountantSignature: 'Accountant / Cashier Signature', directorStamp: 'Director / Management Stamp',
       unknownPayer: 'Unknown Payer', searchPayer: 'Search payer name or phone...', systemName: 'Institute Management System',
       loadFailed: 'Failed to load report data.', allTime: 'All Time', period: 'Period', reportPeriod: 'Report period',
-      currentPeriod: 'Current Period (25→24)'
+      currentPeriod: 'Current Period (25→24)', prevCycle: 'Previous Cycle', nextCycle: 'Next Cycle', cycle: 'Billing Cycle'
     },
     fee: {
       loading: 'Loading Fee Payment Report...', loadFailed: 'Failed to load payment report data.',
@@ -79,7 +79,7 @@ export default {
       reportDate: 'Taariikhda Warbixinta', accountantSignature: 'Saxiixa Xisaabiyaha / Qasnajiga', directorStamp: 'Shaabadda Agaasimaha / Maamulka',
       unknownPayer: 'Bixiye Aan La Aqoon', searchPayer: 'Raadi magaca bixiyaha ama telefoonka...', systemName: 'Nidaamka Maamulka Machadka',
       loadFailed: 'Soo rarista xogta warbixinta way fashilantay.', allTime: 'Dhammaan Waqtiyada', period: 'Muddada', reportPeriod: 'Muddada warbixinta',
-      currentPeriod: 'Muddada Hadda (25→24)'
+      currentPeriod: 'Muddada Hadda (25→24)', prevCycle: 'Wareeggii Hore', nextCycle: 'Wareegga Xiga', cycle: 'Wareegga Bisha'
     },
     fee: {
       loading: 'Waxaa la soo rarayaa warbixinta lacag-bixinta khidmadda...', loadFailed: 'Soo rarista xogta warbixinta lacag-bixinta way fashilantay.',

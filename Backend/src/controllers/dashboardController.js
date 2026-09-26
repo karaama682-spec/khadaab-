@@ -8,7 +8,7 @@ const Transaction = require('../models/Transaction');
 const StudentAttendance = require('../models/StudentAttendance');
 const TeacherAttendance = require('../models/TeacherAttendance');
 const Notification = require('../models/Notification');
-const { currentCycle, cycleRange, cycleMatch } = require('../utils/billingCycle');
+const { currentCycle, cycleRange, cycleMatch, isValidCycleKey } = require('../utils/billingCycle');
 const { computeFeeTotals, computePreviousDebt } = require('./cashbookController');
 
 // In-memory cache to prevent re-running 13 aggregations on every dashboard visit
@@ -20,7 +20,8 @@ const DASHBOARD_CACHE_TTL = 30 * 1000; // 30 seconds
 // @access  Private
 const getDashboardData = asyncHandler(async (req, res) => {
     const branchId = req.user.branchId || req.user.warehouseId;
-    const branchKey = String(branchId || 'all');
+    const cycle = req.query.cycle && isValidCycleKey(req.query.cycle) ? req.query.cycle : currentCycle();
+    const branchKey = `${String(branchId || 'all')}::${cycle}`;
     const nowTime = Date.now();
 
     if (dashboardCache.has(branchKey)) {
@@ -38,9 +39,8 @@ const getDashboardData = asyncHandler(async (req, res) => {
     const endOfToday = new Date();
     endOfToday.setHours(23, 59, 59, 999);
 
-    // Financial "this month" = the current BILLING CYCLE (25th→24th), not the
-    // calendar month. startOfMonth/endOfMonth below are the cycle's boundaries.
-    const cycle = currentCycle();
+    // Financial "this month" = the requested or current BILLING CYCLE (25th→24th),
+    // not the calendar month. startOfMonth/endOfMonth below are the cycle's boundaries.
     const { start: startOfMonth, end: endOfMonth } = cycleRange(cycle);
     const currentMonth = cycle; // billing-cycle key
 

@@ -12,7 +12,7 @@ import {
 import { jsPDF } from 'jspdf';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
-import { currentCycle, cycleRangeISO } from '../utils/billingCycle';
+import { currentCycle, cycleRangeISO, addCycles, cycleShortLabel } from '../utils/billingCycle';
 import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const fmtMoney = (n) =>
@@ -28,10 +28,41 @@ const CashbookCategoryReport = () => {
 
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCycle, setSelectedCycle] = useState(currentCycle());
   // Default to the current billing cycle (25th→24th) so the report opens on the
   // same period its labels describe.
   const [dateFrom, setDateFrom] = useState(() => currentPeriod().from);
   const [dateTo, setDateTo] = useState(() => currentPeriod().to);
+
+  const cycleOptions = useMemo(() => {
+    const list = [];
+    const base = currentCycle();
+    for (let i = -12; i <= 6; i++) {
+      const key = addCycles(base, i);
+      list.push({
+        key,
+        shortLabel: cycleShortLabel(key)
+      });
+    }
+    return list;
+  }, []);
+
+  const handleCycleSelect = (key) => {
+    setSelectedCycle(key);
+    if (!key) {
+      setDateFrom('');
+      setDateTo('');
+      return;
+    }
+    const range = cycleRangeISO(key);
+    setDateFrom(range.from);
+    setDateTo(range.to);
+  };
+
+  const handleCycleStep = (delta) => {
+    const nextKey = addCycles(selectedCycle || currentCycle(), delta);
+    handleCycleSelect(nextKey);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -333,13 +364,75 @@ const CashbookCategoryReport = () => {
           <Calendar size={16} className="text-slate-400" />
           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('reports.common.reportPeriod')}</p>
         </div>
+
+        {/* Quick Cycle Navigation */}
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 mb-5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500 mr-1">
+              {t('reports.common.cycle')}:
+            </span>
+            <button
+              type="button"
+              onClick={() => handleCycleStep(-1)}
+              className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-black hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1 shadow-sm transition-all"
+            >
+              ◀ {t('reports.common.prevCycle')}
+            </button>
+            <select
+              value={selectedCycle}
+              onChange={(e) => handleCycleSelect(e.target.value)}
+              className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-black shadow-sm"
+            >
+              {cycleOptions.map((c) => (
+                <option key={c.key} value={c.key}>
+                  {c.shortLabel} {c.key === currentCycle() ? `(${t('cashbook.currentMonth')})` : ''}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => handleCycleStep(1)}
+              className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-black hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1 shadow-sm transition-all"
+            >
+              {t('reports.common.nextCycle')} ▶
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleCycleSelect(currentCycle())}
+              className={`px-3.5 py-2 rounded-xl text-xs font-black shadow-sm transition-all ${
+                selectedCycle === currentCycle() && dateFrom === currentPeriod().from && dateTo === currentPeriod().to
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-brand-600 hover:bg-brand-700 text-white'
+              }`}
+            >
+              {t('reports.common.currentPeriod')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCycle('');
+                setDateFrom('');
+                setDateTo('');
+              }}
+              className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-black hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+            >
+              {t('reports.common.allTime')}
+            </button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
           <div>
             <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">{t('cashbook.fromDate')}</label>
             <input
               type="date"
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+              onChange={(e) => {
+                setSelectedCycle('');
+                setDateFrom(e.target.value);
+              }}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
             />
           </div>
@@ -348,7 +441,10 @@ const CashbookCategoryReport = () => {
             <input
               type="date"
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+              onChange={(e) => {
+                setSelectedCycle('');
+                setDateTo(e.target.value);
+              }}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm"
             />
           </div>
@@ -356,23 +452,7 @@ const CashbookCategoryReport = () => {
             <button
               type="button"
               onClick={() => {
-                setDateFrom('');
-                setDateTo('');
-              }}
-              className="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-black uppercase tracking-wider"
-            >
-              {t('reports.common.allTime')}
-            </button>
-            <button
-              type="button"
-              onClick={() => applyPeriod(currentPeriod())}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800"
-            >
-              {t('reports.common.currentPeriod')}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
+                setSelectedCycle('');
                 setDateFrom('');
                 setDateTo('');
               }}
