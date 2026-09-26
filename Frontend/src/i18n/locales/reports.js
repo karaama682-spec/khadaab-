@@ -54,10 +54,14 @@ export default {
       incomeCategories_one: '{count} income category', incomeCategories_other: '{count} income categories',
       expenseCategories_one: '{count} expense category', expenseCategories_other: '{count} expense categories',
       netIncome: 'Net Income', incomeMinusExpense: 'Income minus Expense',
+      openingBalance: 'Opening Balance (Balance b/f)', openingBalanceHint: 'Balance brought forward from prior cycles',
+      currentPeriodNet: 'Current Period Net Income', closingBalance: 'Closing Balance (Total Available)',
+      closingBalanceHint: 'Opening Balance + Current Period Net', walletFilterLabel: 'Wallet', allWallets: 'All Wallets',
       pdf: {
         title: 'MACHAD INSTITUTE - CATEGORY SUMMARY REPORT', categoryName: 'CATEGORY NAME', type: 'TYPE', entries: 'ENTRIES',
         sectionTotal: '{heading} TOTAL', income: 'INCOME SUMMARY', expense: 'EXPENSE SUMMARY',
-        net: 'NET INCOME (Income - Expense)', file: 'Machad_Category_Summary'
+        net: 'NET INCOME (Income - Expense)', openingBalance: 'OPENING BALANCE (Balance b/f)',
+        closingBalance: 'CLOSING BALANCE (Total Available)', file: 'Machad_Category_Summary'
       }
     },
     payment: {
@@ -126,10 +130,14 @@ export default {
       incomeCategories_one: '{count} qayb dakhli', incomeCategories_other: '{count} qaybood oo dakhli ah',
       expenseCategories_one: '{count} qayb kharash', expenseCategories_other: '{count} qaybood oo kharash ah',
       netIncome: 'Dakhliga Saafiga ah', incomeMinusExpense: 'Dakhliga oo laga jaray kharashka',
+      openingBalance: 'Haraagii Hore (Ka Hor Wareeggan)', openingBalanceHint: 'Haraagii guud ee ka soo wareegay wareegyadii hore',
+      currentPeriodNet: 'Dakhliga Saafiga ee Wareeggan', closingBalance: 'Haraaga Guud ee Xirmaya',
+      closingBalanceHint: 'Haraagii Hore + Dakhliga Saafiga ee Wareeggan', walletFilterLabel: 'Kaydka', allWallets: 'Dhammaan Kaydadka',
       pdf: {
         title: 'MACHADKA - WARBIXINTA SOO-KOOBIDDA QAYBAHA', categoryName: 'MAGACA QAYBTA', type: 'NOOCA', entries: 'GELINNADA',
         sectionTotal: 'WADARTA {heading}', income: 'SOO-KOOBIDDA DAKHLIGA', expense: 'SOO-KOOBIDDA KHARASHKA',
-        net: 'DAKHLIGA SAAFIGA AH (Dakhli - Kharash)', file: 'Soo_Koobidda_Qaybaha'
+        net: 'DAKHLIGA SAAFIGA AH EE WAREEGGAN', openingBalance: 'HARAAGII HORE (Ka Hor Wareeggan)',
+        closingBalance: 'HARAAGA GUUD EE XIRMAYA', file: 'Soo_Koobidda_Qaybaha'
       }
     },
     payment: {
