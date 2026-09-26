@@ -1,6 +1,6 @@
 const asyncHandler = require('../middleware/asyncHandler');
 const Payment = require('../models/Payment');
-const { cycleKeyForDate } = require('../utils/billingCycle');
+const { cycleKeyForDate, isValidCycleKey } = require('../utils/billingCycle');
 
 const getPayments = asyncHandler(async (req, res) => {
     const data = await Payment.find()
@@ -47,11 +47,16 @@ const createPayment = asyncHandler(async (req, res) => {
         }
     }
 
-    // Attribute the payment to a BILLING CYCLE (25th→24th) derived from its real
-    // payment date. Both `month` (legacy display) and `billingCycle` carry the
-    // cycle key for new records; historical records are unaffected.
+    // Attribute the payment to a BILLING CYCLE (25th→24th). If an explicit valid
+    // cycle/month was passed (e.g. paying for last month / arrears), respect it;
+    // otherwise derive from the real payment date. Both `month` (legacy display)
+    // and `billingCycle` carry the cycle key.
     const pDate = body.paymentDate ? new Date(body.paymentDate) : new Date();
-    const cycle = cycleKeyForDate(pDate);
+    const cycle = isValidCycleKey(body.billingCycle)
+        ? body.billingCycle
+        : isValidCycleKey(body.month)
+            ? body.month
+            : cycleKeyForDate(pDate);
     body.billingCycle = cycle;
     body.month = cycle;
 

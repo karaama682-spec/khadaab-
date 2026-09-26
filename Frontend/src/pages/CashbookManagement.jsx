@@ -47,19 +47,25 @@ const emptyCategoryForm = () => ({
   description: ''
 });
 
-// Advance options are BILLING CYCLES (25th→24th): the current cycle plus the next
-// six. Each value is a cycle key; the label shows the cycle's date range.
+// Billing cycle options (25th→24th): previous 6 cycles (arrears), current cycle,
+// and next 6 cycles (advance). Each value is a cycle key.
 const getMonthOptions = () => {
   const options = [];
   const base = currentCycle();
   const MONTH_NAMES = monthNames();
-  for (let i = 0; i <= 6; i++) {
+  for (let i = -6; i <= 6; i++) {
     const key = addCycles(base, i);
     const [y, m] = key.split('-').map(Number);
     const mName = MONTH_NAMES[m - 1];
     let label = translate('cashbook.cycleOption', { month: mName, year: y, range: cycleShortLabel(key) });
-    label += i === 0 ? ` (${translate('cashbook.currentMonth')})` : ` (${translate('cashbook.advance')})`;
-    options.push({ value: key, label, monthName: mName, year: y, isAdvance: i > 0 });
+    if (i === 0) {
+      label += ` (${translate('cashbook.currentMonth')})`;
+    } else if (i > 0) {
+      label += ` (${translate('cashbook.advance')})`;
+    } else {
+      label += ` (${translate('cashbook.arrearsTag')})`;
+    }
+    options.push({ value: key, label, monthName: mName, year: y, isAdvance: i > 0, isPast: i < 0 });
   }
   return options;
 };
@@ -122,13 +128,13 @@ const CashbookManagement = () => {
   const [payerInfo, setPayerInfo] = useState(null);
   const [monthsToPay, setMonthsToPay] = useState(1);
 
-  // The most a responsible payer may pay: the current month's outstanding balance,
-  // or the advance fee for the selected advance month(s). In edit mode, it allows
-  // at least the entry's existing amount so editing an existing transaction is never blocked.
+  // The most a responsible payer may pay: total owed (previous arrears + current balance),
+  // plus any advance months chosen. In edit mode, it allows at least the entry's existing amount.
+  const payerTotalOutstanding = Number(payerInfo?.totalDue ?? (Number(payerInfo?.totalBalance || 0) + Number(payerInfo?.previousBalance || 0)));
   const maxPayable = (payerInfo && payerInfo.kind === 'responsible')
     ? (monthsToPay === 1
-        ? Math.max(Number(payerInfo.totalBalance || 0), editingEntry ? Number(editingEntry.amount || 0) : 0)
-        : Number(payerInfo.totalMonthlyFee || 0) * (monthsToPay - 1))
+        ? Math.max(payerTotalOutstanding, editingEntry ? Number(editingEntry.amount || 0) : 0)
+        : payerTotalOutstanding + Number(payerInfo.totalMonthlyFee || 0) * (monthsToPay - 1))
     : null;
 
   const currentMonthStr = currentCycle();
@@ -1262,6 +1268,29 @@ const CashbookManagement = () => {
               </div>
             )}
 
+            {transactionForm.targetMonth && transactionForm.targetMonth < currentMonthStr && (() => {
+              const [y, m] = transactionForm.targetMonth.split('-').map(Number);
+              const mName = monthNames()[m - 1];
+              const curObj = getPayerMonthLabel(currentMonthStr, 0);
+              return (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                    <span className="font-bold text-rose-700 dark:text-rose-300">
+                      {t('cashbook.payingArrearsBanner', { month: mName, year: y })}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleTargetMonthChange(currentMonthStr)}
+                    className="text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-rose-600 underline"
+                  >
+                    {t('cashbook.switchToCurrentMonth', { month: `${curObj.name} ${curObj.year}` })}
+                  </button>
+                </div>
+              );
+            })()}
+
             <div>
               <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('common.amount')}</label>
               <input
@@ -1421,6 +1450,72 @@ const CashbookManagement = () => {
                   </div>
                 )}
 
+                {/* Arrears carried over from earlier months — shown alongside, never merged into, the current month. */}
+                {Number(payerInfo.previousBalance || 0) > 0 && Array.isArray(payerInfo.arrears) && (
+                  <div className="mt-4 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/80 dark:bg-rose-950/30 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-rose-600 dark:text-rose-400">
+                        {t('cashbook.previousArrears')}
+                      </p>
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                        {t('cashbook.arrearsMonths', { count: payerInfo.arrears.length })}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                      {payerInfo.arrears.map((a) => {
+                        const mo = getPayerMonthLabel(a.month, 0);
+                        const who = (payerInfo.students || [])
+                          .filter((s) => (s.arrears || []).some((x) => x.month === a.month))
+                          .map((s) => s.name);
+                        const isSelected = transactionForm.targetMonth === a.month;
+                        return (
+                          <button
+                            key={a.month}
+                            type="button"
+                            onClick={() => {
+                              setTransactionForm((prev) => ({
+                                ...prev,
+                                amount: a.balance,
+                                targetMonth: a.month
+                              }));
+                            }}
+                            className={`text-left p-3 rounded-xl border transition-all ${
+                              isSelected
+                                ? 'bg-rose-100 dark:bg-rose-900/60 border-rose-500 ring-2 ring-rose-500/30'
+                                : 'bg-white/80 dark:bg-slate-900/60 border-rose-200 dark:border-rose-900/60 hover:border-rose-400 hover:bg-rose-50/50'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-black text-slate-900 dark:text-white text-xs">{mo.name} {mo.year}</span>
+                              <span className="text-sm font-black text-rose-600 dark:text-rose-400">{fmtMoney(a.balance)}</span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                              {t('cashbook.fee')}: {fmtMoney(a.fee)} · {t('common.paid')}: {fmtMoney(a.paid)}
+                            </p>
+                            {payerInfo.count > 1 && who.length > 0 && (
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{who.join(', ')}</p>
+                            )}
+                            <div className="mt-2 flex items-center justify-between pt-1.5 border-t border-rose-100 dark:border-rose-900/40 text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                              <span>{isSelected ? `✓ ${t('cashbook.selected')}` : t('cashbook.payThisMonth')}</span>
+                              <span className="text-xs">→</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="pt-2 border-t border-rose-200/70 dark:border-rose-900/50 space-y-1 text-xs font-black">
+                      <div className="flex justify-between text-rose-700 dark:text-rose-300">
+                        <span>{t('cashbook.previousArrearsTotal')}</span>
+                        <span>{fmtMoney(payerInfo.previousBalance)}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-900 dark:text-white">
+                        <span>{t('cashbook.totalDueAll')}</span>
+                        <span>{fmtMoney(payerInfo.totalDue ?? (Number(payerInfo.totalBalance || 0) + Number(payerInfo.previousBalance || 0)))}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Per-student remaining money table. */}
                 {Array.isArray(payerInfo.students) && payerInfo.students.length > 0 && (
                   <div className="mt-4 rounded-xl border border-emerald-100 dark:border-emerald-900/50 overflow-hidden bg-white/70 dark:bg-slate-900/50">
@@ -1464,16 +1559,51 @@ const CashbookManagement = () => {
                 )}
 
                 <div className="flex flex-wrap gap-2 mt-4">
+                  {Number(payerInfo.previousBalance || 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const oldest = payerInfo.arrears?.[0]?.month || currentMonthStr;
+                        setTransactionForm((prev) => ({
+                          ...prev,
+                          amount: payerInfo.totalDue ?? (Number(payerInfo.totalBalance || 0) + Number(payerInfo.previousBalance || 0)),
+                          targetMonth: oldest
+                        }));
+                      }}
+                      className="px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-[11px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1.5"
+                    >
+                      <AlertCircle size={13} />
+                      {t('cashbook.payTotalDue', {
+                        amount: fmtMoney(payerInfo.totalDue ?? (Number(payerInfo.totalBalance || 0) + Number(payerInfo.previousBalance || 0)))
+                      })}
+                    </button>
+                  )}
+                  {Number(payerInfo.previousBalance || 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const oldest = payerInfo.arrears?.[0]?.month || currentMonthStr;
+                        setTransactionForm((prev) => ({
+                          ...prev,
+                          amount: payerInfo.previousBalance,
+                          targetMonth: oldest
+                        }));
+                      }}
+                      className="px-4 py-2 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 dark:bg-rose-950/60 dark:hover:bg-rose-900/80 dark:text-rose-200 border border-rose-300 dark:border-rose-800 text-[11px] font-black uppercase tracking-wider"
+                    >
+                      {t('cashbook.payArrears', { amount: fmtMoney(payerInfo.previousBalance) })}
+                    </button>
+                  )}
                   {payerInfo.totalBalance > 0 && (
                     <button
                       type="button"
-                      onClick={() => setTransactionForm((prev) => ({ ...prev, amount: payerInfo.totalBalance }))}
-                      className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-black uppercase tracking-wider"
+                      onClick={() => setTransactionForm((prev) => ({ ...prev, amount: payerInfo.totalBalance, targetMonth: currentMonthStr }))}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black uppercase tracking-wider"
                     >
                       {t('cashbook.payFull', { amount: fmtMoney(payerInfo.totalBalance) })}
                     </button>
                   )}
-                  {payerInfo.totalBalance > 0 && entered > 0 && entered !== payerInfo.totalBalance && (
+                  {entered > 0 && (
                     <button
                       type="button"
                       onClick={() => setTransactionForm((prev) => ({ ...prev, amount: '' }))}

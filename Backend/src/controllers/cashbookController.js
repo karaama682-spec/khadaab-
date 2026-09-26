@@ -725,10 +725,39 @@ const buildPayerInfo = async (match, variants, purpose = 'sender', reqDate = nul
 
         if (!students.length) return { kind: 'responsible', students: [], totalMonthlyFee: 0, totalPaid: 0, totalBalance: 0, remainingBalance: 0, count: 0 };
         const summary = await summarizeStudents(students, currentMonth, excludeEntryId);
+
+        // Previous debt (arrears) — the Dashboard's own calculation, narrowed to
+        // this payer's students. Reported alongside the current cycle only; it is
+        // never folded into totalBalance / remainingBalance (allocation unchanged).
+        // Capped at the real current cycle so an advance lookup matches the Dashboard.
+        const now = currentCycle();
+        const debtCycle = currentMonth < now ? currentMonth : now;
+        const { debt: previousBalance, rows: debtRows } = await computePreviousDebt(debtCycle, {
+            studentIds: students.map((s) => s._id),
+            detail: true
+        });
+        const byMonth = new Map();
+        for (const r of debtRows) {
+            const agg = byMonth.get(r.month) || { month: r.month, fee: 0, paid: 0, balance: 0 };
+            agg.fee += r.fee;
+            agg.paid += r.paid;
+            agg.balance += r.balance;
+            byMonth.set(r.month, agg);
+        }
+        summary.students.forEach((row) => {
+            row.arrears = debtRows
+                .filter((r) => r.studentId === String(row.studentId))
+                .map(({ month, fee, paid, balance }) => ({ month, fee, paid, balance }));
+            row.previousBalance = row.arrears.reduce((sum, a) => sum + a.balance, 0);
+        });
+
         return {
             kind: 'responsible',
             ...summary,
-            remainingBalance: summary.totalBalance
+            remainingBalance: summary.totalBalance,
+            previousBalance,
+            arrears: [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month)),
+            totalDue: summary.totalBalance + previousBalance
         };
     }
 
@@ -1002,7 +1031,12 @@ const computeFeeTotals = async (cycle = currentCycle()) => {
 // `pending` and lands here; a later payment targeted at that cycle reduces it.
 // Counting starts at the first cycle with any completed fee payment, so cycles
 // from before the system was in use are never counted as debt.
-const computePreviousDebt = async (cycle = currentCycle()) => {
+//
+// Optional `studentIds` narrows the same calculation to one payer's students, and
+// `detail: true` returns the per-student/per-cycle rows behind the sum as
+// { debt, rows }. With no options (the Dashboard call) it returns the number.
+const computePreviousDebt = async (cycle = currentCycle(), { studentIds = null, detail = false } = {}) => {
+    const none = detail ? { debt: 0, rows: [] } : 0;
     const [firstByDate, firstByKey] = await Promise.all([
         Payment.findOne({ status: 'Completed', paymentDate: { $ne: null } }).sort({ paymentDate: 1 }).select('paymentDate').lean(),
         Payment.findOne({ status: 'Completed', billingCycle: { $nin: [null, ''] } }).sort({ billingCycle: 1 }).select('billingCycle').lean()
@@ -1012,14 +1046,16 @@ const computePreviousDebt = async (cycle = currentCycle()) => {
         firstByKey && firstByKey.billingCycle
     ].filter(Boolean).sort();
     const firstCycle = starts[0];
-    if (!firstCycle || firstCycle >= cycle) return 0;
+    if (!firstCycle || firstCycle >= cycle) return none;
 
     const { end: lastEnd } = cycleRange(addCycles(cycle, -1));
-    const students = await Student.find({
+    const studentQuery = {
         status: { $nin: ['Inactive', 'Exited'] },
         registrationDate: { $lte: lastEnd }
-    }).select('monthlyFee fee registrationDate').lean();
-    if (!students.length) return 0;
+    };
+    if (studentIds) studentQuery._id = { $in: studentIds };
+    const students = await Student.find(studentQuery).select('monthlyFee fee registrationDate').lean();
+    if (!students.length) return none;
 
     const payments = await Payment.find({
         studentId: { $in: students.map((s) => s._id) },
@@ -1035,15 +1071,19 @@ const computePreviousDebt = async (cycle = currentCycle()) => {
     }
 
     let debt = 0;
+    const rows = [];
     for (const s of students) {
         const fee = Number(s.monthlyFee || s.fee || 0);
         if (fee <= 0) continue;
         const regCycle = cycleKeyForDate(s.registrationDate);
         for (let c = regCycle > firstCycle ? regCycle : firstCycle; c < cycle; c = addCycles(c, 1)) {
-            debt += Math.max(0, fee - (paidByStudentCycle.get(`${s._id}|${c}`) || 0));
+            const paid = paidByStudentCycle.get(`${s._id}|${c}`) || 0;
+            const owed = Math.max(0, fee - paid);
+            debt += owed;
+            if (detail && owed > 0) rows.push({ studentId: String(s._id), month: c, fee, paid, balance: owed });
         }
     }
-    return debt;
+    return detail ? { debt, rows } : debt;
 };
 
 // The payer (fee-responsible person) shown for a student: the linked guardian's

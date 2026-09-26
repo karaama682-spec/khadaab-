@@ -145,19 +145,20 @@ test('dashboard finance cards satisfy the accounting identities', async () => {
   const otherExpenses = 70;
   assert.equal(k.totalSalaries + otherExpenses, k.totalExpenses);
 
-  // Advance cards report the future-cycle amounts...
-  assert.equal(k.advanceStudentFees, 200, 'advance fees = future-cycle payment');
-  assert.equal(k.advanceSalaries, 400, 'advance salaries = future-cycle paid salary');
-
-  // ...and those advances are NOT double-counted in any current-cycle figure.
+  // Advance payments are NOT double-counted in any current-cycle figure.
   assert.equal(k.studentFeesCollected, 100, 'advance fee excluded from collected');
   assert.equal(k.totalIncome, 150, 'advance fee excluded from total income');
   assert.equal(k.totalSalaries, 300, 'advance salary excluded from total salaries');
   assert.equal(k.totalExpenses, 370, 'advance salary excluded from total expenses');
 
+  // Previous debt (Deyn Hore) is 0 for students whose registration begins this cycle.
+  assert.equal(k.previousDebt, 0, 'previous debt = 0 when registered in current cycle');
+
   // Removed cards must be gone.
   assert.equal(k.monthlyIncome, undefined);
   assert.equal(k.walletBalance, undefined);
+  assert.equal(k.advanceStudentFees, undefined);
+  assert.equal(k.advanceSalaries, undefined);
 });
 
 test('finance is institute-wide: branch-scoped user sees identical totals', async () => {
@@ -170,6 +171,5 @@ test('finance is institute-wide: branch-scoped user sees identical totals', asyn
   assert.equal(k.totalSalaries, 300);
   assert.equal(k.studentFeesCollected, 100);
   assert.equal(k.pendingStudentFees, 100);
-  assert.equal(k.advanceStudentFees, 200);
-  assert.equal(k.advanceSalaries, 400);
+  assert.equal(k.previousDebt, 0);
 });
