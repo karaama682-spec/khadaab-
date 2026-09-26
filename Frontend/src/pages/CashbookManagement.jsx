@@ -325,7 +325,7 @@ const CashbookManagement = () => {
             senderName: name,
             senderEntityType: entityType === 'teacher' ? 'user' : entityType,
             senderEntityId: entityId || '',
-            targetMonth: editingEntryRef.current ? prev.targetMonth : (hasArrears && oldestArrears ? oldestArrears : prev.targetMonth),
+            targetMonth: editingEntryRef.current ? prev.targetMonth : (hasArrears && oldestArrears ? oldestArrears : currentMonthStr),
             amount: editingEntryRef.current ? prev.amount : (rem !== null && !isNaN(rem) ? rem : prev.amount)
           }));
           setSenderLocked(true);
