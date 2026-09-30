@@ -49,6 +49,24 @@ const studentSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    feeHistory: [
+        {
+            effectiveCycle: {
+                type: String,
+                required: true,
+                trim: true
+            },
+            amount: {
+                type: Number,
+                required: true,
+                min: 0
+            },
+            changedAt: {
+                type: Date,
+                default: Date.now
+            }
+        }
+    ],
     branchId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Branch'

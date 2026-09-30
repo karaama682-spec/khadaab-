@@ -14,6 +14,7 @@ const {
     cycleKeyForDate, cycleRange, isValidCycleKey, addCycles,
     currentCycle, nextCycle, cycleMatch
 } = require('../utils/billingCycle');
+const { getStudentFeeForCycle } = require('../utils/studentFee');
 
 // The wallet is populated alongside the category so reports can name the
 // institute side of a transaction: it is the sender on an expense and the
@@ -67,7 +68,7 @@ const syncFeePayments = async (entry, category, createdBy) => {
 
     // Exited (archived) students never receive new fee allocations.
     const students = await Student.find({ $or: orConds, status: { $ne: 'Exited' } })
-        .select('fullName monthlyFee fee guardianId branchId');
+        .select('fullName monthlyFee fee guardianId branchId feeHistory');
     if (!students.length) return null;
 
     // The starting billing cycle: the entry's target cycle if set, else derived
@@ -81,7 +82,7 @@ const syncFeePayments = async (entry, category, createdBy) => {
             studentId: s._id, status: 'Completed', ...cycleMatch('billingCycle', 'paymentDate', startCycle)
         }).select('amount');
         const paid = paidDocs.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-        totalOwedBefore += Math.max(0, Number(s.monthlyFee || s.fee || 0) - paid);
+        totalOwedBefore += Math.max(0, getStudentFeeForCycle(s, startCycle) - paid);
     }
 
     // Allocate to the starting cycle first, then roll leftover into upcoming
@@ -96,7 +97,7 @@ const syncFeePayments = async (entry, category, createdBy) => {
                 studentId: s._id, status: 'Completed', ...cycleMatch('billingCycle', 'paymentDate', cycle)
             }).select('amount');
             const paid = paidDocs.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-            const monthlyFee = Number(s.monthlyFee || s.fee || 0);
+            const monthlyFee = getStudentFeeForCycle(s, cycle);
             const remaining = Math.max(0, monthlyFee - paid);
             if (remaining <= 0) continue;
             const alloc = Math.min(remaining, leftover);
@@ -678,7 +679,7 @@ const summarizeStudents = async (students, cycle = currentCycle(), excludeEntryI
         }
         const paidThisMonthAgg = await Payment.find(paymentFilter).select('amount');
         const paidThisMonth = paidThisMonthAgg.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-        const monthlyFee = Number(s.monthlyFee || s.fee || 0);
+        const monthlyFee = getStudentFeeForCycle(s, cycle);
         const balance = Math.max(0, monthlyFee - paidThisMonth);
         totalMonthlyFee += monthlyFee;
         totalPaid += paidThisMonth;
@@ -720,7 +721,7 @@ const buildPayerInfo = async (match, variants, purpose = 'sender', reqDate = nul
         if (!orConds.length) return { kind: 'responsible', students: [], totalMonthlyFee: 0, totalPaid: 0, totalBalance: 0, remainingBalance: 0, count: 0 };
         // Exited (archived) students are not active payers.
         const students = await Student.find({ $or: orConds, status: { $ne: 'Exited' } })
-            .select('fullName classId monthlyFee fee fatherPhone guardianId')
+            .select('fullName classId monthlyFee fee fatherPhone guardianId feeHistory')
             .populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } });
 
         if (!students.length) return { kind: 'responsible', students: [], totalMonthlyFee: 0, totalPaid: 0, totalBalance: 0, remainingBalance: 0, count: 0 };
@@ -977,7 +978,7 @@ const fetchStudentFeeData = async (cycle, { registrationBound = true } = {}) => 
     }
 
     const students = await Student.find(studentQuery)
-        .select('fullName fatherName fatherPhone guardianId monthlyFee fee classId registrationDate status studentCode')
+        .select('fullName fatherName fatherPhone guardianId monthlyFee fee classId registrationDate status studentCode feeHistory')
         .populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } })
         .populate('guardianId', 'fullName phone alternatePhone relationship')
         .lean();
@@ -1014,7 +1015,7 @@ const computeFeeTotals = async (cycle = currentCycle()) => {
     let collected = 0;
     let pending = 0;
     for (const s of students) {
-        const fee = Number(s.monthlyFee || s.fee || 0);
+        const fee = getStudentFeeForCycle(s, cycle);
         const paid = paidByStudent.get(String(s._id)) || 0;
         expected += fee;
         collected += paid;
@@ -1054,7 +1055,7 @@ const computePreviousDebt = async (cycle = currentCycle(), { studentIds = null, 
         registrationDate: { $lte: lastEnd }
     };
     if (studentIds) studentQuery._id = { $in: studentIds };
-    const students = await Student.find(studentQuery).select('monthlyFee fee registrationDate').lean();
+    const students = await Student.find(studentQuery).select('monthlyFee fee registrationDate feeHistory').lean();
     if (!students.length) return none;
 
     const payments = await Payment.find({
@@ -1073,10 +1074,10 @@ const computePreviousDebt = async (cycle = currentCycle(), { studentIds = null, 
     let debt = 0;
     const rows = [];
     for (const s of students) {
-        const fee = Number(s.monthlyFee || s.fee || 0);
-        if (fee <= 0) continue;
         const regCycle = cycleKeyForDate(s.registrationDate);
         for (let c = regCycle > firstCycle ? regCycle : firstCycle; c < cycle; c = addCycles(c, 1)) {
+            const fee = getStudentFeeForCycle(s, c);
+            if (fee <= 0) continue;
             const paid = paidByStudentCycle.get(`${s._id}|${c}`) || 0;
             const owed = Math.max(0, fee - paid);
             debt += owed;
@@ -1149,7 +1150,7 @@ const financeCardDetail = async (cardKey, cycle = currentCycle()) => {
             const { students, paidByStudent } = await fetchStudentFeeData(cycle, { registrationBound: true });
             const rows = [];
             for (const s of students) {
-                const fee = num(s.monthlyFee || s.fee);
+                const fee = getStudentFeeForCycle(s, cycle);
                 const paid = paidByStudent.get(String(s._id)) || 0;
                 const pending = Math.max(0, fee - paid);
                 if (pending <= 0) continue;
@@ -1262,9 +1263,10 @@ const getPayers = asyncHandler(async (req, res) => {
                 totalFee: 0
             });
         }
+        const sFee = getStudentFeeForCycle(s, cycle);
         const g = groups.get(key);
         g.students.push(s);
-        g.totalFee += Number(s.monthlyFee || s.fee || 0);
+        g.totalFee += sFee;
         if (!g.name && payerName) g.name = payerName;
         if (!g.phone && payerPhone) g.phone = payerPhone;
         if (!g.alternatePhone && payerAltPhone) g.alternatePhone = payerAltPhone;
@@ -1278,7 +1280,7 @@ const getPayers = asyncHandler(async (req, res) => {
         let paidAmount = 0;
         for (const s of g.students) {
             const paid = paidByStudent.get(String(s._id)) || 0;
-            const fee = Number(s.monthlyFee || s.fee || 0);
+            const fee = getStudentFeeForCycle(s, cycle);
             paidAmount += paid;
             studentDetails.push({
                 studentId: s._id,
@@ -1326,7 +1328,7 @@ const togglePayer = asyncHandler(async (req, res) => {
     // Exited students are excluded from quick-pay so no new money can be attached
     // to an archived student.
     const students = await Student.find({ _id: { $in: studentIds }, status: { $ne: 'Exited' } })
-        .select('fullName monthlyFee fee guardianId branchId');
+        .select('fullName monthlyFee fee guardianId branchId feeHistory');
 
     if (paid) {
         const wallet = await resolveWallet(req.body.walletId, req.user?.branchId);
@@ -1340,7 +1342,7 @@ const togglePayer = asyncHandler(async (req, res) => {
                 studentId: s._id, status: 'Completed', ...cycleMatch('billingCycle', 'paymentDate', cycle)
             }).select('amount');
             const already = existing.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-            const fee = Number(s.monthlyFee || s.fee || 0);
+            const fee = getStudentFeeForCycle(s, cycle);
             const remaining = Math.max(0, fee - already);
             if (remaining <= 0) continue;
 

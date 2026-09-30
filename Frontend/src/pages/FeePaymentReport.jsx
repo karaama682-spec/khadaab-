@@ -17,6 +17,7 @@ import api from '../services/api';
 import { walletNameOf, walletIdOf } from '../utils/wallet';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { useLanguage } from '../i18n/LanguageContext.jsx';
+import { getStudentFeeForCycle } from '../utils/studentFee';
 
 // jsPDF draws at fixed offsets and never clips, so each cell is fitted to its
 // column width and given an ellipsis only when it genuinely cannot fit.
@@ -99,7 +100,7 @@ const FeePaymentReport = () => {
 
   const getRemaining = (student, item) => {
     const sid = typeof item.studentId === 'object' ? item.studentId?._id : item.studentId;
-    const fee = Number(student.monthlyFee ?? student.fee ?? 0);
+    const fee = getStudentFeeForCycle(student, item.billingCycle || item.month);
     const paid = paidByStudentMonth[`${sid}:${item.month}`] || 0;
     return Math.max(0, fee - paid);
   };

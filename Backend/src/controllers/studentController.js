@@ -1,6 +1,7 @@
 const asyncHandler = require('../middleware/asyncHandler');
 const Student = require('../models/Student');
 const { generateStudentCode, withRetry } = require('../utils/generateCode');
+const { currentCycle, cycleKeyForDate } = require('../utils/billingCycle');
 
 const getStudents = asyncHandler(async (req, res) => {
     // Status handling for the Exit/Archive feature:
@@ -57,6 +58,14 @@ const createStudent = asyncHandler(async (req, res) => {
         payload.fee = Number(payload.monthlyFee) || 0;
     }
 
+    const startFee = Number(payload.monthlyFee || payload.fee || 0);
+    const startCycle = (payload.registrationDate && cycleKeyForDate(payload.registrationDate)) || currentCycle();
+    if (!Array.isArray(payload.feeHistory) || !payload.feeHistory.length) {
+        payload.feeHistory = [
+            { effectiveCycle: startCycle, amount: startFee, changedAt: payload.registrationDate || new Date() }
+        ];
+    }
+
     const data = await Student.create(payload);
     const populated = await Student.findById(data._id).populate('guardianId').populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } });
     res.status(201).json(populated || data);
@@ -74,6 +83,42 @@ const updateStudent = asyncHandler(async (req, res) => {
     }
     if (payload.monthlyFee !== undefined && payload.fee === undefined) {
         payload.fee = Number(payload.monthlyFee) || 0;
+    }
+
+    const existing = await Student.findById(req.params.id);
+    if (!existing) {
+        res.status(404);
+        throw new Error('Student not found');
+    }
+
+    if (payload.monthlyFee !== undefined) {
+        const newFee = Number(payload.monthlyFee);
+        const oldFee = Number(existing.monthlyFee ?? existing.fee ?? 0);
+        if (newFee !== oldFee) {
+            const current = currentCycle();
+            let history = Array.isArray(existing.feeHistory) ? [...existing.feeHistory] : [];
+            const hasPrior = history.some((h) => h.effectiveCycle < current);
+            if (!hasPrior && oldFee > 0) {
+                history.push({
+                    effectiveCycle: '2000-01',
+                    amount: oldFee,
+                    changedAt: existing.registrationDate || new Date()
+                });
+            }
+            const currentEntry = history.find((h) => h.effectiveCycle === current);
+            if (currentEntry) {
+                currentEntry.amount = newFee;
+                currentEntry.changedAt = new Date();
+            } else {
+                history.push({
+                    effectiveCycle: current,
+                    amount: newFee,
+                    changedAt: new Date()
+                });
+            }
+            history.sort((a, b) => (a.effectiveCycle || '').localeCompare(b.effectiveCycle || ''));
+            payload.feeHistory = history;
+        }
     }
 
     const data = await Student.findByIdAndUpdate(req.params.id, payload, { new: true }).populate('guardianId').populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } });
