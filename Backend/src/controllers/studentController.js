@@ -258,6 +258,27 @@ const getStudentArchive = asyncHandler(async (req, res) => {
     });
 });
 
+// @desc    Restore an exited student back to Active status
+// @route   POST /api/students/:id/restore
+const restoreStudent = asyncHandler(async (req, res) => {
+    const student = await Student.findById(req.params.id);
+    if (!student) {
+        res.status(404);
+        throw new Error('Student not found');
+    }
+    student.status = 'Active';
+    student.exitReason = '';
+    student.exitDate = null;
+    student.exitedBy = null;
+    student.exitedAt = null;
+    await student.save();
+
+    const populated = await Student.findById(student._id)
+        .populate('guardianId')
+        .populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } });
+    res.json(populated);
+});
+
 module.exports = {
     getStudents,
     getStudentById,
@@ -265,5 +286,6 @@ module.exports = {
     updateStudent,
     deleteStudent,
     exitStudent,
+    restoreStudent,
     getStudentArchive
 };

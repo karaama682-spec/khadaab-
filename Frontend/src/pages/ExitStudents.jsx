@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LogOut, Search, User as UserIcon, DollarSign, CalendarCheck, ClipboardList, Receipt, ArrowLeft, Building2 } from 'lucide-react';
+import { LogOut, Search, User as UserIcon, DollarSign, CalendarCheck, ClipboardList, Receipt, ArrowLeft, Building2, RotateCcw, Edit2, Trash2, History, X, Save } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { classLabel } from '../utils/classLabel';
@@ -14,7 +14,7 @@ const fmtDMY = (iso) => {
 const money = (n) => `$${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
 const ExitStudents = () => {
-  const { showAlert } = useAlert();
+  const { showAlert, showConfirm } = useAlert();
   const { t, tv, locale } = useLanguage();
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,6 +22,13 @@ const ExitStudents = () => {
   const [selectedId, setSelectedId] = useState(null);
   const [archive, setArchive] = useState(null);
   const [loadingArchive, setLoadingArchive] = useState(false);
+
+  // Edit Exit Reason modal state
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [editExitReason, setEditExitReason] = useState('');
+  const [editExitDate, setEditExitDate] = useState('');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,6 +63,124 @@ const ExitStudents = () => {
     }
   };
 
+  const handleRestoreStudent = async (s) => {
+    const ok = await showConfirm({
+      type: 'info',
+      title: locale === 'so' ? 'Dib ugu celi Nidaamka' : 'Restore Student',
+      message: locale === 'so'
+        ? `Ma hubtaa inaad ardayga "${s.fullName}" dib ugu celiso nidaamka (Active)? Wuxuu si toos ah ugu laabanayaa ardayda firfircoon.`
+        : `Are you sure you want to restore "${s.fullName}" back to active status in the system?`,
+      confirmText: locale === 'so' ? 'Haa, Dib ugu celi' : 'Yes, Restore',
+      cancelText: locale === 'so' ? 'Ka noqo' : 'Cancel'
+    });
+    if (!ok) return;
+
+    try {
+      await api.post(`/students/${s._id}/restore`);
+      setStudents(prev => prev.filter(item => item._id !== s._id));
+      if (selectedId === s._id) {
+        setSelectedId(null);
+        setArchive(null);
+      }
+      showAlert({
+        type: 'success',
+        title: locale === 'so' ? 'Dib ayaa loogu celiyay' : 'Restored',
+        message: locale === 'so'
+          ? `Ardayga "${s.fullName}" si guul leh ayaa loogu soo celiyay nidaamka.`
+          : `Student "${s.fullName}" has been restored to active status.`
+      });
+    } catch (err) {
+      console.error('Failed to restore student', err);
+      showAlert({
+        type: 'danger',
+        title: locale === 'so' ? 'Khalad' : 'Error',
+        message: err.response?.data?.message || (locale === 'so' ? 'Lama soo celin karo ardayga' : 'Failed to restore student')
+      });
+    }
+  };
+
+  const handleDeleteStudent = async (s) => {
+    const ok = await showConfirm({
+      type: 'warning',
+      title: locale === 'so' ? 'Tirtir Ardayga' : 'Delete Student',
+      message: locale === 'so'
+        ? `Ma hubtaa inaad gabi ahaanba tirtirto ardayga "${s.fullName}"? Xogtiisa dib looma heli karo.`
+        : `Are you sure you want to permanently delete "${s.fullName}"? This action cannot be undone.`,
+      confirmText: locale === 'so' ? 'Haa, Tirtir' : 'Yes, Delete',
+      cancelText: locale === 'so' ? 'Ka noqo' : 'Cancel',
+      danger: true
+    });
+    if (!ok) return;
+
+    try {
+      await api.delete(`/students/${s._id}`);
+      setStudents(prev => prev.filter(item => item._id !== s._id));
+      if (selectedId === s._id) {
+        setSelectedId(null);
+        setArchive(null);
+      }
+      showAlert({
+        type: 'success',
+        title: locale === 'so' ? 'Waa la tirtiray' : 'Deleted',
+        message: locale === 'so'
+          ? `Ardayga "${s.fullName}" si guul leh ayaa loo tirtiray.`
+          : `Student "${s.fullName}" has been permanently deleted.`
+      });
+    } catch (err) {
+      console.error('Failed to delete student', err);
+      showAlert({
+        type: 'danger',
+        title: locale === 'so' ? 'Khalad' : 'Error',
+        message: err.response?.data?.message || (locale === 'so' ? 'Lama tirtiri karo ardayga' : 'Failed to delete student')
+      });
+    }
+  };
+
+  const openEditModal = (s) => {
+    setEditingStudent(s);
+    setEditExitReason(s.exitReason || '');
+    setEditExitDate(s.exitDate ? new Date(s.exitDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    try {
+      setSavingEdit(true);
+      await api.put(`/students/${editingStudent._id}`, {
+        exitReason: editExitReason.trim(),
+        exitDate: editExitDate ? new Date(editExitDate) : undefined
+      });
+      setStudents(prev => prev.map(item => item._id === editingStudent._id ? { ...item, exitReason: editExitReason.trim(), exitDate: editExitDate } : item));
+      if (archive && (archive.student?._id === editingStudent._id || selectedId === editingStudent._id)) {
+        setArchive(prev => ({
+          ...prev,
+          student: { ...prev.student, exitReason: editExitReason.trim(), exitDate: editExitDate },
+          exit: { ...prev.exit, exitReason: editExitReason.trim(), exitDate: editExitDate }
+        }));
+      }
+      showAlert({
+        type: 'success',
+        title: locale === 'so' ? 'Waa la cusboonaysiiyay' : 'Updated',
+        message: locale === 'so'
+          ? `Sababta bixitaanka ee "${editingStudent.fullName}" si guul leh ayaa loo keydiyay.`
+          : `Exit details for "${editingStudent.fullName}" updated successfully.`
+      });
+      setIsEditModalOpen(false);
+      setEditingStudent(null);
+    } catch (err) {
+      console.error('Failed to update student exit details', err);
+      showAlert({
+        type: 'danger',
+        title: locale === 'so' ? 'Khalad' : 'Error',
+        message: err.response?.data?.message || (locale === 'so' ? 'Lama cusboonaysiin karo' : 'Failed to update')
+      });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return students;
@@ -69,7 +194,7 @@ const ExitStudents = () => {
   if (loading) return <div className="p-10 text-center text-slate-500">{t('academic.exit.loading')}</div>;
 
   // ---- Detail (archive) view ----
-  if (selectedId) {
+  const renderDetailView = () => {
     const s = archive?.student;
     const fin = archive?.financial || {};
     return (
@@ -92,7 +217,33 @@ const ExitStudents = () => {
                     <p className="text-xs font-bold text-slate-400 font-mono">{t('academic.exit.id')}: {s.studentCode || s.rollNumber || '—'}</p>
                   </div>
                 </div>
-                <span className="rounded-full bg-amber-100 px-4 py-1.5 text-[11px] font-black uppercase tracking-wider text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">{tv('Exited')}</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="rounded-full bg-amber-100 px-4 py-1.5 text-[11px] font-black uppercase tracking-wider text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">{tv('Exited')}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRestoreStudent(s)}
+                    title={locale === 'so' ? 'Dib ugu celi Nidaamka' : 'Restore Student'}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-emerald-600 shadow-sm hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:hover:bg-emerald-900/60 transition-all"
+                  >
+                    <RotateCcw size={14} /> <span>{locale === 'so' ? 'Back' : 'Back'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(s)}
+                    title={locale === 'so' ? 'Wax ka beddel Sababta' : 'Edit Reason'}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-amber-600 shadow-sm hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-400 dark:hover:bg-amber-900/60 transition-all"
+                  >
+                    <Edit2 size={14} /> <span>{locale === 'so' ? 'Edit' : 'Edit'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteStudent(s)}
+                    title={locale === 'so' ? 'Tirtir Ardayga' : 'Delete Student'}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-rose-50 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-rose-600 shadow-sm hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:hover:bg-rose-900/60 transition-all"
+                  >
+                    <Trash2 size={14} /> <span>{locale === 'so' ? 'Delete' : 'Delete'}</span>
+                  </button>
+                </div>
               </div>
               <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4 text-sm">
                 <Info label={t('common.class')} value={classLabel(s.classId, '—')} />
@@ -104,12 +255,10 @@ const ExitStudents = () => {
                 <Info label={t('academic.exit.exitTimestamp')} value={archive.exit?.exitedAt ? new Date(archive.exit.exitedAt).toLocaleString(locale) : '—'} />
                 <Info label={t('academic.exit.registered')} value={fmtDate(s.registrationDate)} />
               </div>
-              {archive.exit?.exitReason ? (
-                <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800">
-                  <span className="text-[10px] font-black uppercase text-slate-400">{t('academic.exit.reason')}</span>
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{archive.exit.exitReason}</p>
-                </div>
-              ) : null}
+              <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-slate-800">
+                <span className="text-[10px] font-black uppercase text-slate-400">{t('academic.exit.reason')}</span>
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{archive.exit?.exitReason || (locale === 'so' ? 'Lama cayimin sababta' : 'No reason specified')}</p>
+              </div>
             </section>
 
             {/* Financials */}
@@ -165,10 +314,10 @@ const ExitStudents = () => {
         )}
       </div>
     );
-  }
+  };
 
   // ---- List view ----
-  return (
+  const renderListView = () => (
     <div className="mx-auto max-w-5xl space-y-6 p-6 pb-24 animate-in fade-in duration-500">
       <div className="flex items-center gap-5 px-2">
         <div className="flex h-16 w-16 items-center justify-center rounded-[24px] border border-slate-700 bg-slate-900 text-amber-400 shadow-2xl ring-4 ring-amber-400/10 dark:bg-slate-800"><LogOut size={30} strokeWidth={2.5} /></div>
@@ -194,24 +343,64 @@ const ExitStudents = () => {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:border-slate-800 dark:bg-slate-800/30">
-                <th className="px-6 py-4">{t('common.student')}</th>
-                <th className="px-6 py-4">{t('common.code')}</th>
-                <th className="px-6 py-4">{t('common.class')}</th>
-                <th className="px-6 py-4">{t('academic.exit.exitDate')}</th>
-                <th className="px-6 py-4">{t('academic.exit.reasonShort')}</th>
-                <th className="px-6 py-4"></th>
+                <th className="px-5 py-4">{t('common.student')}</th>
+                <th className="px-4 py-4">{t('common.code')}</th>
+                <th className="px-4 py-4">{t('common.class')}</th>
+                <th className="px-4 py-4">{t('academic.exit.exitDate')}</th>
+                <th className="px-5 py-4">{t('academic.exit.reasonShort')}</th>
+                <th className="px-5 py-4 text-right">{locale === 'so' ? 'Ficilada' : 'Actions'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filtered.map(s => (
-                <tr key={s._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/20">
-                  <td className="px-6 py-4 text-sm font-bold text-slate-900 dark:text-white">{s.fullName}</td>
-                  <td className="px-6 py-4 text-sm font-bold text-slate-500 font-mono">{s.studentCode || s.rollNumber || '—'}</td>
-                  <td className="px-6 py-4 text-sm font-semibold text-slate-600 dark:text-slate-300">{classLabel(s.classId, '—')}</td>
-                  <td className="px-6 py-4 text-sm font-semibold text-slate-600 dark:text-slate-300">{fmtDate(s.exitDate)}</td>
-                  <td className="px-6 py-4 text-sm text-slate-500 max-w-xs truncate">{s.exitReason || '—'}</td>
-                  <td className="px-6 py-4 text-right">
-                    <button onClick={() => openArchive(s._id)} className="rounded-xl bg-amber-600 px-4 py-2 text-[11px] font-black uppercase tracking-wider text-white hover:bg-amber-700">{t('academic.exit.viewHistory')}</button>
+                <tr key={s._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/20 transition-colors">
+                  <td className="px-5 py-4 text-sm font-bold text-slate-900 dark:text-white">{s.fullName}</td>
+                  <td className="px-4 py-4 text-sm font-bold text-slate-500 font-mono">{s.studentCode || s.rollNumber || '—'}</td>
+                  <td className="px-4 py-4 text-sm font-semibold text-slate-600 dark:text-slate-300">{classLabel(s.classId, '—')}</td>
+                  <td className="px-4 py-4 text-sm font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">{fmtDate(s.exitDate)}</td>
+                  <td className="px-5 py-4 text-sm text-slate-500 max-w-xs truncate" title={s.exitReason || ''}>{s.exitReason || '—'}</td>
+                  <td className="px-5 py-4 text-right">
+                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => openArchive(s._id)}
+                        title={locale === 'so' ? 'Fiiri Taariikhda Buuxda' : 'View History / Archive'}
+                        className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-600 shadow-sm hover:border-amber-400 hover:text-amber-600 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-amber-500 dark:hover:text-amber-400 transition-all"
+                      >
+                        <History size={13} />
+                        <span>History</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRestoreStudent(s)}
+                        title={locale === 'so' ? 'Dib ugu celi Nidaamka (Back to Active)' : 'Restore Student to System'}
+                        className="inline-flex items-center gap-1 rounded-xl bg-emerald-50 px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-600 shadow-sm hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:hover:bg-emerald-900/60 transition-all"
+                      >
+                        <RotateCcw size={13} />
+                        <span>Back</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(s)}
+                        title={locale === 'so' ? 'Wax ka beddel Sababta Bixitaanka' : 'Edit Exit Reason'}
+                        className="inline-flex items-center gap-1 rounded-xl bg-amber-50 px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider text-amber-600 shadow-sm hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-400 dark:hover:bg-amber-900/60 transition-all"
+                      >
+                        <Edit2 size={13} />
+                        <span>Edit</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteStudent(s)}
+                        title={locale === 'so' ? 'Tirtir Ardayga' : 'Delete Student'}
+                        className="inline-flex items-center gap-1 rounded-xl bg-rose-50 px-2.5 py-1.5 text-xs font-bold uppercase tracking-wider text-rose-600 shadow-sm hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:hover:bg-rose-900/60 transition-all"
+                      >
+                        <Trash2 size={13} />
+                        <span>Delete</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -225,6 +414,90 @@ const ExitStudents = () => {
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {selectedId ? renderDetailView() : renderListView()}
+
+      {/* Edit Exit Reason Modal */}
+      {isEditModalOpen && editingStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg overflow-hidden rounded-[28px] border border-slate-100 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400">
+                  <Edit2 size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black uppercase text-slate-900 dark:text-white">
+                    {locale === 'so' ? 'Wax ka beddel Sababta Bixitaanka' : 'Edit Exit Reason'}
+                  </h3>
+                  <p className="text-xs font-semibold text-slate-400">
+                    {editingStudent.fullName} ({editingStudent.studentCode || editingStudent.rollNumber || '—'})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setIsEditModalOpen(false); setEditingStudent(null); }}
+                className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveEdit} className="mt-5 space-y-4">
+              <div>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  {locale === 'so' ? 'Taariikhda Bixitaanka' : 'Exit Date'}
+                </label>
+                <input
+                  type="date"
+                  value={editExitDate}
+                  onChange={e => setEditExitDate(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-sm font-bold text-slate-800 outline-none transition-all focus:border-amber-500 focus:bg-white dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-200 dark:focus:bg-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-slate-400">
+                  {locale === 'so' ? 'Sababta Bixitaanka (Exit Reason)' : 'Exit Reason'}
+                </label>
+                <textarea
+                  rows={4}
+                  value={editExitReason}
+                  onChange={e => setEditExitReason(e.target.value)}
+                  placeholder={locale === 'so' ? 'Geli sababta uu ardaygu uga baxay machadka...' : 'Enter the reason why student exited...'}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50/50 p-4 text-sm font-semibold text-slate-800 outline-none transition-all focus:border-amber-500 focus:bg-white dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-200 dark:focus:bg-slate-900"
+                />
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => { setIsEditModalOpen(false); setEditingStudent(null); }}
+                  className="rounded-2xl border border-slate-200 px-5 py-2.5 text-xs font-black uppercase tracking-wider text-slate-600 hover:bg-slate-100 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  {locale === 'so' ? 'Ka noqo' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-amber-600 px-6 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-amber-600/20 hover:bg-amber-700 disabled:opacity-50"
+                >
+                  <Save size={16} />
+                  <span>{savingEdit ? (locale === 'so' ? 'Keydinayaa...' : 'Saving...') : (locale === 'so' ? 'Keydi' : 'Save')}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 
