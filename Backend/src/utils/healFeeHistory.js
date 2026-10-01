@@ -24,7 +24,8 @@ const healFeeHistory = async () => {
             $or: [
                 { phone: phoneRegex },
                 { alternatePhone: phoneRegex },
-                { fullName: /Hani/i }
+                { fullName: /Hani/i },
+                { fullName: /Cabdirixman/i }
             ]
         }).select('_id phone fullName').lean();
 
@@ -35,6 +36,7 @@ const healFeeHistory = async () => {
             $or: [
                 { fatherPhone: phoneRegex },
                 { fatherName: /Hani/i },
+                { fatherName: /Cabdirixman/i },
                 ...(targetGuardianIds.length ? [{ guardianId: { $in: targetGuardianIds } }] : [])
             ]
         });
@@ -50,11 +52,12 @@ const healFeeHistory = async () => {
             }).lean();
 
             const prevPaid = prevPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-            const currentFee = Number(s.monthlyFee || s.fee || 30);
+            const currentFee = Number(s.monthlyFee || s.fee || 10);
 
-            // Baseline historical fee: if paid amount in prev cycle > 0 use that (e.g. 10, 15, 25).
-            // If prevPaid is 0 but current fee is 30 and initial was 25, fallback to 25.
-            const baseAmount = prevPaid > 0 ? prevPaid : (currentFee === 30 ? 25 : currentFee);
+            // If the student had payments in the previous cycle, baseline is what they paid.
+            // If the student had $0 payments in the previous cycle, their historical fee in the previous cycle
+            // was $0 (e.g. newly added student or covered under flat family fee of $25), so they do not owe debt for August.
+            const baseAmount = prevPaid;
 
             s.feeHistory = [
                 { effectiveCycle: '2000-01', amount: baseAmount, changedAt: s.registrationDate || new Date() },
