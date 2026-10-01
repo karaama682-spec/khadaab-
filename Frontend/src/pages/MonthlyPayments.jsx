@@ -340,7 +340,9 @@ const MonthlyPayments = () => {
               {tenantInfo.name} - {tenantInfo.subtitle && tenantInfo.subtitle !== 'Institute Management' ? tenantInfo.subtitle : t('nav.instituteManagement')}
             </h1>
             <h2 className="text-[8.5pt] font-extrabold text-black uppercase mt-0.5 leading-tight">
-              {statusFilter === 'paid'
+              {isPreviousDebtView
+                ? (locale === 'so' ? 'DEYNTA WAREEGYADII HORE (PREVIOUS CYCLES DEBT)' : 'PREVIOUS CYCLES DEBT')
+                : statusFilter === 'paid'
                 ? t('monthlyPayments.print.titlePaid')
                 : statusFilter === 'pending'
                 ? t('monthlyPayments.print.titlePending')
@@ -396,45 +398,46 @@ const MonthlyPayments = () => {
 
         {/* Action Controls: Period selector + Print Button */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* If in previousDebtView, show a switcher back to monthly view */}
-          {isPreviousDebtView ? (
+          {/* If in previousDebtView, show a switcher back to current monthly view */}
+          {isPreviousDebtView && (
             <button
               type="button"
               onClick={() => {
                 const nextParams = new URLSearchParams(searchParams);
                 nextParams.delete('view');
+                nextParams.set('month', currentCycle());
                 setSearchParams(nextParams);
               }}
               className="flex items-center gap-2 rounded-2xl bg-slate-100 dark:bg-slate-800 px-4 py-3 text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all print:hidden"
             >
               <span>{locale === 'so' ? '← Eeg Wareegga Hadda' : '← View Current Cycle'}</span>
             </button>
-          ) : (
-            /* Period selector */
-            <div className="flex items-center gap-3 bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm w-full sm:w-auto print:hidden">
-              <label htmlFor="month-select" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 shrink-0 leading-tight">
-                {t('monthlyPayments.cycle')}
-              </label>
-              <select
-                id="month-select"
-                value={monthKey}
-                onChange={(e) => {
-                  const [y, m] = e.target.value.split('-');
-                  setYear(Number(y));
-                  setMonth(Number(m) - 1);
-                  const nextParams = new URLSearchParams(searchParams);
-                  nextParams.delete('view');
-                  nextParams.set('month', e.target.value);
-                  setSearchParams(nextParams);
-                }}
-                className="w-full min-w-0 bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
-              >
-                {monthOptions.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
           )}
+
+          {/* Period selector - ALWAYS available so user can pick ANY cycle: mid hore ama mid dambe */}
+          <div className="flex items-center gap-3 bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm w-full sm:w-auto print:hidden">
+            <label htmlFor="month-select" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 shrink-0 leading-tight">
+              {t('monthlyPayments.cycle')}
+            </label>
+            <select
+              id="month-select"
+              value={monthKey}
+              onChange={(e) => {
+                const [y, m] = e.target.value.split('-');
+                setYear(Number(y));
+                setMonth(Number(m) - 1);
+                const nextParams = new URLSearchParams(searchParams);
+                nextParams.delete('view');
+                nextParams.set('month', e.target.value);
+                setSearchParams(nextParams);
+              }}
+              className="w-full min-w-0 bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+            >
+              {monthOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
 
           {/* Print Button */}
           <button

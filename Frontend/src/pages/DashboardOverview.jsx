@@ -246,7 +246,7 @@ const DashboardOverview = () => {
             icon: <AlertCircle size={20} />,
             color: 'bg-red-600',
             badgeColor: 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300',
-            path: '/finance/monthly-payments?view=previousDebt&status=pending',
+            path: `/finance/monthly-payments?month=${prevCycleKey}&view=previousDebt&status=pending`,
             description: cardText('previousDebt', 'description', { cycle: billingCycleName }),
             explanationVars: { cycle: billingCycleName },
             statValue: previousCycleName
