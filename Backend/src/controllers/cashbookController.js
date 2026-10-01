@@ -1139,12 +1139,13 @@ const getPreviousDebtPayers = async (cycle = currentCycle()) => {
             if (fee <= 0) continue;
             const paid = paidByStudentCycle.get(`${s._id}|${c}`) || 0;
             const owed = Math.max(0, fee - paid);
+            const credited = Math.min(fee, paid);
             studentTotalFee += fee;
-            studentTotalPaid += paid;
+            studentTotalPaid += credited;
             studentTotalOwed += owed;
         }
 
-        if (studentTotalOwed <= 0) continue;
+        if (studentTotalFee <= 0) continue;
 
         const guardian = s.guardianId && typeof s.guardianId === 'object' ? s.guardianId : null;
         const payerName = guardian?.fullName || s.fatherName || '';
@@ -1177,7 +1178,7 @@ const getPreviousDebtPayers = async (cycle = currentCycle()) => {
             monthlyFee: studentTotalFee,
             paid: studentTotalPaid,
             remaining: studentTotalOwed,
-            isPaid: false
+            isPaid: studentTotalFee > 0 && studentTotalPaid >= studentTotalFee
         });
         g.totalFee += studentTotalFee;
         g.paidAmount += studentTotalPaid;
@@ -1190,6 +1191,7 @@ const getPreviousDebtPayers = async (cycle = currentCycle()) => {
 
     const result = [];
     for (const g of groups.values()) {
+        const isPaid = g.totalFee > 0 && g.paidAmount >= g.totalFee;
         result.push({
             key: g.key,
             name: g.name || 'Unknown',
@@ -1203,7 +1205,7 @@ const getPreviousDebtPayers = async (cycle = currentCycle()) => {
             totalFee: g.totalFee,
             paidAmount: g.paidAmount,
             remaining: g.remaining,
-            paid: false,
+            paid: isPaid,
             month: 'previous',
             cycle: `before-${cycle}`,
             isPreviousDebt: true
