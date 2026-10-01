@@ -66,6 +66,11 @@ connectDB().then(async () => {
     await seedAdminUser();
     const healFeeHistory = require('./utils/healFeeHistory');
     await healFeeHistory();
+    const { ensureCycleSnapshot } = require('./services/cycleSnapshotService');
+    const { previousCycle, currentCycle } = require('./utils/billingCycle');
+    await ensureCycleSnapshot(previousCycle(currentCycle())).catch((e) => {
+        console.error('Initial cycle snapshot check:', e.message);
+    });
 }).catch(err => {
     console.error('Failed to connect to MongoDB on startup. The server will start, but DB operations will fail until connection is established:', err.message);
 });
