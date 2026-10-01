@@ -223,3 +223,37 @@ test('payer who paid $25 in previous cycle does NOT owe $5 arrears when student 
   assert.deepStrictEqual(info.arrears, []);
 });
 
+test('reverting student fee or using feeScope: "all" clears historical arrears', async () => {
+  const Student = require('../src/models/Student');
+  const Class = require('../src/models/Class');
+  const cls = await Class.findOne({ name: 'History Class' });
+
+  // Student registered with fee=15 initially due to mistake
+  const testStudent = await Student.create({
+    studentCode: 'REV-001',
+    fullName: 'Revert Student',
+    fatherName: 'Revert Father',
+    fatherPhone: '615000000',
+    classId: cls._id,
+    monthlyFee: 15,
+    fee: 15,
+    feeHistory: [
+      { effectiveCycle: '2000-01', amount: 15 }
+    ],
+    status: 'Active',
+    registrationDate: new Date()
+  });
+
+  // Admin resets fee to 10 across all cycles
+  const updateRes = await invoke(updateStudent, {
+    params: { id: String(testStudent._id) },
+    body: { monthlyFee: 10, feeScope: 'all' }
+  });
+  assert.strictEqual(updateRes.statusCode, 200);
+
+  const updated = await Student.findById(testStudent._id).lean();
+  assert.strictEqual(updated.monthlyFee, 10);
+  assert.strictEqual(updated.feeHistory.length, 1);
+  assert.strictEqual(updated.feeHistory[0].amount, 10);
+});
+

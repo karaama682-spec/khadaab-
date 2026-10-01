@@ -1,7 +1,7 @@
 const asyncHandler = require('../middleware/asyncHandler');
 const Student = require('../models/Student');
 const { generateStudentCode, withRetry } = require('../utils/generateCode');
-const { currentCycle, cycleKeyForDate } = require('../utils/billingCycle');
+const { currentCycle, addCycles, cycleKeyForDate } = require('../utils/billingCycle');
 
 const getStudents = asyncHandler(async (req, res) => {
     // Status handling for the Exit/Archive feature:
@@ -94,30 +94,55 @@ const updateStudent = asyncHandler(async (req, res) => {
     if (payload.monthlyFee !== undefined) {
         const newFee = Number(payload.monthlyFee);
         const oldFee = Number(existing.monthlyFee ?? existing.fee ?? 0);
-        if (newFee !== oldFee) {
+        const feeScope = payload.feeScope || 'current'; // 'current' | 'all' | 'previous'
+
+        if (newFee !== oldFee || payload.feeScope) {
             const current = currentCycle();
-            let history = Array.isArray(existing.feeHistory) ? [...existing.feeHistory] : [];
-            const hasPrior = history.some((h) => h.effectiveCycle < current);
-            if (!hasPrior && oldFee > 0) {
-                history.push({
-                    effectiveCycle: '2000-01',
-                    amount: oldFee,
-                    changedAt: existing.registrationDate || new Date()
-                });
-            }
-            const currentEntry = history.find((h) => h.effectiveCycle === current);
-            if (currentEntry) {
-                currentEntry.amount = newFee;
-                currentEntry.changedAt = new Date();
+
+            if (feeScope === 'all') {
+                // Completely reset fee across ALL cycles (heals historical ghost arrears when an accidental increase or error is corrected)
+                payload.feeHistory = [
+                    { effectiveCycle: '2000-01', amount: newFee, changedAt: new Date() }
+                ];
+            } else if (feeScope === 'previous') {
+                const prev = addCycles(current, -1);
+                payload.feeHistory = [
+                    { effectiveCycle: '2000-01', amount: oldFee, changedAt: existing.registrationDate || new Date() },
+                    { effectiveCycle: prev, amount: newFee, changedAt: new Date() }
+                ];
             } else {
-                history.push({
-                    effectiveCycle: current,
-                    amount: newFee,
-                    changedAt: new Date()
-                });
+                // feeScope === 'current' (default)
+                let history = Array.isArray(existing.feeHistory) ? [...existing.feeHistory] : [];
+
+                // Smart reversion: If reducing the fee (e.g. admin reverting an accidental increase
+                // without choosing a scope), update any previous baseline entry that held the inflated oldFee
+                // so the reduction cleanly heals the previous cycle instead of leaving it trapped at oldFee.
+                if (newFee < oldFee) {
+                    history = history.map((h) => (h.amount === oldFee ? { ...h, amount: newFee, changedAt: new Date() } : h));
+                }
+
+                const hasPrior = history.some((h) => h.effectiveCycle < current);
+                if (!hasPrior && (newFee < oldFee ? newFee : oldFee) > 0) {
+                    history.push({
+                        effectiveCycle: '2000-01',
+                        amount: newFee < oldFee ? newFee : oldFee,
+                        changedAt: existing.registrationDate || new Date()
+                    });
+                }
+                const currentEntry = history.find((h) => h.effectiveCycle === current);
+                if (currentEntry) {
+                    currentEntry.amount = newFee;
+                    currentEntry.changedAt = new Date();
+                } else {
+                    history.push({
+                        effectiveCycle: current,
+                        amount: newFee,
+                        changedAt: new Date()
+                    });
+                }
+                history.sort((a, b) => (a.effectiveCycle || '').localeCompare(b.effectiveCycle || ''));
+                payload.feeHistory = history;
             }
-            history.sort((a, b) => (a.effectiveCycle || '').localeCompare(b.effectiveCycle || ''));
-            payload.feeHistory = history;
         }
     }
 

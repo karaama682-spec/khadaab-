@@ -305,6 +305,7 @@ const StudentsManagement = () => {
     gender: 'Male',
     monthlyFee: '',
     fee: '',
+    feeScope: 'current',
     fatherName: '',
     fatherPhone: '',
     guardianPhone: '',
@@ -643,6 +644,7 @@ const StudentsManagement = () => {
       classId: classes[0]?._id || '',
       gender: 'Male',
       monthlyFee: '',
+      feeScope: 'current',
       fatherName: '',
       fatherPhone: '',
       guardianId: '',
@@ -664,6 +666,7 @@ const StudentsManagement = () => {
       classId: item.classId?._id || item.classId || '',
       gender: item.gender || 'Male',
       monthlyFee: item.monthlyFee !== undefined ? item.monthlyFee : (item.fee || ''),
+      feeScope: 'current',
       fatherName: item.fatherName || '',
       fatherPhone: item.fatherPhone || '',
       guardianId: existingG?._id || item.guardianId || '',
@@ -713,6 +716,7 @@ const StudentsManagement = () => {
         gender: formData.gender,
         monthlyFee: Number(formData.monthlyFee) || 0,
         fee: Number(formData.monthlyFee) || 0,
+        feeScope: formData.feeScope || 'current',
         fatherName: formData.guardianName || formData.fatherName || '',
         fatherPhone: formData.guardianPhone || formData.fatherPhone || '',
         guardianId: guardianId || undefined,
@@ -1366,6 +1370,46 @@ const StudentsManagement = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Fee Change Scope (Visible when editing student) */}
+              {editingItem && (
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+                  <label className="block text-xs font-black uppercase text-slate-500 mb-2">
+                    {t('students.feeScopeLabel')}
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, feeScope: 'current' })}
+                      className={`p-3 rounded-xl text-left border transition-all ${
+                        formData.feeScope === 'current'
+                          ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/50'
+                      }`}
+                    >
+                      <span className="block text-xs font-black">{t('students.feeScopeCurrent')}</span>
+                      <span className={`text-[10px] block mt-0.5 leading-snug ${formData.feeScope === 'current' ? 'text-white/80' : 'text-slate-400'}`}>
+                        {t('students.feeScopeCurrentHint')}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, feeScope: 'all' })}
+                      className={`p-3 rounded-xl text-left border transition-all ${
+                        formData.feeScope === 'all'
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/50'
+                      }`}
+                    >
+                      <span className="block text-xs font-black">{t('students.feeScopeAll')}</span>
+                      <span className={`text-[10px] block mt-0.5 leading-snug ${formData.feeScope === 'all' ? 'text-white/80' : 'text-slate-400'}`}>
+                        {t('students.feeScopeAllHint')}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Who Pays the Fee Section */}
               <div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-2">

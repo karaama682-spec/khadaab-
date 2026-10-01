@@ -64,6 +64,8 @@ connectDB().then(async () => {
         StudentAttendance.removeLegacyDailyUniqueIndex()
     ]);
     await seedAdminUser();
+    const healFeeHistory = require('./utils/healFeeHistory');
+    await healFeeHistory();
 }).catch(err => {
     console.error('Failed to connect to MongoDB on startup. The server will start, but DB operations will fail until connection is established:', err.message);
 });
