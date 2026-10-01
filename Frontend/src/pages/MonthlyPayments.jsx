@@ -637,7 +637,7 @@ const MonthlyPayments = () => {
                               {formatPersonName(p.name)}
                             </span>
                             {p.relationship && (
-                              <span className="inline-block text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider print:text-[7pt] print:text-slate-700 leading-none mt-0.5 font-sans">
+                              <span className="inline-block text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider print:hidden leading-none mt-0.5 font-sans">
                                 {relationshipLabel(p.relationship)}
                               </span>
                             )}

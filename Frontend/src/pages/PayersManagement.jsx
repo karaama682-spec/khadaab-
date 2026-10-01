@@ -308,7 +308,7 @@ const PayersManagement = () => {
                       <td className="px-5 py-4 text-sm font-bold text-slate-900 dark:text-slate-100">
                         {payerName(p.name)}
                         {p.relationship && (
-                          <span className="block text-[10px] text-slate-400 font-semibold uppercase">{relationshipLabel(p.relationship)}</span>
+                          <span className="block text-[10px] text-slate-400 font-semibold uppercase print:hidden">{relationshipLabel(p.relationship)}</span>
                         )}
                       </td>
                       <td className="px-5 py-4 text-sm font-semibold text-slate-600 dark:text-slate-300">
