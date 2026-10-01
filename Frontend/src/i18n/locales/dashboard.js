@@ -81,6 +81,11 @@ export default {
         explanation: 'Unpaid tuition fees carried over from all previous cycles (before {cycle}). When a cycle ends, its unpaid amount leaves "Pending Student Fees" and is added here. In Monthly Payments, choose the month you want to see the people.',
         statLabel: 'Most Recent Cycle', actionText: 'View Non-Payers (Only Pending)'
       },
+      historicalCycleDebt: {
+        label: 'Historical Cycle Debt', subtitle: 'Debt frozen at cycle close', badge: 'Sealed History', description: 'Debt recorded at close of {cycle}',
+        explanation: 'Historical snapshot of unpaid tuition fees frozen at the close of cycle ({cycle}). Payments made in subsequent cycles do not mutate this record. Click to search debtors in Monthly Payments.',
+        statLabel: 'Closed Cycle', actionText: 'View Cycle Payers (Monthly Payments)'
+      },
       todayStudentAttendance: {
         label: 'Student Attendance Today', subtitle: 'Student attendance today', badge: 'Today', description: 'Students present today',
         explanation: 'The number of students confirmed present today. The total number of active students is {total}.',
@@ -173,6 +178,11 @@ export default {
         label: 'Deyn Hore', subtitle: 'Deynta Wareegyadii Hore', badge: 'Wareegyadii Hore', description: 'Ka hor {cycle}',
         explanation: 'Lacagaha waxbarashada ee aan la bixin ee ka soo haray dhammaan wareegyadii hore (ka hor {cycle}). Marka wareeg dhammaado, lacagta ku dhiman waxay ka baxdaa "Khidmadda Ardayda Ku Dhiman" waxayna halkan ku soo biirtaa. Lacag-bixinta Bishii ka dooro bishii aad rabto si aad u aragto dadka.',
         statLabel: 'Wareeggii u dambeeyay', actionText: 'Eeg Dadka aan Bixin (Kaliya kuwa Ku Dhiman)'
+      },
+      historicalCycleDebt: {
+        label: 'Deyntii Cycle-kii Xirmay', subtitle: 'Deyntii lagu xiray cycle-kii hore (Snapshot)', badge: 'Taariikh Qufulan', description: 'Deyntii lagu diiwaangeliyay xiritaankii {cycle}',
+        explanation: 'Waa sawir rasmi ah (snapshot) oo muujinaya deyntii ku hartay cycle-ka ({cycle}) markii la xirayay. Lacag dambe oo la bixiyo waxba kama beddelayso taariikhdan. Guji si aad ugu baarto Monthly Payments.',
+        statLabel: 'Cycle-kii Xirmay', actionText: 'Eeg Payers-ka Cycle-kaas (Monthly Payments)'
       },
       todayStudentAttendance: {
         label: 'Xaadirinta Ardayda Maanta', subtitle: 'Imaanshaha Ardayda Maanta', badge: 'Maanta', description: 'Ardayda xaadirka ah maanta',

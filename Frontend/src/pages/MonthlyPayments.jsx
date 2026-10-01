@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   CalendarRange, Search, Phone, ChevronDown, ChevronRight, Wallet, X,
-  CheckCircle2, Clock, AlertCircle, Users, ArrowUpRight, DollarSign, Filter, Printer
+  CheckCircle2, Clock, AlertCircle, Users, ArrowUpRight, DollarSign, Filter, Printer, History
 } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
@@ -71,16 +71,26 @@ const MonthlyPayments = () => {
   const initialStatus = searchParams.get('status') || searchParams.get('filter') || 'all';
   const [statusFilter, setStatusFilter] = useState(initialStatus);
 
+  // Open on the requested URL ?month=YYYY-MM or CURRENT 25→24 billing cycle
+  const initialMonthParam = searchParams.get('month');
+  const [initYear, initMonth] = (initialMonthParam && /^\d{4}-\d{2}$/.test(initialMonthParam)
+    ? initialMonthParam
+    : currentCycle()
+  ).split('-').map(Number);
+  const [year, setYear] = useState(initYear);
+  const [month, setMonth] = useState(initMonth - 1); // 0-11
+
   // Sync with URL query parameter when it changes
   useEffect(() => {
     const s = searchParams.get('status') || searchParams.get('filter') || 'all';
     setStatusFilter(s);
+    const m = searchParams.get('month');
+    if (m && /^\d{4}-\d{2}$/.test(m)) {
+      const [y, mon] = m.split('-').map(Number);
+      setYear(y);
+      setMonth(mon - 1);
+    }
   }, [searchParams]);
-
-  // Open on the CURRENT 25→24 billing cycle
-  const [initYear, initMonth] = currentCycle().split('-').map(Number);
-  const [year, setYear] = useState(initYear);
-  const [month, setMonth] = useState(initMonth - 1); // 0-11
 
   const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
@@ -352,8 +362,14 @@ const MonthlyPayments = () => {
             <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none md:text-4xl">
               {t('monthlyPayments.title')}
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 text-xs font-bold mt-2 uppercase tracking-wider">
-              {t('monthlyPayments.subtitle')} · {cycleLabel(monthKey)}
+            <p className="text-slate-500 dark:text-slate-400 text-xs font-bold mt-2 uppercase tracking-wider flex items-center gap-2 flex-wrap">
+              <span>{t('monthlyPayments.subtitle')} · {cycleLabel(monthKey)}</span>
+              {monthKey < currentCycle() && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 uppercase tracking-widest">
+                  <History size={11} strokeWidth={2.5} />
+                  {locale === 'so' ? 'Snapshot Qufulan' : 'Sealed Snapshot'}
+                </span>
+              )}
             </p>
           </div>
         </div>

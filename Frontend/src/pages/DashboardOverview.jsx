@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     Activity, AlertCircle, AlertTriangle, ArrowRight, ArrowRightLeft, BookOpen,
     DollarSign, Plus, ShieldCheck, UserCheck, Users, Wallet, CalendarCheck, CreditCard, Receipt,
-    RefreshCw, X, ExternalLink, Sparkles, Filter, CheckCircle2
+    RefreshCw, X, ExternalLink, Sparkles, Filter, CheckCircle2, History
 } from 'lucide-react';
 import KPICard from './KPICard';
 import api, { clearApiCache } from '../services/api';
@@ -80,6 +80,7 @@ const DashboardOverview = () => {
     const cycle = currentCycle();
     const billingCycleName = cycleLabel(cycle);
     const previousCycleName = cycleLabel(previousCycle(cycle));
+    const prevCycleKey = previousCycle(cycle);
     const balance = (kpis.totalIncome || 0) - (kpis.totalExpenses || 0);
     const fmtSignedMoney = (n) => `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString()}`;
 
@@ -249,6 +250,20 @@ const DashboardOverview = () => {
             description: cardText('previousDebt', 'description', { cycle: billingCycleName }),
             explanationVars: { cycle: billingCycleName },
             statValue: previousCycleName
+        },
+        {
+            id: 'historical-cycle-debt',
+            textKey: 'historicalCycleDebt',
+            category: 'finance',
+            value: money(kpis.historicalCycleDebt),
+            rawValue: kpis.historicalCycleDebt || 0,
+            icon: <History size={20} />,
+            color: 'bg-amber-600',
+            badgeColor: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
+            path: `/finance/monthly-payments?month=${kpis.historicalCycle || prevCycleKey}&status=pending`,
+            description: cardText('historicalCycleDebt', 'description', { cycle: kpis.historicalCycleLabel || previousCycleName }),
+            explanationVars: { cycle: kpis.historicalCycleLabel || previousCycleName },
+            statValue: kpis.historicalCycleLabel || previousCycleName
         },
         {
             id: 'today-student-attendance',

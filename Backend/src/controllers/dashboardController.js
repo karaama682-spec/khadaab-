@@ -10,6 +10,7 @@ const TeacherAttendance = require('../models/TeacherAttendance');
 const Notification = require('../models/Notification');
 const { currentCycle, cycleRange, cycleMatch, isValidCycleKey } = require('../utils/billingCycle');
 const { computeFeeTotals, computePreviousDebt } = require('./cashbookController');
+const { getHistoricalDebtKPI } = require('../services/cycleSnapshotService');
 
 // In-memory cache to prevent re-running 13 aggregations on every dashboard visit
 const dashboardCache = new Map();
@@ -54,6 +55,7 @@ const getDashboardData = asyncHandler(async (req, res) => {
         totalSalariesAgg,
         feeTotals,
         previousDebt,
+        historicalDebtInfo,
         todayStudentAttendance,
         todayTeacherAttendance,
         recentTransactions,
@@ -91,6 +93,8 @@ const getDashboardData = asyncHandler(async (req, res) => {
         // (the same per-cycle pending rule, summed). Pending above stays
         // current-cycle only, so the two never overlap.
         computePreviousDebt(cycle),
+        // Historical Cycle Debt: frozen snapshot of the most recently closed cycle
+        getHistoricalDebtKPI(cycle),
         StudentAttendance.countDocuments({ ...branchQuery, date: { $gte: startOfToday, $lte: endOfToday }, status: 'Present' }),
         TeacherAttendance.countDocuments({ ...branchQuery, date: { $gte: startOfToday, $lte: endOfToday }, status: 'Present' }),
         Transaction.find(branchQuery).sort({ date: -1 }).limit(10).lean(),
@@ -117,6 +121,10 @@ const getDashboardData = asyncHandler(async (req, res) => {
             totalSalaries,
             expectedStudentFees,
             previousDebt,
+            historicalCycleDebt: historicalDebtInfo ? (historicalDebtInfo.historicalCycleDebt || 0) : 0,
+            historicalCycle: historicalDebtInfo ? historicalDebtInfo.historicalCycle : null,
+            historicalCycleLabel: historicalDebtInfo ? historicalDebtInfo.historicalCycleLabel : '',
+            historicalPayerCount: historicalDebtInfo ? (historicalDebtInfo.historicalPayerCount || 0) : 0,
             todayStudentAttendance,
             todayTeacherAttendance
         },

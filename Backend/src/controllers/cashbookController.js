@@ -15,6 +15,7 @@ const {
     currentCycle, nextCycle, cycleMatch
 } = require('../utils/billingCycle');
 const { getStudentFeeForCycle } = require('../utils/studentFee');
+const { ensureCycleSnapshot } = require('../services/cycleSnapshotService');
 
 // The wallet is populated alongside the category so reports can name the
 // institute side of a transaction: it is the sender on an expense and the
@@ -1233,6 +1234,15 @@ const getPayers = asyncHandler(async (req, res) => {
     const requestedCycle = isValidCycleKey(req.query.month || '') ? req.query.month : null;
     const cycle = requestedCycle || currentCycle();
 
+    // If a closed historical cycle is requested, serve the sealed snapshot.
+    // Immutable: payments made later do not alter historical cycle debt.
+    if (requestedCycle && requestedCycle < currentCycle()) {
+        const snapshot = await ensureCycleSnapshot(requestedCycle);
+        if (snapshot && Array.isArray(snapshot.payers) && snapshot.payers.length > 0) {
+            return res.json(snapshot.payers);
+        }
+    }
+
     // Reuse the shared fee-data calculation. Monthly Payments (a specific cycle)
     // bounds students to those registered by the cycle end; the Payers page (no
     // cycle) lists every active student. Registration-window rationale:
@@ -1304,6 +1314,7 @@ const getPayers = asyncHandler(async (req, res) => {
             studentCount: g.students.length,
             totalFee: g.totalFee,
             paidAmount,
+            remaining: Math.max(0, g.totalFee - paidAmount),
             paid: g.totalFee > 0 && paidAmount >= g.totalFee,
             month: cycle,
             cycle
