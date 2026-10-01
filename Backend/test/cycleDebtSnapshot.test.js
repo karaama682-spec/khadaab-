@@ -125,3 +125,14 @@ test('Dashboard KPI: getHistoricalDebtKPI returns the frozen snapshot of the clo
     assert.equal(kpi.historicalCycleDebt, 20, 'Dashboard KPI must display the frozen $20 debt');
     assert.equal(kpi.historicalPayerCount, 1);
 });
+
+test('Previous Debt view: getPayers with view=previousDebt returns live arrears matching computePreviousDebt', async () => {
+    const { computePreviousDebt } = require('../src/controllers/cashbookController');
+    const livePreviousDebt = await computePreviousDebt(cycles.now);
+
+    const { body: prevPayers } = await invoke(getPayers, { query: { view: 'previousDebt' } });
+    assert.ok(Array.isArray(prevPayers));
+    const sumRemaining = prevPayers.reduce((acc, p) => acc + (p.remaining || 0), 0);
+    assert.equal(sumRemaining, livePreviousDebt, 'Sum of remaining in view=previousDebt must strictly equal computePreviousDebt');
+});
+

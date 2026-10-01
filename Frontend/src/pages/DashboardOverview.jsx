@@ -246,7 +246,7 @@ const DashboardOverview = () => {
             icon: <AlertCircle size={20} />,
             color: 'bg-red-600',
             badgeColor: 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300',
-            path: '/finance/monthly-payments?status=pending',
+            path: '/finance/monthly-payments?view=previousDebt&status=pending',
             description: cardText('previousDebt', 'description', { cycle: billingCycleName }),
             explanationVars: { cycle: billingCycleName },
             statValue: previousCycleName
@@ -260,7 +260,7 @@ const DashboardOverview = () => {
             icon: <History size={20} />,
             color: 'bg-amber-600',
             badgeColor: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
-            path: `/finance/monthly-payments?month=${kpis.historicalCycle || prevCycleKey}&status=pending`,
+            path: `/finance/monthly-payments?month=${kpis.historicalCycle || prevCycleKey}&view=snapshot&status=pending`,
             description: cardText('historicalCycleDebt', 'description', { cycle: kpis.historicalCycleLabel || previousCycleName }),
             explanationVars: { cycle: kpis.historicalCycleLabel || previousCycleName },
             statValue: kpis.historicalCycleLabel || previousCycleName

@@ -1088,6 +1088,132 @@ const computePreviousDebt = async (cycle = currentCycle(), { studentIds = null, 
     return detail ? { debt, rows } : debt;
 };
 
+// Generates the payer list for live Previous Debt across all cycles before currentCycle,
+// strictly matching computePreviousDebt's total.
+const getPreviousDebtPayers = async (cycle = currentCycle()) => {
+    const [firstByDate, firstByKey] = await Promise.all([
+        Payment.findOne({ status: 'Completed', paymentDate: { $ne: null } }).sort({ paymentDate: 1 }).select('paymentDate').lean(),
+        Payment.findOne({ status: 'Completed', billingCycle: { $nin: [null, ''] } }).sort({ billingCycle: 1 }).select('billingCycle').lean()
+    ]);
+    const starts = [
+        firstByDate && cycleKeyForDate(firstByDate.paymentDate),
+        firstByKey && firstByKey.billingCycle
+    ].filter(Boolean).sort();
+    const firstCycle = starts[0];
+    if (!firstCycle || firstCycle >= cycle) return [];
+
+    const { end: lastEnd } = cycleRange(addCycles(cycle, -1));
+    const studentQuery = {
+        status: { $nin: ['Inactive', 'Exited'] },
+        registrationDate: { $lte: lastEnd }
+    };
+    const students = await Student.find(studentQuery)
+        .select('fullName fatherName fatherPhone guardianId monthlyFee fee classId registrationDate status studentCode feeHistory')
+        .populate({ path: 'classId', select: 'name className branchId', populate: { path: 'branchId', select: 'name' } })
+        .populate('guardianId', 'fullName phone alternatePhone relationship')
+        .lean();
+    if (!students.length) return [];
+
+    const payments = await Payment.find({
+        studentId: { $in: students.map((s) => s._id) },
+        status: 'Completed'
+    }).select('studentId amount billingCycle paymentDate').lean();
+
+    const paidByStudentCycle = new Map();
+    for (const p of payments) {
+        const key = p.billingCycle || (p.paymentDate ? cycleKeyForDate(p.paymentDate) : null);
+        if (!key || key >= cycle) continue;
+        const k = `${p.studentId}|${key}`;
+        paidByStudentCycle.set(k, (paidByStudentCycle.get(k) || 0) + (Number(p.amount) || 0));
+    }
+
+    const groups = new Map();
+    for (const s of students) {
+        const regCycle = cycleKeyForDate(s.registrationDate);
+        let studentTotalFee = 0;
+        let studentTotalPaid = 0;
+        let studentTotalOwed = 0;
+
+        for (let c = regCycle > firstCycle ? regCycle : firstCycle; c < cycle; c = addCycles(c, 1)) {
+            const fee = getStudentFeeForCycle(s, c);
+            if (fee <= 0) continue;
+            const paid = paidByStudentCycle.get(`${s._id}|${c}`) || 0;
+            const owed = Math.max(0, fee - paid);
+            studentTotalFee += fee;
+            studentTotalPaid += paid;
+            studentTotalOwed += owed;
+        }
+
+        if (studentTotalOwed <= 0) continue;
+
+        const guardian = s.guardianId && typeof s.guardianId === 'object' ? s.guardianId : null;
+        const payerName = guardian?.fullName || s.fatherName || '';
+        const payerPhone = guardian?.phone || s.fatherPhone || '';
+        const payerAltPhone = guardian?.alternatePhone || '';
+        const phoneKey = digitsOnly(payerPhone);
+        const key = (guardian?._id && `g:${guardian._id}`) || phoneKey || `s:${s._id}`;
+
+        if (!groups.has(key)) {
+            groups.set(key, {
+                key,
+                name: payerName,
+                phone: payerPhone,
+                alternatePhone: payerAltPhone,
+                relationship: guardian?.relationship || '',
+                guardianId: guardian?._id || null,
+                students: [],
+                totalFee: 0,
+                paidAmount: 0,
+                remaining: 0
+            });
+        }
+
+        const g = groups.get(key);
+        g.students.push({
+            studentId: s._id,
+            name: s.fullName,
+            studentCode: s.studentCode || '',
+            className: classDisplayName(s.classId),
+            monthlyFee: studentTotalFee,
+            paid: studentTotalPaid,
+            remaining: studentTotalOwed,
+            isPaid: false
+        });
+        g.totalFee += studentTotalFee;
+        g.paidAmount += studentTotalPaid;
+        g.remaining += studentTotalOwed;
+        if (!g.name && payerName) g.name = payerName;
+        if (!g.phone && payerPhone) g.phone = payerPhone;
+        if (!g.alternatePhone && payerAltPhone) g.alternatePhone = payerAltPhone;
+        if (!g.relationship && guardian?.relationship) g.relationship = guardian.relationship;
+    }
+
+    const result = [];
+    for (const g of groups.values()) {
+        result.push({
+            key: g.key,
+            name: g.name || 'Unknown',
+            phone: g.phone,
+            alternatePhone: g.alternatePhone || '',
+            relationship: g.relationship || '',
+            guardianId: g.guardianId,
+            studentIds: g.students.map((s) => s.studentId),
+            students: g.students,
+            studentCount: g.students.length,
+            totalFee: g.totalFee,
+            paidAmount: g.paidAmount,
+            remaining: g.remaining,
+            paid: false,
+            month: 'previous',
+            cycle: `before-${cycle}`,
+            isPreviousDebt: true
+        });
+    }
+
+    result.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    return result;
+};
+
 // The payer (fee-responsible person) shown for a student: the linked guardian's
 // name, else the denormalised father name.
 const payerNameOf = (student) => {
@@ -1229,12 +1355,19 @@ const financeCardDetail = async (cardKey, cycle = currentCycle()) => {
 // One row per responsible payer (father / guardian): name, number, how many
 // students they cover, the total monthly fee, and whether it's fully paid this month.
 const getPayers = asyncHandler(async (req, res) => {
+    // 1. Live Previous Debt view: all unpaid arrears from cycles before current,
+    // exactly matching the Dashboard's Previous Debt card total.
+    if (req.query.view === 'previousDebt' || req.query.month === 'previous') {
+        const livePreviousPayers = await getPreviousDebtPayers(currentCycle());
+        return res.json(livePreviousPayers);
+    }
+
     // The `month` param is now a BILLING CYCLE key (25th→24th), not a calendar
     // month. Without it: the current cycle, every active student (Payers page).
     const requestedCycle = isValidCycleKey(req.query.month || '') ? req.query.month : null;
     const cycle = requestedCycle || currentCycle();
 
-    // If a closed historical cycle is requested, serve the sealed snapshot.
+    // 2. Sealed Historical Cycle Snapshot: closed historical cycle requested, serve the sealed snapshot.
     // Immutable: payments made later do not alter historical cycle debt.
     if (requestedCycle && requestedCycle < currentCycle()) {
         const snapshot = await ensureCycleSnapshot(requestedCycle);

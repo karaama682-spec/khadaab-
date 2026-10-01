@@ -71,6 +71,9 @@ const MonthlyPayments = () => {
   const initialStatus = searchParams.get('status') || searchParams.get('filter') || 'all';
   const [statusFilter, setStatusFilter] = useState(initialStatus);
 
+  const viewParam = searchParams.get('view');
+  const isPreviousDebtView = viewParam === 'previousDebt';
+
   // Open on the requested URL ?month=YYYY-MM or CURRENT 25→24 billing cycle
   const initialMonthParam = searchParams.get('month');
   const [initYear, initMonth] = (initialMonthParam && /^\d{4}-\d{2}$/.test(initialMonthParam)
@@ -98,7 +101,10 @@ const MonthlyPayments = () => {
     try {
       setLoading(true);
       setError(null);
-      const { data } = await api.get('/cashbook/payers', { params: { month: monthKey } });
+      const params = isPreviousDebtView
+        ? { view: 'previousDebt' }
+        : { month: monthKey, view: viewParam || undefined };
+      const { data } = await api.get('/cashbook/payers', { params });
       setPayers(data || []);
     } catch (err) {
       console.error('Failed to load monthly payments', err);
@@ -112,7 +118,7 @@ const MonthlyPayments = () => {
 
   useEffect(() => {
     fetchPayers();
-  }, [monthKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [monthKey, isPreviousDebtView, viewParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Status filter logic
   const statusFiltered = useMemo(() => {
@@ -360,15 +366,29 @@ const MonthlyPayments = () => {
           </div>
           <div>
             <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none md:text-4xl">
-              {t('monthlyPayments.title')}
+              {isPreviousDebtView
+                ? (locale === 'so' ? 'Deynta Wareegyadii Hore' : 'Previous Cycles Debt')
+                : t('monthlyPayments.title')}
             </h1>
             <p className="text-slate-500 dark:text-slate-400 text-xs font-bold mt-2 uppercase tracking-wider flex items-center gap-2 flex-wrap">
-              <span>{t('monthlyPayments.subtitle')} · {cycleLabel(monthKey)}</span>
-              {monthKey < currentCycle() && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 uppercase tracking-widest">
-                  <History size={11} strokeWidth={2.5} />
-                  {locale === 'so' ? 'Snapshot Qufulan' : 'Sealed Snapshot'}
-                </span>
+              {isPreviousDebtView ? (
+                <>
+                  <span>{locale === 'so' ? 'Deymaha Nool ee Ka Horreeyay' : 'All Arrears Before'} · {cycleLabel(currentCycle())}</span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 uppercase tracking-widest">
+                    <AlertCircle size={11} strokeWidth={2.5} />
+                    {locale === 'so' ? 'Deyn Hore oo Nool' : 'Live Previous Debt'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span>{t('monthlyPayments.subtitle')} · {cycleLabel(monthKey)}</span>
+                  {monthKey < currentCycle() && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 uppercase tracking-widest">
+                      <History size={11} strokeWidth={2.5} />
+                      {locale === 'so' ? 'Snapshot Qufulan' : 'Sealed Snapshot'}
+                    </span>
+                  )}
+                </>
               )}
             </p>
           </div>
@@ -376,26 +396,45 @@ const MonthlyPayments = () => {
 
         {/* Action Controls: Period selector + Print Button */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Period selector */}
-          <div className="flex items-center gap-3 bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm w-full sm:w-auto print:hidden">
-            <label htmlFor="month-select" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 shrink-0 leading-tight">
-              {t('monthlyPayments.cycle')}
-            </label>
-            <select
-              id="month-select"
-              value={monthKey}
-              onChange={(e) => {
-                const [y, m] = e.target.value.split('-');
-                setYear(Number(y));
-                setMonth(Number(m) - 1);
+          {/* If in previousDebtView, show a switcher back to monthly view */}
+          {isPreviousDebtView ? (
+            <button
+              type="button"
+              onClick={() => {
+                const nextParams = new URLSearchParams(searchParams);
+                nextParams.delete('view');
+                setSearchParams(nextParams);
               }}
-              className="w-full min-w-0 bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+              className="flex items-center gap-2 rounded-2xl bg-slate-100 dark:bg-slate-800 px-4 py-3 text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all print:hidden"
             >
-              {monthOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
+              <span>{locale === 'so' ? '← Eeg Wareegga Hadda' : '← View Current Cycle'}</span>
+            </button>
+          ) : (
+            /* Period selector */
+            <div className="flex items-center gap-3 bg-white dark:bg-slate-900 rounded-2xl px-5 py-3 border border-slate-100 dark:border-slate-800 shadow-sm w-full sm:w-auto print:hidden">
+              <label htmlFor="month-select" className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 shrink-0 leading-tight">
+                {t('monthlyPayments.cycle')}
+              </label>
+              <select
+                id="month-select"
+                value={monthKey}
+                onChange={(e) => {
+                  const [y, m] = e.target.value.split('-');
+                  setYear(Number(y));
+                  setMonth(Number(m) - 1);
+                  const nextParams = new URLSearchParams(searchParams);
+                  nextParams.delete('view');
+                  nextParams.set('month', e.target.value);
+                  setSearchParams(nextParams);
+                }}
+                className="w-full min-w-0 bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+              >
+                {monthOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Print Button */}
           <button
