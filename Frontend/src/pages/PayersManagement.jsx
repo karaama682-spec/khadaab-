@@ -4,6 +4,7 @@ import { jsPDF } from 'jspdf';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { useLanguage } from '../i18n/LanguageContext.jsx';
+import { currentCycle, cycleLabel } from '../utils/billingCycle';
 
 const fmtMoney = (n) =>
   Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -11,6 +12,29 @@ const fmtMoney = (n) =>
 const PayersManagement = () => {
   const { showAlert } = useAlert();
   const { t, locale } = useLanguage();
+  // Dynamic tenant branding
+  const [tenantInfo, setTenantInfo] = useState(() => {
+    try {
+      const cached = localStorage.getItem('tenantBranding');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.name) return { name: parsed.name, subtitle: parsed.systemSubtitle || '' };
+      }
+    } catch (e) {}
+    return { name: 'salaax aldaareyn', subtitle: '' };
+  });
+
+  useEffect(() => {
+    api.get('/tenants/me').then(({ data }) => {
+      if (data?.name) {
+        setTenantInfo({
+          name: data.name,
+          subtitle: data.systemSubtitle || ''
+        });
+      }
+    }).catch(() => {});
+  }, []);
+
   // The API names a payer "Unknown" when none is stored; show that in the selected language.
   const payerName = (name) => (!name || name === 'Unknown' ? t('common.unknown') : name);
   const relationshipLabel = (value) => t(`academic.guardians.relationships.${value}`, { defaultValue: value });
@@ -228,7 +252,137 @@ const PayersManagement = () => {
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24 print:p-0 print:space-y-4">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24 print:p-0 print:m-0 print:space-y-0 print:max-w-none print:pb-0">
+      {/* Ultra-compact print style - 100% Pure White Paper, No Dark Fills */}
+      <style>{`
+        @media print {
+          @page {
+            margin: 4mm 4mm 4mm 4mm !important;
+            size: A4 portrait;
+          }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          body, html, #root {
+            background: #ffffff !important;
+            color: #000000 !important;
+            font-size: 8pt !important;
+            font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+          }
+          .person-name-print {
+            font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif !important;
+            font-weight: 800 !important;
+            color: #000000 !important;
+            text-transform: capitalize !important;
+            letter-spacing: -0.01em !important;
+          }
+          aside, nav, header, footer, .print\\:hidden {
+            display: none !important;
+          }
+          main {
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+          }
+          .print-header-banner {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            padding: 2px 0 6px 0 !important;
+            margin-bottom: 6px !important;
+            border-bottom: 1.5px solid #000000 !important;
+          }
+          .print-header-banner h1,
+          .print-header-banner h2,
+          .print-header-banner p,
+          .print-header-banner span,
+          .print-header-banner div {
+            color: #000000 !important;
+          }
+          .print-compact-table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            margin: 0 !important;
+            background-color: #ffffff !important;
+          }
+          .print-compact-table th {
+            padding: 3px 4px !important;
+            font-size: 7.5pt !important;
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            border: 0.5px solid #000000 !important;
+            font-weight: 900 !important;
+            line-height: 1.1 !important;
+            text-transform: uppercase !important;
+          }
+          .print-compact-table th * {
+            color: #000000 !important;
+          }
+          .print-compact-table td {
+            padding: 2px 4px !important;
+            font-size: 8pt !important;
+            line-height: 1.1 !important;
+            border: 0.5px solid #cbd5e1 !important;
+            color: #000000 !important;
+            background-color: #ffffff !important;
+          }
+          .print-compact-table td * {
+            color: #000000 !important;
+          }
+          .print-compact-table tr {
+            page-break-inside: avoid !important;
+            background-color: #ffffff !important;
+          }
+          .print-summary-row {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            font-weight: 900 !important;
+          }
+          .print-summary-row td {
+            color: #000000 !important;
+            background-color: #ffffff !important;
+            border-top: 1.5px solid #000000 !important;
+            border-bottom: 1.5px solid #000000 !important;
+            border-left: 0.5px solid #000000 !important;
+            border-right: 0.5px solid #000000 !important;
+            font-weight: 900 !important;
+          }
+          .print-summary-row td * {
+            color: #000000 !important;
+            font-weight: 900 !important;
+          }
+        }
+      `}</style>
+
+      {/* Printable Header Banner (Front of paper - pure white, crisp black text) */}
+      <div className="hidden print:block print-header-banner">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-[11pt] font-black uppercase tracking-tight text-black leading-tight">
+              {tenantInfo.name} - {tenantInfo.subtitle && tenantInfo.subtitle !== 'Institute Management' ? tenantInfo.subtitle : t('nav.instituteManagement')}
+            </h1>
+            <h2 className="text-[8.5pt] font-extrabold text-black uppercase mt-0.5 leading-tight">
+              {t('payers.title')} - {t('payers.printChecklist')}
+            </h2>
+            <p className="text-[7.5pt] text-black mt-0.5">
+              {t('monthlyPayments.print.cycle')}: <span className="font-bold text-black">{cycleLabel(currentCycle())}</span> · {t('monthlyPayments.print.printed')}: <span className="text-black">{new Date().toLocaleDateString(locale)} {new Date().toLocaleTimeString(locale || [], { hour: '2-digit', minute: '2-digit' })}</span>
+            </p>
+          </div>
+          <div className="text-right text-[8pt] leading-tight text-black">
+            <p className="font-bold text-black">
+              {t('common.total')}: <span className="font-black text-[9pt]">${fmtMoney(filteredTotal)}</span>
+            </p>
+            <p className="text-[7.5pt] text-slate-700">
+              {t('payers.pdf.payers')}: <span className="font-bold text-black">{filtered.length}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2 print:hidden">
         <div className="flex items-center gap-6">
@@ -277,21 +431,21 @@ const PayersManagement = () => {
       </div>
 
       {/* Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden print:rounded-none print:border-0 print:shadow-none">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
+      <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden print:rounded-none print:border-0 print:shadow-none print:m-0 print:p-0">
+        <div className="overflow-x-auto print:overflow-visible">
+          <table className="w-full text-left print-compact-table">
             <thead>
-              <tr className="bg-slate-50/70 dark:bg-slate-800/40 text-slate-400 text-[10px] font-black uppercase tracking-wider border-b border-slate-100 dark:border-slate-800">
+              <tr className="bg-slate-50/70 dark:bg-slate-800/40 text-slate-400 text-[10px] font-black uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 print:text-[7.5pt] print:bg-white print:text-black">
                 <th className="px-4 py-4 w-10 print:hidden"></th>
-                <th className="px-5 py-4">{t('payers.colName')}</th>
-                <th className="px-5 py-4">{t('payers.colNumbers')}</th>
-                <th className="px-5 py-4 text-center">{t('nav.students')}</th>
-                <th className="px-5 py-4 text-right">{t('payers.colTotal')}</th>
-                <th className="px-5 py-4 text-center">{t('common.paid')}</th>
+                <th className="px-5 py-4 print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">{t('payers.colName')}</th>
+                <th className="px-5 py-4 print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">{t('payers.colNumbers')}</th>
+                <th className="px-5 py-4 text-center print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">{t('nav.students')}</th>
+                <th className="px-5 py-4 text-right print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">{t('payers.colTotal')}</th>
+                <th className="px-5 py-4 text-center print:px-1.5 print:py-1 print:text-[8pt] print:text-black print:bg-white">{t('common.paid')}</th>
                 <th className="px-5 py-4 text-center print:hidden">{t('common.actions')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 print:divide-slate-300">
               {filtered.map((p) => {
                 const isOpen = expandedKey === p.key;
                 return (
@@ -300,37 +454,39 @@ const PayersManagement = () => {
                       onClick={() => setExpandedKey(isOpen ? null : p.key)}
                       className={`cursor-pointer transition-colors ${
                         isOpen ? 'bg-slate-50 dark:bg-slate-800/30' : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/10'
-                      }`}
+                      } print:border-b print:border-slate-300`}
                     >
                       <td className="px-4 py-4 text-slate-400 print:hidden">
                         {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                       </td>
-                      <td className="px-5 py-4 text-sm font-bold text-slate-900 dark:text-slate-100">
-                        {payerName(p.name)}
+                      <td className="px-5 py-4 text-sm font-bold text-slate-900 dark:text-slate-100 print:px-1.5 print:py-0.5 print:text-[8pt] print:text-black">
+                        <span className="block person-name-print font-sans font-bold capitalize print:text-[8.5pt] print:text-black">
+                          {payerName(p.name)}
+                        </span>
                         {p.relationship && (
                           <span className="block text-[10px] text-slate-400 font-semibold uppercase print:hidden">{relationshipLabel(p.relationship)}</span>
                         )}
                       </td>
-                      <td className="px-5 py-4 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                        <div className="flex flex-col gap-1.5">
+                      <td className="px-5 py-4 text-sm font-semibold text-slate-600 dark:text-slate-300 print:px-1.5 print:py-0.5 print:text-[8pt] print:text-black">
+                        <div className="flex flex-col gap-1.5 print:gap-0 leading-tight">
                           {p.phone ? (
                             <a
                               href={`tel:${p.phone}`}
                               onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-500/20 w-fit"
+                              className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-500/20 w-fit print:bg-transparent print:p-0 print:border-0 print:text-black print:text-[7.5pt]"
                               title={t('academic.guardians.phone1Title')}
                             >
                               <Phone size={11} className="shrink-0 print:hidden text-emerald-500" />
                               <span>{p.phone}</span>
                             </a>
                           ) : (
-                            <span className="text-slate-400 font-mono text-xs">—</span>
+                            <span className="text-slate-400 font-mono text-xs print:text-[7.5pt]">—</span>
                           )}
                           {p.alternatePhone && p.alternatePhone !== p.phone && (
                             <a
                               href={`tel:${p.alternatePhone}`}
                               onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 rounded-lg border border-blue-500/20 w-fit"
+                              className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 rounded-lg border border-blue-500/20 w-fit print:bg-transparent print:p-0 print:border-0 print:text-black print:text-[7.5pt]"
                               title={t('academic.guardians.phone2Title')}
                             >
                               <Phone size={11} className="shrink-0 print:hidden text-blue-500" />
@@ -339,18 +495,18 @@ const PayersManagement = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-center">
-                        <span className="px-3 py-1 text-xs font-black rounded-full bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-300">
+                      <td className="px-5 py-4 text-center print:px-1.5 print:py-0.5 print:text-[8pt] print:text-black">
+                        <span className="px-3 py-1 text-xs font-black rounded-full bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-300 print:bg-transparent print:p-0 print:text-black">
                           {p.studentCount}
                         </span>
                       </td>
-                      <td className="px-5 py-4 text-right text-sm font-black text-slate-900 dark:text-white">
+                      <td className="px-5 py-4 text-right text-sm font-black text-slate-900 dark:text-white print:px-1.5 print:py-0.5 print:text-[8pt] print:text-black tabular-nums">
                         ${fmtMoney(p.totalFee)}
                       </td>
                       {/* Empty box — printed and ticked by hand */}
-                      <td className="px-5 py-4">
+                      <td className="px-5 py-4 print:px-1.5 print:py-0.5 text-center">
                         <div className="flex items-center justify-center">
-                          <span className="inline-block w-6 h-6 rounded-md border-2 border-slate-900 dark:border-slate-300 print:border-black" />
+                          <span className="inline-block w-6 h-6 rounded-md border-2 border-slate-900 dark:border-slate-300 print:border-black print:w-3.5 print:h-3.5 print:border print:rounded-sm" />
                         </div>
                       </td>
                       <td className="px-5 py-4 text-center print:hidden" onClick={(e) => e.stopPropagation()}>
@@ -433,6 +589,25 @@ const PayersManagement = () => {
                 </tr>
               )}
             </tbody>
+            {!loading && !error && filtered.length > 0 && (
+              <tfoot>
+                <tr className="print-summary-row bg-slate-100/80 dark:bg-slate-800/60 font-black text-slate-900 dark:text-white">
+                  <td className="px-4 py-4 print:hidden"></td>
+                  <td className="px-5 py-3 text-xs uppercase tracking-wider print:px-1.5 print:py-1 print:text-[8pt] print:text-black">
+                    {t('common.total')} ({filtered.length} {t('payers.pdf.payers')})
+                  </td>
+                  <td className="px-5 py-3 print:px-1.5 print:py-1 print:text-[8pt] print:text-black">—</td>
+                  <td className="px-5 py-3 text-center print:px-1.5 print:py-1 print:text-[8pt] print:text-black">
+                    {filtered.reduce((s, p) => s + (p.studentCount || 0), 0)}
+                  </td>
+                  <td className="px-5 py-3 text-right print:px-1.5 print:py-1 print:text-[8pt] print:text-black tabular-nums">
+                    ${fmtMoney(filteredTotal)}
+                  </td>
+                  <td className="px-5 py-3 print:px-1.5 print:py-1"></td>
+                  <td className="px-5 py-3 print:hidden"></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
@@ -440,7 +615,7 @@ const PayersManagement = () => {
       {/* Grand Total — summed from every payer's server-calculated total fee.
           Positioned below the payer table so the figure closes the list.
           Values and calculations are unchanged. */}
-      <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm px-8 py-6 flex flex-wrap items-center justify-between gap-4 print:rounded-none print:border-0 print:shadow-none">
+      <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm px-8 py-6 flex flex-wrap items-center justify-between gap-4 print:hidden">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 print:hidden">
             <Wallet size={22} strokeWidth={2.5} />
