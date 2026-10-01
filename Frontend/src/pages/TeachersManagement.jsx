@@ -10,7 +10,8 @@ import {
   Trash2,
   X,
   User,
-  IdCard as IdCardIcon
+  IdCard as IdCardIcon,
+  Printer
 } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
@@ -19,7 +20,7 @@ import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const TeachersManagement = () => {
   const { showAlert, showConfirm } = useAlert();
-  const { t: tr, tv } = useLanguage();
+  const { t: tr, tv, locale } = useLanguage();
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cardTeacher, setCardTeacher] = useState(null);
@@ -28,6 +29,32 @@ const TeachersManagement = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const [tenantInfo, setTenantInfo] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tenant_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          name: parsed.name || 'Salaaxu–Aldaareyn',
+          subtitle: parsed.systemSubtitle || 'Institute Management'
+        };
+      }
+    } catch (_) {}
+    return { name: 'Salaaxu–Aldaareyn', subtitle: 'Institute Management' };
+  });
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await api.get('/settings');
+        setTenantInfo({
+          name: data?.name || 'Salaaxu–Aldaareyn',
+          subtitle: data?.systemSubtitle || 'Institute Management'
+        });
+      } catch (_) {}
+    })();
+  }, []);
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -77,6 +104,12 @@ const TeachersManagement = () => {
       return matchesSearch && matchesGender;
     });
   }, [teachers, searchTerm, genderFilter]);
+
+  const filteredTotalSalary = useMemo(() => {
+    return filteredTeachers.reduce((sum, t) => sum + (Number(t.salary) || 0), 0);
+  }, [filteredTeachers]);
+
+  const handlePrint = () => window.print();
 
   const handleOpenAdd = () => {
     setEditingTeacher(null);
@@ -197,9 +230,133 @@ const TeachersManagement = () => {
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24">
+    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24 print:p-0 print:m-0 print:space-y-0 print:max-w-none print:pb-0">
+      {/* Print CSS Styles - Pure White A4 Paper, Sharp Contrast */}
+      <style>{`
+        @media print {
+          @page {
+            margin: 6mm 6mm 6mm 6mm !important;
+            size: A4 portrait;
+          }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          body, html, #root {
+            background: #ffffff !important;
+            color: #000000 !important;
+            font-size: 8.5pt !important;
+            font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+          }
+          aside, nav, header, footer, .print\\:hidden {
+            display: none !important;
+          }
+          main {
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            background: #ffffff !important;
+          }
+          .print-header-banner {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            padding: 2px 0 8px 0 !important;
+            margin-bottom: 8px !important;
+            border-bottom: 2px solid #000000 !important;
+          }
+          .print-header-banner h1,
+          .print-header-banner h2,
+          .print-header-banner p,
+          .print-header-banner span,
+          .print-header-banner div {
+            color: #000000 !important;
+          }
+          .print-compact-table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            margin: 0 !important;
+            background-color: #ffffff !important;
+          }
+          .print-compact-table th {
+            padding: 5px 8px !important;
+            font-size: 8pt !important;
+            background-color: #f8fafc !important;
+            color: #000000 !important;
+            border: 1px solid #000000 !important;
+            font-weight: 900 !important;
+            line-height: 1.2 !important;
+            text-transform: uppercase !important;
+          }
+          .print-compact-table th * {
+            color: #000000 !important;
+          }
+          .print-compact-table td {
+            padding: 5px 8px !important;
+            font-size: 8.5pt !important;
+            line-height: 1.2 !important;
+            border: 0.5px solid #cbd5e1 !important;
+            color: #000000 !important;
+            background-color: #ffffff !important;
+          }
+          .print-compact-table td * {
+            color: #000000 !important;
+          }
+          .print-compact-table tr {
+            page-break-inside: avoid !important;
+            background-color: #ffffff !important;
+          }
+          .print-summary-row {
+            background-color: #f8fafc !important;
+            color: #000000 !important;
+            font-weight: 900 !important;
+          }
+          .print-summary-row td {
+            color: #000000 !important;
+            background-color: #f8fafc !important;
+            border-top: 2px solid #000000 !important;
+            border-bottom: 2px solid #000000 !important;
+            border-left: 0.5px solid #000000 !important;
+            border-right: 0.5px solid #000000 !important;
+            font-weight: 900 !important;
+            font-size: 9pt !important;
+          }
+          .print-summary-row td * {
+            color: #000000 !important;
+            font-weight: 900 !important;
+          }
+        }
+      `}</style>
+
+      {/* Printable Header Banner */}
+      <div className="hidden print:block print-header-banner">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-[11pt] font-black uppercase tracking-tight text-black leading-tight">
+              {tenantInfo.name} - {tenantInfo.subtitle && tenantInfo.subtitle !== 'Institute Management' ? tenantInfo.subtitle : tr('nav.instituteManagement')}
+            </h1>
+            <h2 className="text-[9pt] font-extrabold text-black uppercase mt-0.5 leading-tight">
+              {locale === 'so' ? 'LIISKA MACALLIMIINTA IYO MUSHAARAADKA' : 'TEACHERS DIRECTORY & SALARY LIST'}
+            </h2>
+            <p className="text-[7.5pt] text-black mt-0.5">
+              {locale === 'so' ? 'Waqtiga la daabacay' : 'Printed'}: <span className="font-bold text-black">{new Date().toLocaleDateString(locale)} {new Date().toLocaleTimeString(locale || [], { hour: '2-digit', minute: '2-digit' })}</span>
+            </p>
+          </div>
+          <div className="text-right text-[8pt] leading-tight text-black">
+            <p className="font-bold text-black">
+              {locale === 'so' ? 'Wadarta Mushaarka' : 'Total Payroll'}: <span className="font-black text-[9.5pt]">${filteredTotalSalary.toLocaleString()}</span>
+            </p>
+            <p className="text-[7.5pt] text-slate-700">
+              {locale === 'so' ? 'Tirada Macallimiinta' : 'Total Teachers'}: <span className="font-bold text-black">{filteredTeachers.length}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Header Section */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2 print:hidden">
         <div className="flex items-center gap-6">
           <div className="w-16 h-16 bg-slate-900 dark:bg-slate-800 rounded-[24px] flex items-center justify-center text-brand-400 shadow-2xl border border-slate-700 ring-4 ring-brand-400/10">
             <GraduationCap size={32} strokeWidth={2.5} />
@@ -214,16 +371,28 @@ const TeachersManagement = () => {
           </div>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          className="flex items-center gap-3 px-8 py-4 bg-brand-500 hover:bg-brand-600 text-white rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:shadow-brand-500/25 transition-all active:scale-95"
-        >
-          <Plus size={18} strokeWidth={3} /> {tr('academic.teachers.registerNew')}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="flex items-center gap-2 px-6 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-200 rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-sm hover:shadow transition-all active:scale-95"
+            title={locale === 'so' ? 'Daabaco Liiska Macallimiinta' : 'Print Teachers List'}
+          >
+            <Printer size={18} strokeWidth={2.5} />
+            <span>{locale === 'so' ? 'Daabaco' : 'Print'}</span>
+          </button>
+
+          <button
+            onClick={handleOpenAdd}
+            className="flex items-center gap-3 px-8 py-4 bg-brand-500 hover:bg-brand-600 text-white rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:shadow-brand-500/25 transition-all active:scale-95"
+          >
+            <Plus size={18} strokeWidth={3} /> {tr('academic.teachers.registerNew')}
+          </button>
+        </div>
       </div>
 
       {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 print:hidden">
         <div className="p-6 rounded-[32px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-5">
           <div className="w-14 h-14 rounded-2xl bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 flex items-center justify-center">
             <GraduationCap size={28} />
@@ -248,7 +417,7 @@ const TeachersManagement = () => {
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-[28px] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-[28px] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 print:hidden">
         <div className="relative w-full md:w-96">
           <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -278,17 +447,18 @@ const TeachersManagement = () => {
       </div>
 
       {/* Teachers Directory Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden print:border-none print:shadow-none print:rounded-none">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse print-compact-table">
             <thead>
               <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                <th className="px-8 py-5">{tr('academic.teachers.colName')}</th>
-                <th className="px-8 py-5">{tr('academic.teachers.colPhone')}</th>
-                <th className="px-8 py-5">{tr('academic.teachers.colMasuul')}</th>
-                <th className="px-8 py-5">{tr('academic.teachers.colStatus')}</th>
-                <th className="px-8 py-5">{tr('academic.teachers.colSalary')}</th>
-                <th className="px-8 py-5 text-right">{tr('common.actions')}</th>
+                <th className="hidden print:table-cell text-center w-12 font-black">#</th>
+                <th className="px-8 py-5 print:p-2">{tr('academic.teachers.colName')}</th>
+                <th className="px-8 py-5 print:p-2">{tr('academic.teachers.colPhone')}</th>
+                <th className="px-8 py-5 print:hidden">{tr('academic.teachers.colMasuul')}</th>
+                <th className="px-8 py-5 print:hidden">{tr('academic.teachers.colStatus')}</th>
+                <th className="px-8 py-5 print:p-2">{tr('academic.teachers.colSalary')}</th>
+                <th className="px-8 py-5 text-right print:hidden">{tr('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
@@ -299,39 +469,43 @@ const TeachersManagement = () => {
                   </td>
                 </tr>
               ) : (
-                filteredTeachers.map(t => (
+                filteredTeachers.map((t, idx) => (
                   <tr
                     key={t._id}
                     className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors group"
                   >
-                    <td className="px-8 py-5">
+                    <td className="hidden print:table-cell text-center font-bold text-slate-800">
+                      {idx + 1}
+                    </td>
+
+                    <td className="px-8 py-5 print:p-2">
                       <div className="flex items-center gap-4">
-                        <div className="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 font-black text-base flex items-center justify-center border border-brand-100 dark:border-brand-900">
+                        <div className="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 font-black text-base flex items-center justify-center border border-brand-100 dark:border-brand-900 print:hidden">
                           {t.fullName?.[0]?.toUpperCase() || 'T'}
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900 dark:text-white text-sm">
+                          <p className="font-bold text-slate-900 dark:text-white text-sm print:text-black print:text-[8.5pt]">
                             {t.fullName || t.username}
                           </p>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-400 print:hidden">
                             {tr('academic.teachers.facultyBadge')}
                           </span>
                         </div>
                       </div>
                     </td>
 
-                    <td className="px-8 py-5">
+                    <td className="px-8 py-5 print:p-2">
                       {t.phone ? (
-                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 text-xs font-semibold">
-                          <Phone size={13} className="text-slate-400" />
-                          {t.phone}
+                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 text-xs font-semibold print:text-black print:text-[8.5pt]">
+                          <Phone size={13} className="text-slate-400 print:hidden" />
+                          <span className="font-mono">{t.phone}</span>
                         </div>
                       ) : (
-                        <span className="text-slate-400 text-xs font-medium">{tr('common.notAvailable')}</span>
+                        <span className="text-slate-400 text-xs font-medium print:text-black print:text-[8.5pt]">—</span>
                       )}
                     </td>
 
-                    <td className="px-8 py-5">
+                    <td className="px-8 py-5 print:hidden">
                       {t.masuulName || t.masuulNumber ? (
                         <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                           <p>{t.masuulName || '—'}</p>
@@ -344,7 +518,7 @@ const TeachersManagement = () => {
                       )}
                     </td>
 
-                    <td className="px-8 py-5">
+                    <td className="px-8 py-5 print:hidden">
                       <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
                         t.gender === 'Female'
                           ? 'bg-pink-50 text-pink-600 dark:bg-pink-950/40 dark:text-pink-400'
@@ -354,11 +528,11 @@ const TeachersManagement = () => {
                       </span>
                     </td>
 
-                    <td className="px-8 py-5 font-black text-slate-900 dark:text-white text-sm">
+                    <td className="px-8 py-5 font-black text-slate-900 dark:text-white text-sm print:p-2 print:text-black print:text-[8.5pt] print:font-bold">
                       ${(Number(t.salary) || 0).toLocaleString()}
                     </td>
 
-                    <td className="px-8 py-5 text-right">
+                    <td className="px-8 py-5 text-right print:hidden">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => setCardTeacher(t)}
@@ -385,6 +559,14 @@ const TeachersManagement = () => {
                     </td>
                   </tr>
                 ))
+              )}
+              {filteredTeachers.length > 0 && (
+                <tr className="hidden print:table-row print-summary-row">
+                  <td className="p-2 text-center font-black">#</td>
+                  <td className="p-2 font-black uppercase text-left">{locale === 'so' ? 'WADARTA GUUD' : 'TOTAL'}</td>
+                  <td className="p-2 font-bold text-center">{locale === 'so' ? `${filteredTeachers.length} Macallimiin` : `${filteredTeachers.length} Teachers`}</td>
+                  <td className="p-2 font-black text-left">${filteredTotalSalary.toLocaleString()}</td>
+                </tr>
               )}
             </tbody>
           </table>
