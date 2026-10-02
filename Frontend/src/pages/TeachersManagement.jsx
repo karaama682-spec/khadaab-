@@ -15,13 +15,84 @@ import {
   CheckCircle2,
   AlertCircle,
   Clock,
-  Filter
+  Filter,
+  Download
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import IdCard from '../components/IdCard.jsx';
 import { useLanguage } from '../i18n/LanguageContext.jsx';
 import { currentCycle, cycleLabel, cycleKeyForDate } from '../utils/billingCycle';
+
+const initialsOf = (name) =>
+  String(name || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(p => p[0].toUpperCase())
+    .join('') || 'T';
+
+const drawTeacherCard = (doc, teacher, instituteName, locale) => {
+  const heading = locale === 'so' ? 'KAARKA AQOONSIGA MACALLINKA' : 'TEACHER IDENTITY CARD';
+  const institute = instituteName || 'Salaaxu–Aldaareyn';
+  const name = teacher.fullName || teacher.username || '-';
+  const idNumber = teacher.teacherCode || `TCH-${(teacher._id || '').slice(-6).toUpperCase()}`;
+
+  // Header band (Indigo #4f46e5)
+  doc.setFillColor(79, 70, 229);
+  doc.rect(0, 0, 85.6, 13, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text(String(institute).toUpperCase().slice(0, 34), 4, 6);
+  doc.setFontSize(6);
+  doc.setFont('helvetica', 'normal');
+  doc.text(heading.toUpperCase(), 4, 10);
+
+  // Avatar disc
+  doc.setFillColor(226, 232, 240);
+  doc.circle(13, 30, 8, 'F');
+  doc.setTextColor(71, 85, 105);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(initialsOf(name), 13, 33, { align: 'center' });
+
+  // Name
+  doc.setTextColor(15, 23, 42);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text(doc.splitTextToSize(String(name), 55)[0], 25, 22);
+
+  // ID Number
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(79, 70, 229);
+  doc.text(String(idNumber), 25, 27.5);
+
+  // Detail rows
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(71, 85, 105);
+  let y = 33;
+  const rows = [
+    { label: locale === 'so' ? 'Doorka' : 'Role', value: locale === 'so' ? 'Macallin' : 'Teacher' },
+    { label: locale === 'so' ? 'Tel' : 'Phone', value: teacher.phone || '—' },
+    { label: locale === 'so' ? 'Mushahar' : 'Salary', value: teacher.salary ? `$${Number(teacher.salary).toLocaleString()}` : '—' }
+  ];
+
+  rows.forEach(r => {
+    doc.text(`${r.label}: ${doc.splitTextToSize(String(r.value), 50)[0]}`, 25, y);
+    y += 4.5;
+  });
+
+  // Footer divider & property text
+  doc.setDrawColor(203, 213, 225);
+  doc.line(4, 48, 81.6, 48);
+  doc.setFontSize(5);
+  doc.setTextColor(148, 163, 184);
+  doc.text(locale === 'so' ? 'Hantida Machadka Salaaxu-Aldaareyn' : 'Property of the Institution', 4, 51);
+};
 
 const TeachersManagement = () => {
   const { showAlert, showConfirm } = useAlert();
@@ -195,11 +266,48 @@ const TeachersManagement = () => {
     });
   }, [teachersWithSalary, searchTerm, genderFilter, salaryFilter]);
 
-  const filteredTotalSalary = useMemo(() => {
-    return filteredTeachers.reduce((sum, t) => sum + (Number(t.salary) || 0), 0);
+  const filteredTotals = useMemo(() => {
+    return filteredTeachers.reduce(
+      (acc, t) => {
+        acc.salary += Number(t.salary) || 0;
+        acc.paid += Number(t.paid) || 0;
+        acc.remaining += Number(t.remaining) || 0;
+        return acc;
+      },
+      { salary: 0, paid: 0, remaining: 0 }
+    );
   }, [filteredTeachers]);
 
+  const filteredTotalSalary = filteredTotals.salary;
+
   const handlePrint = () => window.print();
+
+  const handleDownloadTeacherCard = (teacher) => {
+    try {
+      const doc = new jsPDF({ unit: 'mm', format: [85.6, 54], orientation: 'landscape' });
+      drawTeacherCard(doc, teacher, tenantInfo.name, locale);
+      const safeName = String(teacher.fullName || teacher.username || 'teacher').replace(/\s+/g, '_');
+      doc.save(`Teacher_ID_${safeName}.pdf`);
+    } catch (err) {
+      console.error('Failed to download teacher ID card:', err);
+    }
+  };
+
+  const handleDownloadAllCardsPdf = () => {
+    if (filteredTeachers.length === 0) return;
+    try {
+      const doc = new jsPDF({ unit: 'mm', format: [85.6, 54], orientation: 'landscape' });
+      filteredTeachers.forEach((t, idx) => {
+        if (idx > 0) {
+          doc.addPage([85.6, 54], 'landscape');
+        }
+        drawTeacherCard(doc, t, tenantInfo.name, locale);
+      });
+      doc.save(`Teachers_All_ID_Cards_${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (err) {
+      console.error('Failed to download all teacher ID cards:', err);
+    }
+  };
 
   const handleOpenAdd = () => {
     setEditingTeacher(null);
@@ -398,6 +506,9 @@ const TeachersManagement = () => {
             page-break-inside: avoid !important;
             background-color: #ffffff !important;
           }
+          tfoot {
+            display: table-footer-group !important;
+          }
           .print-summary-row {
             background-color: #f8fafc !important;
             color: #000000 !important;
@@ -411,7 +522,7 @@ const TeachersManagement = () => {
             border-left: 0.5px solid #000000 !important;
             border-right: 0.5px solid #000000 !important;
             font-weight: 900 !important;
-            font-size: 9pt !important;
+            font-size: 8.5pt !important;
           }
           .print-summary-row td * {
             color: #000000 !important;
@@ -466,6 +577,16 @@ const TeachersManagement = () => {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleDownloadAllCardsPdf}
+            className="flex items-center gap-2 px-5 py-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-900/60 border border-indigo-200/80 dark:border-indigo-800 rounded-[20px] font-black text-[11px] uppercase tracking-[0.15em] shadow-sm hover:shadow transition-all active:scale-95"
+            title={locale === 'so' ? 'Soo deji dhammaan kaararka aqoonsiga macallimiinta (PDF)' : 'Download all teacher ID cards (PDF)'}
+          >
+            <Download size={18} strokeWidth={2.5} />
+            <span>{locale === 'so' ? 'Kaararka PDF' : 'ID Cards PDF'}</span>
+          </button>
+
           <button
             type="button"
             onClick={handlePrint}
@@ -811,27 +932,34 @@ const TeachersManagement = () => {
                     </td>
 
                     <td className="px-6 py-4 text-right print:hidden">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handleDownloadTeacherCard(t)}
+                          className="p-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 dark:text-indigo-400 transition-colors"
+                          title={locale === 'so' ? 'Soo deji Kaarka ID (PDF)' : 'Download ID Card (PDF)'}
+                        >
+                          <Download size={15} />
+                        </button>
                         <button
                           onClick={() => setCardTeacher(t)}
                           className="p-2.5 rounded-xl bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 transition-colors"
                           title={tr('academic.teachers.idCard')}
                         >
-                          <IdCardIcon size={16} />
+                          <IdCardIcon size={15} />
                         </button>
                         <button
                           onClick={() => handleOpenEdit(t)}
                           className="p-2.5 rounded-xl bg-slate-100 hover:bg-brand-50 text-slate-600 hover:text-brand-600 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 transition-colors"
                           title={tr('academic.teachers.editTitle')}
                         >
-                          <Edit2 size={16} />
+                          <Edit2 size={15} />
                         </button>
                         <button
                           onClick={() => handleDelete(t)}
                           className="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/30 dark:hover:bg-rose-900/50 dark:text-rose-400 transition-colors"
                           title={tr('academic.teachers.deleteButton')}
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={15} />
                         </button>
                       </div>
                     </td>
@@ -839,6 +967,33 @@ const TeachersManagement = () => {
                 ))
               )}
             </tbody>
+            {filteredTeachers.length > 0 && (
+              <tfoot>
+                <tr className="bg-slate-100/90 dark:bg-slate-800/90 font-black border-t-2 border-slate-900 dark:border-slate-700 print-summary-row">
+                  <td className="hidden print:table-cell text-center p-2 font-black text-black">
+                    #
+                  </td>
+                  <td className="px-6 py-4 print:p-2 font-black uppercase text-slate-900 dark:text-white print:text-black">
+                    {locale === 'so' ? 'WADARTA GUUD' : 'TOTAL'} ({filteredTeachers.length})
+                  </td>
+                  <td className="px-6 py-4 print:p-2 text-slate-400 print:text-black text-center font-normal">
+                    —
+                  </td>
+                  <td className="px-6 py-4 print:hidden text-slate-400 text-center">—</td>
+                  <td className="px-6 py-4 print:hidden text-slate-400 text-center">—</td>
+                  <td className="px-6 py-4 print:p-2 text-right font-black text-slate-900 dark:text-white print:text-black print:text-[8.5pt]">
+                    ${filteredTotals.salary.toLocaleString()}
+                  </td>
+                  <td className="px-6 py-4 print:p-2 text-right font-black text-emerald-600 dark:text-emerald-400 print:text-black print:text-[8.5pt]">
+                    ${filteredTotals.paid.toLocaleString()}
+                  </td>
+                  <td className="px-6 py-4 print:p-2 text-right font-black text-rose-600 dark:text-rose-400 print:text-black print:text-[8.5pt]">
+                    ${filteredTotals.remaining.toLocaleString()}
+                  </td>
+                  <td className="px-6 py-4 print:hidden"></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>
