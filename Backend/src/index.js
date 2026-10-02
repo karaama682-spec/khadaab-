@@ -114,6 +114,7 @@ app.use('/api/transactions', require('./routes/transactionRoutes'));
 app.use('/api/cashbook', require('./routes/cashbookRoutes'));
 app.use('/api/expenses', require('./routes/expenseRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
+app.use('/api/quran/surahs', require('./routes/quranSurahRoutes'));
 
 // Unchanged AI/Analytics/Dashboard/Settings routes if they are generic, 
 // but we deleted their routes. We can re-add them if needed, but since we deleted them let's remove.
