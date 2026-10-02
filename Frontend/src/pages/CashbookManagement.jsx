@@ -15,7 +15,7 @@ import {
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { digitsOnly, isValidSomaliMobile } from '../utils/somaliPhone';
-import { currentCycle, addCycles, cycleShortLabel, cycleKeyForDate } from '../utils/billingCycle';
+import { currentCycle, addCycles, cycleShortLabel, cycleKeyForDate, cycleLabel, cycleRangeISO } from '../utils/billingCycle';
 import { useLanguage, translate } from '../i18n/LanguageContext.jsx';
 import { monthNames } from '../i18n/core.js';
 
@@ -368,8 +368,30 @@ const CashbookManagement = () => {
     }
   }, [transactionForm.method, transactionForm.date, transactionForm.targetMonth]);
 
+  const handleDateChange = (newDate) => {
+    const newCycle = newDate ? cycleKeyForDate(newDate) : currentCycle();
+    setTransactionForm((prev) => ({
+      ...prev,
+      date: newDate,
+      targetMonth: newCycle
+    }));
+    const activePhone = walletDirection === 'sender' ? transactionForm.receiverPhone : transactionForm.senderPhone;
+    const activeSide = walletDirection === 'sender' ? 'receiver' : 'sender';
+    if (activePhone && activeSide !== 'sender') {
+      lookupPhone(activePhone, activeSide, newCycle);
+    }
+  };
+
   const handleTargetMonthChange = (newMonth) => {
-    setTransactionForm((prev) => ({ ...prev, targetMonth: newMonth }));
+    const range = cycleRangeISO(newMonth);
+    const today = new Date().toISOString().split('T')[0];
+    const newDate = (today >= range.from && today <= range.to) ? today : range.from;
+
+    setTransactionForm((prev) => ({
+      ...prev,
+      targetMonth: newMonth,
+      date: newDate
+    }));
     const activePhone = walletDirection === 'sender' ? transactionForm.receiverPhone : transactionForm.senderPhone;
     const activeSide = walletDirection === 'sender' ? 'receiver' : 'sender';
     // For staff/teacher/accounts/expense, look up the target month's budget/salary.
