@@ -37,6 +37,7 @@ import RolesPermissions from './pages/RolesPermissions.jsx';
 import ActivityLogs from './pages/ActivityLogs.jsx';
 import BusinessProfile from './pages/BusinessProfile.jsx';
 import SystemPreferences from './pages/settings/SystemPreferences.jsx';
+import QuranManagement from './pages/QuranManagement.jsx';
 
 import { UserRole } from './types.js';
 import { NAV_CONFIG } from './constants.jsx';
@@ -267,6 +268,7 @@ const App = () => {
               <RoleGuard currentRole={currentRole} user={user}>
                 <Routes>
                   <Route path="/" element={<DashboardOverview />} />
+                  <Route path="/quran" element={<QuranManagement />} />
 
                   {/* Academic Management */}
                   <Route path="/academic/classes" element={<ClassesManagement />} />

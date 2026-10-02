@@ -33,6 +33,14 @@ export const NAV_CONFIG = [
     subItems: []
   },
   {
+    label: "Qur'aan",
+    translationKey: 'quran',
+    path: '/quran',
+    icon: BookOpen,
+    roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER, UserRole.TEACHER],
+    subItems: []
+  },
+  {
     label: 'Academic Management',
     translationKey: 'academicManagement',
     path: '/academic',
