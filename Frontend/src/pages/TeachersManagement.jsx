@@ -17,6 +17,7 @@ import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import IdCard from '../components/IdCard.jsx';
 import { useLanguage } from '../i18n/LanguageContext.jsx';
+import { currentCycle, cycleLabel } from '../utils/billingCycle';
 
 const TeachersManagement = () => {
   const { showAlert, showConfirm } = useAlert();
@@ -341,7 +342,7 @@ const TeachersManagement = () => {
               {locale === 'so' ? 'LIISKA MACALLIMIINTA IYO MUSHAARAADKA' : 'TEACHERS DIRECTORY & SALARY LIST'}
             </h2>
             <p className="text-[7.5pt] text-black mt-0.5">
-              {locale === 'so' ? 'Waqtiga la daabacay' : 'Printed'}: <span className="font-bold text-black">{new Date().toLocaleDateString(locale)} {new Date().toLocaleTimeString(locale || [], { hour: '2-digit', minute: '2-digit' })}</span>
+              {tr('monthlyPayments.print.cycle') || (locale === 'so' ? 'Wareegga' : 'Cycle')}: <span className="font-bold text-black">{cycleLabel(currentCycle())}</span> · {locale === 'so' ? 'Waqtiga la daabacay' : 'Printed'}: <span className="text-black">{new Date().toLocaleDateString(locale)} {new Date().toLocaleTimeString(locale || [], { hour: '2-digit', minute: '2-digit' })}</span>
             </p>
           </div>
           <div className="text-right text-[8pt] leading-tight text-black">
