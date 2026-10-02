@@ -6,7 +6,9 @@ import { translateApiMessage } from '../i18n/core.js';
 // Environment Variables for production. In local dev it falls back to localhost.
 // No production backend URL is hard-coded here on purpose — the deployment
 // controls it via env, so a backend URL change never requires a code change.
-const host = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5005' : '');
+const rawHost = import.meta.env.VITE_API_URL;
+const isPlaceholderHost = !rawHost || rawHost.includes('YOUR-BACKEND') || rawHost.includes('your-backend');
+const host = (!isPlaceholderHost ? rawHost : '') || (import.meta.env.DEV ? 'http://localhost:5005' : '');
 
 if (!host) {
     console.error('[config] VITE_API_URL is not set. The app cannot reach the backend. Set VITE_API_URL in your production (Vercel) environment.');
