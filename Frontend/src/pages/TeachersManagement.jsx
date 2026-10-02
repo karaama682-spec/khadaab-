@@ -11,22 +11,28 @@ import {
   X,
   User,
   IdCard as IdCardIcon,
-  Printer
+  Printer,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Filter
 } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import IdCard from '../components/IdCard.jsx';
 import { useLanguage } from '../i18n/LanguageContext.jsx';
-import { currentCycle, cycleLabel } from '../utils/billingCycle';
+import { currentCycle, cycleLabel, cycleKeyForDate } from '../utils/billingCycle';
 
 const TeachersManagement = () => {
   const { showAlert, showConfirm } = useAlert();
   const { t: tr, tv, locale } = useLanguage();
   const [teachers, setTeachers] = useState([]);
+  const [salaries, setSalaries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cardTeacher, setCardTeacher] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [genderFilter, setGenderFilter] = useState('All');
+  const [salaryFilter, setSalaryFilter] = useState('all'); // 'all' | 'paid' | 'pending'
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -69,8 +75,22 @@ const TeachersManagement = () => {
   const fetchTeachers = async () => {
     try {
       setLoading(true);
-      const { data } = await api.get('/users?role=Teacher');
-      setTeachers(Array.isArray(data) ? data : []);
+      const [teachersRes, salariesRes] = await Promise.allSettled([
+        api.get('/users?role=Teacher'),
+        api.get('/salaries')
+      ]);
+
+      if (teachersRes.status === 'fulfilled' && Array.isArray(teachersRes.value.data)) {
+        setTeachers(teachersRes.value.data);
+      } else {
+        setTeachers([]);
+      }
+
+      if (salariesRes.status === 'fulfilled' && Array.isArray(salariesRes.value.data)) {
+        setSalaries(salariesRes.value.data);
+      } else {
+        setSalaries([]);
+      }
     } catch (error) {
       console.error('Failed to fetch teachers:', error);
       showAlert({
@@ -87,24 +107,93 @@ const TeachersManagement = () => {
     fetchTeachers();
   }, []);
 
+  const teacherIdOfSalary = (s) => {
+    if (!s) return null;
+    if (typeof s.teacherId === 'object' && s.teacherId?._id) {
+      return String(s.teacherId._id);
+    }
+    return String(s.teacherId || '');
+  };
+
+  const salaryBelongsToCycle = (s, cycleKey) => {
+    if (!s) return false;
+    if (s.billingCycle) return s.billingCycle === cycleKey;
+    if (s.month && /^\d{4}-\d{2}$/.test(s.month)) return s.month === cycleKey;
+    if (s.paymentDate) return cycleKeyForDate(s.paymentDate) === cycleKey;
+    if (s.createdAt) return cycleKeyForDate(s.createdAt) === cycleKey;
+    return false;
+  };
+
+  const activeCycle = currentCycle();
+
+  const teachersWithSalary = useMemo(() => {
+    return teachers.map((t) => {
+      const salary = Number(t.salary) || 0;
+      const teacherSalaries = salaries.filter((s) => {
+        const matchT = teacherIdOfSalary(s) === String(t._id);
+        const matchC = salaryBelongsToCycle(s, activeCycle);
+        const isPaid = s.status === 'Paid';
+        return matchT && matchC && isPaid;
+      });
+      const paid = teacherSalaries.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+      const remaining = salary > 0 ? Math.max(0, salary - paid) : 0;
+
+      let paymentStatus = 'none';
+      if (salary > 0) {
+        if (paid >= salary) paymentStatus = 'paid';
+        else if (paid > 0) paymentStatus = 'partial';
+        else paymentStatus = 'pending';
+      }
+
+      return {
+        ...t,
+        paid,
+        remaining,
+        paymentStatus
+      };
+    });
+  }, [teachers, salaries, activeCycle]);
+
   const stats = useMemo(() => {
-    const total = teachers.length;
-    const maleCount = teachers.filter(t => t.gender === 'Male').length;
-    const femaleCount = teachers.filter(t => t.gender === 'Female').length;
-    const totalSalary = teachers.reduce((sum, t) => sum + (Number(t.salary) || 0), 0);
-    return { total, maleCount, femaleCount, totalSalary };
-  }, [teachers]);
+    const total = teachersWithSalary.length;
+    const maleCount = teachersWithSalary.filter(t => t.gender === 'Male').length;
+    const femaleCount = teachersWithSalary.filter(t => t.gender === 'Female').length;
+    const totalSalary = teachersWithSalary.reduce((sum, t) => sum + (Number(t.salary) || 0), 0);
+    const totalPaid = teachersWithSalary.reduce((sum, t) => sum + (Number(t.paid) || 0), 0);
+    const totalRemaining = teachersWithSalary.reduce((sum, t) => sum + (Number(t.remaining) || 0), 0);
+    const paidCount = teachersWithSalary.filter(t => t.paymentStatus === 'paid' || (t.paid > 0 && t.remaining === 0)).length;
+    const pendingCount = teachersWithSalary.filter(t => t.salary > 0 && (t.paymentStatus === 'pending' || t.paymentStatus === 'partial')).length;
+
+    return {
+      total,
+      maleCount,
+      femaleCount,
+      totalSalary,
+      totalPaid,
+      totalRemaining,
+      paidCount,
+      pendingCount
+    };
+  }, [teachersWithSalary]);
 
   const filteredTeachers = useMemo(() => {
-    return teachers.filter(t => {
+    return teachersWithSalary.filter(t => {
       const matchesSearch =
         t.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         t.phone?.includes(searchTerm);
       const matchesGender =
         genderFilter === 'All' || t.gender === genderFilter;
-      return matchesSearch && matchesGender;
+
+      let matchesSalary = true;
+      if (salaryFilter === 'paid') {
+        matchesSalary = t.paid > 0;
+      } else if (salaryFilter === 'pending') {
+        matchesSalary = t.salary > 0 && t.remaining > 0;
+      }
+
+      return matchesSearch && matchesGender && matchesSalary;
     });
-  }, [teachers, searchTerm, genderFilter]);
+  }, [teachersWithSalary, searchTerm, genderFilter, salaryFilter]);
 
   const filteredTotalSalary = useMemo(() => {
     return filteredTeachers.reduce((sum, t) => sum + (Number(t.salary) || 0), 0);
@@ -392,27 +481,119 @@ const TeachersManagement = () => {
         </div>
       </div>
 
-      {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 print:hidden">
-        <div className="p-6 rounded-[32px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-5">
-          <div className="w-14 h-14 rounded-2xl bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 flex items-center justify-center">
+      {/* KPI Stats Grid - 4 Clickable Interactive Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 print:hidden">
+        {/* Card 1: Total Teachers */}
+        <div
+          onClick={() => setSalaryFilter('all')}
+          className={`p-6 rounded-[32px] border shadow-sm flex items-center gap-5 cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md active:scale-[0.98] ${
+            salaryFilter === 'all'
+              ? 'bg-white dark:bg-slate-900 border-brand-500/60 ring-2 ring-brand-500/20'
+              : 'bg-white/80 dark:bg-slate-900/80 border-slate-100 dark:border-slate-800 opacity-90 hover:opacity-100'
+          }`}
+          title={locale === 'so' ? 'Guji si aad u aragto dhammaan macallimiinta' : 'Click to view all teachers'}
+        >
+          <div className="w-14 h-14 rounded-2xl bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 flex items-center justify-center shrink-0">
             <GraduationCap size={28} />
           </div>
-          <div>
-            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{tr('academic.teachers.total')}</p>
-            <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{stats.total}</h3>
+          <div className="min-w-0">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">
+              {tr('academic.teachers.total')}
+            </p>
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">
+              {stats.total}
+            </h3>
+            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+              {stats.maleCount} {locale === 'so' ? 'Lab' : 'Male'} · {stats.femaleCount} {locale === 'so' ? 'Dheddig' : 'Female'}
+            </p>
           </div>
         </div>
 
-        <div className="p-6 rounded-[32px] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-5">
-          <div className="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+        {/* Card 2: Monthly Payroll */}
+        <div
+          onClick={() => setSalaryFilter('all')}
+          className={`p-6 rounded-[32px] border shadow-sm flex items-center gap-5 cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md active:scale-[0.98] ${
+            salaryFilter === 'all'
+              ? 'bg-white dark:bg-slate-900 border-amber-500/60 ring-2 ring-amber-500/20'
+              : 'bg-white/80 dark:bg-slate-900/80 border-slate-100 dark:border-slate-800 opacity-90 hover:opacity-100'
+          }`}
+          title={locale === 'so' ? 'Wadarta guud ee mushaarka bisha' : 'Total monthly payroll'}
+        >
+          <div className="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
             <DollarSign size={28} />
           </div>
-          <div>
-            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{tr('academic.teachers.payroll')}</p>
-            <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate">
+              {tr('academic.teachers.payroll')}
+            </p>
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">
               ${stats.totalSalary.toLocaleString()}
             </h3>
+            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+              {locale === 'so' ? 'Miisaaniyadda Bisha' : 'Monthly Obligation'}
+            </p>
+          </div>
+        </div>
+
+        {/* Card 3: Paid Salary */}
+        <div
+          onClick={() => setSalaryFilter(salaryFilter === 'paid' ? 'all' : 'paid')}
+          className={`p-6 rounded-[32px] border shadow-sm flex items-center gap-5 cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md active:scale-[0.98] ${
+            salaryFilter === 'paid'
+              ? 'bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-500 ring-2 ring-emerald-500/25 shadow-md shadow-emerald-500/10'
+              : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800/60'
+          }`}
+          title={locale === 'so' ? 'Guji si aad u aragto macallimiinta lacagta la siiyey' : 'Click to filter paid teachers'}
+        >
+          <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+            <CheckCircle2 size={28} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest truncate">
+                {locale === 'so' ? 'LA BIXIYEY' : 'PAID SALARY'}
+              </p>
+              {salaryFilter === 'paid' && (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              )}
+            </div>
+            <h3 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1 tabular-nums">
+              ${stats.totalPaid.toLocaleString()}
+            </h3>
+            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+              {stats.paidCount} {locale === 'so' ? 'macallin ayaa qaatay' : 'teachers paid'}
+            </p>
+          </div>
+        </div>
+
+        {/* Card 4: Remaining Salary */}
+        <div
+          onClick={() => setSalaryFilter(salaryFilter === 'pending' ? 'all' : 'pending')}
+          className={`p-6 rounded-[32px] border shadow-sm flex items-center gap-5 cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md active:scale-[0.98] ${
+            salaryFilter === 'pending'
+              ? 'bg-rose-50/50 dark:bg-rose-950/30 border-rose-500 ring-2 ring-rose-500/25 shadow-md shadow-rose-500/10'
+              : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-800/60'
+          }`}
+          title={locale === 'so' ? 'Guji si aad u aragto macallimiinta mushaarku ku dhiman yahay' : 'Click to filter pending teachers'}
+        >
+          <div className="w-14 h-14 rounded-2xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+            <Clock size={28} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest truncate">
+                {locale === 'so' ? 'DHIMAN' : 'REMAINING SALARY'}
+              </p>
+              {salaryFilter === 'pending' && (
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+              )}
+            </div>
+            <h3 className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1 tabular-nums">
+              ${stats.totalRemaining.toLocaleString()}
+            </h3>
+            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+              {stats.pendingCount} {locale === 'so' ? 'macallin ku dhiman' : 'teachers pending'}
+            </p>
           </div>
         </div>
       </div>
@@ -430,20 +611,68 @@ const TeachersManagement = () => {
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          {['All', 'Male', 'Female'].map(s => (
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          {/* Status Tabs */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl gap-1">
             <button
-              key={s}
-              onClick={() => setGenderFilter(s)}
-              className={`px-5 py-2.5 rounded-xl font-bold text-xs transition-all ${
-                genderFilter === s
-                  ? 'bg-slate-900 text-white dark:bg-brand-500 shadow-md'
-                  : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-400 hover:bg-slate-100'
+              type="button"
+              onClick={() => setSalaryFilter('all')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                salaryFilter === 'all'
+                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
               }`}
             >
-              {s === 'All' ? tr('academic.teachers.allStatus') : tv(s)}
+              {locale === 'so' ? 'Dhammaan' : 'All'}
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => setSalaryFilter('paid')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                salaryFilter === 'paid'
+                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
+                  : 'text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400'
+              }`}
+            >
+              <CheckCircle2 size={13} />
+              <span>{locale === 'so' ? 'La Bixiyey' : 'Paid'}</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${salaryFilter === 'paid' ? 'bg-white/25 text-white' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'}`}>
+                {stats.paidCount}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSalaryFilter('pending')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                salaryFilter === 'pending'
+                  ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/30'
+                  : 'text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400'
+              }`}
+            >
+              <AlertCircle size={13} />
+              <span>{locale === 'so' ? 'Dhiman' : 'Pending'}</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${salaryFilter === 'pending' ? 'bg-white/25 text-white' : 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'}`}>
+                {stats.pendingCount}
+              </span>
+            </button>
+          </div>
+
+          {/* Gender Filter */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl gap-1">
+            {['All', 'Male', 'Female'].map(s => (
+              <button
+                key={s}
+                onClick={() => setGenderFilter(s)}
+                className={`px-3.5 py-2 rounded-xl font-bold text-xs transition-all ${
+                  genderFilter === s
+                    ? 'bg-slate-900 text-white dark:bg-brand-500 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                {s === 'All' ? (locale === 'so' ? 'Jinsiga' : 'All') : tv(s)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -520,17 +749,52 @@ const TeachersManagement = () => {
                     </td>
 
                     <td className="px-8 py-5 print:hidden">
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                        t.gender === 'Female'
-                          ? 'bg-pink-50 text-pink-600 dark:bg-pink-950/40 dark:text-pink-400'
-                          : 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400'
-                      }`}>
-                        {tv(t.gender || 'Male')}
-                      </span>
+                      <div className="flex flex-col gap-1 items-start">
+                        {t.paymentStatus === 'paid' && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
+                            <CheckCircle2 size={12} strokeWidth={2.5} />
+                            {locale === 'so' ? 'Bixiyey' : 'Paid'}
+                          </span>
+                        )}
+                        {t.paymentStatus === 'partial' && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/60">
+                            <Clock size={12} strokeWidth={2.5} />
+                            {locale === 'so' ? 'Qayb' : 'Partial'}
+                          </span>
+                        )}
+                        {t.paymentStatus === 'pending' && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800/60">
+                            <AlertCircle size={12} strokeWidth={2.5} />
+                            {locale === 'so' ? 'Dhiman' : 'Pending'}
+                          </span>
+                        )}
+                        {t.paymentStatus === 'none' && (
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800">
+                            —
+                          </span>
+                        )}
+                        <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 ml-1">
+                          {tv(t.gender || 'Male')}
+                        </span>
+                      </div>
                     </td>
 
-                    <td className="px-8 py-5 font-black text-slate-900 dark:text-white text-sm print:p-2 print:text-black print:text-[8.5pt] print:font-bold">
-                      ${(Number(t.salary) || 0).toLocaleString()}
+                    <td className="px-8 py-5 print:p-2">
+                      <div className="font-black text-slate-900 dark:text-white text-sm print:text-black print:text-[8.5pt] print:font-bold">
+                        ${(Number(t.salary) || 0).toLocaleString()}
+                      </div>
+                      <div className="text-[11px] font-bold mt-1 print:hidden flex flex-wrap items-center gap-2">
+                        {t.paid > 0 && (
+                          <span className="text-emerald-600 dark:text-emerald-400">
+                            {locale === 'so' ? 'La Bixiyey' : 'Paid'}: ${t.paid.toLocaleString()}
+                          </span>
+                        )}
+                        {t.salary > 0 && t.remaining > 0 && (
+                          <span className="text-rose-500 dark:text-rose-400">
+                            {locale === 'so' ? 'Dhiman' : 'Due'}: ${t.remaining.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     <td className="px-8 py-5 text-right print:hidden">
