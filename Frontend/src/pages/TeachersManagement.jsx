@@ -25,74 +25,6 @@ import IdCard from '../components/IdCard.jsx';
 import { useLanguage } from '../i18n/LanguageContext.jsx';
 import { currentCycle, cycleLabel, cycleKeyForDate } from '../utils/billingCycle';
 
-const initialsOf = (name) =>
-  String(name || '')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(p => p[0].toUpperCase())
-    .join('') || 'T';
-
-const drawTeacherCard = (doc, teacher, instituteName, locale) => {
-  const heading = locale === 'so' ? 'KAARKA AQOONSIGA MACALLINKA' : 'TEACHER IDENTITY CARD';
-  const institute = instituteName || 'Salaaxu–Aldaareyn';
-  const name = teacher.fullName || teacher.username || '-';
-  const idNumber = teacher.teacherCode || `TCH-${(teacher._id || '').slice(-6).toUpperCase()}`;
-
-  // Header band (Indigo #4f46e5)
-  doc.setFillColor(79, 70, 229);
-  doc.rect(0, 0, 85.6, 13, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.text(String(institute).toUpperCase().slice(0, 34), 4, 6);
-  doc.setFontSize(6);
-  doc.setFont('helvetica', 'normal');
-  doc.text(heading.toUpperCase(), 4, 10);
-
-  // Avatar disc
-  doc.setFillColor(226, 232, 240);
-  doc.circle(13, 30, 8, 'F');
-  doc.setTextColor(71, 85, 105);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text(initialsOf(name), 13, 33, { align: 'center' });
-
-  // Name
-  doc.setTextColor(15, 23, 42);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.text(doc.splitTextToSize(String(name), 55)[0], 25, 22);
-
-  // ID Number
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(79, 70, 229);
-  doc.text(String(idNumber), 25, 27.5);
-
-  // Detail rows
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.5);
-  doc.setTextColor(71, 85, 105);
-  let y = 33;
-  const rows = [
-    { label: locale === 'so' ? 'Doorka' : 'Role', value: locale === 'so' ? 'Macallin' : 'Teacher' },
-    { label: locale === 'so' ? 'Tel' : 'Phone', value: teacher.phone || '—' },
-    { label: locale === 'so' ? 'Mushahar' : 'Salary', value: teacher.salary ? `$${Number(teacher.salary).toLocaleString()}` : '—' }
-  ];
-
-  rows.forEach(r => {
-    doc.text(`${r.label}: ${doc.splitTextToSize(String(r.value), 50)[0]}`, 25, y);
-    y += 4.5;
-  });
-
-  // Footer divider & property text
-  doc.setDrawColor(203, 213, 225);
-  doc.line(4, 48, 81.6, 48);
-  doc.setFontSize(5);
-  doc.setTextColor(148, 163, 184);
-  doc.text(locale === 'so' ? 'Hantida Machadka Salaaxu-Aldaareyn' : 'Property of the Institution', 4, 51);
-};
 
 const TeachersManagement = () => {
   const { showAlert, showConfirm } = useAlert();
@@ -282,30 +214,182 @@ const TeachersManagement = () => {
 
   const handlePrint = () => window.print();
 
-  const handleDownloadTeacherCard = (teacher) => {
-    try {
-      const doc = new jsPDF({ unit: 'mm', format: [85.6, 54], orientation: 'landscape' });
-      drawTeacherCard(doc, teacher, tenantInfo.name, locale);
-      const safeName = String(teacher.fullName || teacher.username || 'teacher').replace(/\s+/g, '_');
-      doc.save(`Teacher_ID_${safeName}.pdf`);
-    } catch (err) {
-      console.error('Failed to download teacher ID card:', err);
-    }
-  };
-
-  const handleDownloadAllCardsPdf = () => {
-    if (filteredTeachers.length === 0) return;
-    try {
-      const doc = new jsPDF({ unit: 'mm', format: [85.6, 54], orientation: 'landscape' });
-      filteredTeachers.forEach((t, idx) => {
-        if (idx > 0) {
-          doc.addPage([85.6, 54], 'landscape');
-        }
-        drawTeacherCard(doc, t, tenantInfo.name, locale);
+  const handleExportPDF = () => {
+    if (filteredTeachers.length === 0) {
+      showAlert({
+        type: 'warning',
+        title: locale === 'so' ? 'Ma jiro xog' : 'No Data',
+        message: locale === 'so' ? 'Ma jiro macallimiin la soo saaro' : 'No teachers to export'
       });
-      doc.save(`Teachers_All_ID_Cards_${new Date().toISOString().slice(0, 10)}.pdf`);
+      return;
+    }
+
+    try {
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = doc.internal.pageSize.getWidth(); // 210mm
+      const pageH = doc.internal.pageSize.getHeight(); // 297mm
+
+      // Header styling
+      doc.setFillColor(15, 23, 42); // Slate 900
+      doc.rect(0, 0, pageW, 26, 'F');
+
+      // Tenant Name & Subtitle
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      const tenantTitle = `${tenantInfo.name || 'SALAAXU-ALDAAREYN'} - ${tenantInfo.subtitle && tenantInfo.subtitle !== 'Institute Management' ? tenantInfo.subtitle : 'INSTITUTE MANAGEMENT'}`.toUpperCase();
+      doc.text(tenantTitle, 14, 11);
+
+      // Report Title based on active card/filter
+      let reportTitle = locale === 'so' ? 'LIISKA MACALLIMIINTA IYO MUSHAARAADKA' : 'TEACHERS DIRECTORY & SALARY LIST';
+      if (salaryFilter === 'paid') {
+        reportTitle = locale === 'so' ? 'LIISKA MUSHAARKA LA BIXIYEY' : 'PAID TEACHERS SALARY LIST';
+      } else if (salaryFilter === 'pending') {
+        reportTitle = locale === 'so' ? 'LIISKA MUSHAARKA DHIMAN' : 'PENDING TEACHERS SALARY LIST';
+      }
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(245, 158, 11); // Amber accent
+      doc.text(reportTitle.toUpperCase(), 14, 18);
+
+      // Metadata line (Cycle & Print Date)
+      doc.setFontSize(7.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(203, 213, 225);
+      const cycleStr = `${locale === 'so' ? 'Wareegga' : 'Cycle'}: ${cycleLabel(currentCycle())}   |   ${locale === 'so' ? 'Waqtiga la daabacay' : 'Printed'}: ${new Date().toLocaleDateString(locale)} ${new Date().toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`;
+      doc.text(cycleStr, 14, 23);
+
+      // Right-aligned stats in header
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      const totalTeachersText = `${locale === 'so' ? 'Tirada Macallimiinta' : 'Total Teachers'}: ${filteredTeachers.length}`;
+      doc.text(totalTeachersText, pageW - 14, 12, { align: 'right' });
+      const payrollText = `${locale === 'so' ? 'Wadarta Mushaarka' : 'Total Payroll'}: $${filteredTotals.salary.toLocaleString()}`;
+      doc.text(payrollText, pageW - 14, 18, { align: 'right' });
+
+      // Table definition
+      const cols = {
+        no: { x: 14, w: 10, label: '#' },
+        name: { x: 24, w: 60, label: locale === 'so' ? 'MAGACA MACALLINKA' : 'TEACHER NAME' },
+        phone: { x: 84, w: 32, label: locale === 'so' ? 'TEL' : 'PHONE' },
+        salary: { x: 116, w: 26, label: locale === 'so' ? 'MUSHAARKA' : 'SALARY' },
+        paid: { x: 142, w: 26, label: locale === 'so' ? 'LA BIXIYEY' : 'PAID' },
+        remaining: { x: 168, w: 28, label: locale === 'so' ? 'HARAAGA' : 'REMAINING' }
+      };
+
+      let y = 35;
+
+      const renderTableHeader = () => {
+        doc.setFillColor(241, 245, 249);
+        doc.rect(14, y - 5, 182, 8, 'F');
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.3);
+        doc.rect(14, y - 5, 182, 8, 'S');
+
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+
+        doc.text(cols.no.label, cols.no.x + 5, y, { align: 'center' });
+        doc.text(cols.name.label, cols.name.x + 2, y);
+        doc.text(cols.phone.label, cols.phone.x + 2, y);
+        doc.text(cols.salary.label, cols.salary.x + cols.salary.w - 2, y, { align: 'right' });
+        doc.text(cols.paid.label, cols.paid.x + cols.paid.w - 2, y, { align: 'right' });
+        doc.text(cols.remaining.label, cols.remaining.x + cols.remaining.w - 2, y, { align: 'right' });
+        y += 6;
+      };
+
+      renderTableHeader();
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+
+      filteredTeachers.forEach((t, idx) => {
+        if (y > pageH - 22) {
+          doc.addPage();
+          y = 16;
+          renderTableHeader();
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+        }
+
+        // Alternating row background
+        if (idx % 2 === 1) {
+          doc.setFillColor(248, 250, 252);
+          doc.rect(14, y - 4, 182, 6.5, 'F');
+        }
+
+        // Light row border
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.15);
+        doc.line(14, y + 2.5, 196, y + 2.5);
+
+        doc.setTextColor(0, 0, 0);
+        doc.text(String(idx + 1), cols.no.x + 5, y, { align: 'center' });
+        doc.text(doc.splitTextToSize(String(t.fullName || t.username || '—'), 58)[0], cols.name.x + 2, y);
+        doc.text(String(t.phone || '—'), cols.phone.x + 2, y);
+
+        doc.setFont('helvetica', 'bold');
+        doc.text(`$${(Number(t.salary) || 0).toLocaleString()}`, cols.salary.x + cols.salary.w - 2, y, { align: 'right' });
+
+        doc.setTextColor(5, 150, 105); // Emerald
+        doc.text(`$${(Number(t.paid) || 0).toLocaleString()}`, cols.paid.x + cols.paid.w - 2, y, { align: 'right' });
+
+        if (t.remaining === 0) {
+          doc.setTextColor(100, 116, 139); // Slate 500
+          doc.text('$0', cols.remaining.x + cols.remaining.w - 2, y, { align: 'right' });
+        } else {
+          doc.setTextColor(225, 29, 72); // Rose
+          doc.text(`$${(Number(t.remaining) || 0).toLocaleString()}`, cols.remaining.x + cols.remaining.w - 2, y, { align: 'right' });
+        }
+
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'normal');
+        y += 6.5;
+      });
+
+      // Bottom Summary Row
+      if (y > pageH - 22) {
+        doc.addPage();
+        y = 16;
+      }
+
+      doc.setFillColor(241, 245, 249);
+      doc.rect(14, y - 4, 182, 8, 'F');
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.rect(14, y - 4, 182, 8, 'S');
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+
+      doc.text('#', cols.no.x + 5, y + 1, { align: 'center' });
+      doc.text(`${locale === 'so' ? 'WADARTA GUUD' : 'TOTAL'} (${filteredTeachers.length})`, cols.name.x + 2, y + 1);
+      doc.text('—', cols.phone.x + 2, y + 1);
+
+      doc.text(`$${filteredTotals.salary.toLocaleString()}`, cols.salary.x + cols.salary.w - 2, y + 1, { align: 'right' });
+      doc.setTextColor(5, 150, 105);
+      doc.text(`$${filteredTotals.paid.toLocaleString()}`, cols.paid.x + cols.paid.w - 2, y + 1, { align: 'right' });
+      doc.setTextColor(225, 29, 72);
+      doc.text(`$${filteredTotals.remaining.toLocaleString()}`, cols.remaining.x + cols.remaining.w - 2, y + 1, { align: 'right' });
+
+      // Save PDF file
+      const fileSlug = salaryFilter === 'paid'
+        ? 'Macallimiinta_La_Bixiyey'
+        : salaryFilter === 'pending'
+        ? 'Macallimiinta_Mushaarku_Dhiman'
+        : 'Liiska_Macallimiinta_Guud';
+      doc.save(`${fileSlug}_${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (err) {
-      console.error('Failed to download all teacher ID cards:', err);
+      console.error('Failed to export PDF:', err);
+      showAlert({
+        type: 'danger',
+        title: tr('common.error'),
+        message: locale === 'so' ? 'Qalad ayaa dhacay markii PDF-ka la soo saarayay' : 'Error generating PDF report'
+      });
     }
   };
 
@@ -579,12 +663,12 @@ const TeachersManagement = () => {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={handleDownloadAllCardsPdf}
-            className="flex items-center gap-2 px-5 py-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-900/60 border border-indigo-200/80 dark:border-indigo-800 rounded-[20px] font-black text-[11px] uppercase tracking-[0.15em] shadow-sm hover:shadow transition-all active:scale-95"
-            title={locale === 'so' ? 'Soo deji dhammaan kaararka aqoonsiga macallimiinta (PDF)' : 'Download all teacher ID cards (PDF)'}
+            onClick={handleExportPDF}
+            className="flex items-center gap-2 px-6 py-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-900/60 border border-indigo-200/80 dark:border-indigo-800 rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-sm hover:shadow transition-all active:scale-95"
+            title={locale === 'so' ? 'Soo deji PDF xogta kaarkan' : 'Export PDF of selected report'}
           >
             <Download size={18} strokeWidth={2.5} />
-            <span>{locale === 'so' ? 'Kaararka PDF' : 'ID Cards PDF'}</span>
+            <span>PDF</span>
           </button>
 
           <button
@@ -932,20 +1016,13 @@ const TeachersManagement = () => {
                     </td>
 
                     <td className="px-6 py-4 text-right print:hidden">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => handleDownloadTeacherCard(t)}
-                          className="p-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 dark:text-indigo-400 transition-colors"
-                          title={locale === 'so' ? 'Soo deji Kaarka ID (PDF)' : 'Download ID Card (PDF)'}
-                        >
-                          <Download size={15} />
-                        </button>
+                      <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => setCardTeacher(t)}
                           className="p-2.5 rounded-xl bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 transition-colors"
                           title={tr('academic.teachers.idCard')}
                         >
-                          <IdCardIcon size={15} />
+                          <IdCardIcon size={16} />
                         </button>
                         <button
                           onClick={() => handleOpenEdit(t)}
