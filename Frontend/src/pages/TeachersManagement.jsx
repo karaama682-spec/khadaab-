@@ -161,8 +161,8 @@ const TeachersManagement = () => {
     const totalSalary = teachersWithSalary.reduce((sum, t) => sum + (Number(t.salary) || 0), 0);
     const totalPaid = teachersWithSalary.reduce((sum, t) => sum + (Number(t.paid) || 0), 0);
     const totalRemaining = teachersWithSalary.reduce((sum, t) => sum + (Number(t.remaining) || 0), 0);
-    const paidCount = teachersWithSalary.filter(t => t.paymentStatus === 'paid' || (t.paid > 0 && t.remaining === 0)).length;
-    const pendingCount = teachersWithSalary.filter(t => t.salary > 0 && (t.paymentStatus === 'pending' || t.paymentStatus === 'partial')).length;
+    const paidCount = teachersWithSalary.filter(t => t.paid > 0).length;
+    const pendingCount = teachersWithSalary.filter(t => t.salary > 0 && t.remaining > 0).length;
 
     return {
       total,
@@ -428,7 +428,11 @@ const TeachersManagement = () => {
               {tenantInfo.name} - {tenantInfo.subtitle && tenantInfo.subtitle !== 'Institute Management' ? tenantInfo.subtitle : tr('nav.instituteManagement')}
             </h1>
             <h2 className="text-[9pt] font-extrabold text-black uppercase mt-0.5 leading-tight">
-              {locale === 'so' ? 'LIISKA MACALLIMIINTA IYO MUSHAARAADKA' : 'TEACHERS DIRECTORY & SALARY LIST'}
+              {salaryFilter === 'paid'
+                ? (locale === 'so' ? 'LIISKA MUSHAARKA LA BIXIYEY' : 'PAID TEACHERS SALARY LIST')
+                : salaryFilter === 'pending'
+                ? (locale === 'so' ? 'LIISKA MUSHAARKA DHIMAN' : 'PENDING TEACHERS SALARY LIST')
+                : (locale === 'so' ? 'LIISKA MACALLIMIINTA IYO MUSHAARAADKA' : 'TEACHERS DIRECTORY & SALARY LIST')}
             </h2>
             <p className="text-[7.5pt] text-black mt-0.5">
               {tr('monthlyPayments.print.cycle') || (locale === 'so' ? 'Wareegga' : 'Cycle')}: <span className="font-bold text-black">{cycleLabel(currentCycle())}</span> · {locale === 'so' ? 'Waqtiga la daabacay' : 'Printed'}: <span className="text-black">{new Date().toLocaleDateString(locale)} {new Date().toLocaleTimeString(locale || [], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -682,19 +686,21 @@ const TeachersManagement = () => {
           <table className="w-full text-left border-collapse print-compact-table">
             <thead>
               <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                <th className="hidden print:table-cell text-center w-12 font-black">#</th>
-                <th className="px-8 py-5 print:p-2">{tr('academic.teachers.colName')}</th>
-                <th className="px-8 py-5 print:p-2">{tr('academic.teachers.colPhone')}</th>
-                <th className="px-8 py-5 print:hidden">{tr('academic.teachers.colMasuul')}</th>
-                <th className="px-8 py-5 print:hidden">{tr('academic.teachers.colStatus')}</th>
-                <th className="px-8 py-5 print:p-2">{tr('academic.teachers.colSalary')}</th>
-                <th className="px-8 py-5 text-right print:hidden">{tr('common.actions')}</th>
+                <th className="hidden print:table-cell text-center w-10 font-black">#</th>
+                <th className="px-6 py-4 print:p-2">{tr('academic.teachers.colName')}</th>
+                <th className="px-6 py-4 print:p-2">{tr('academic.teachers.colPhone')}</th>
+                <th className="px-6 py-4 print:hidden">{tr('academic.teachers.colMasuul')}</th>
+                <th className="px-6 py-4 print:hidden">{tr('academic.teachers.colStatus')}</th>
+                <th className="px-6 py-4 print:p-2 text-right">{locale === 'so' ? 'Mushaharka' : 'Salary'}</th>
+                <th className="px-6 py-4 print:p-2 text-right">{locale === 'so' ? 'La Bixiyey' : 'Paid'}</th>
+                <th className="px-6 py-4 print:p-2 text-right">{locale === 'so' ? 'Haraaga' : 'Remaining'}</th>
+                <th className="px-6 py-4 text-right print:hidden">{tr('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
               {filteredTeachers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-8 py-16 text-center text-slate-400 font-semibold text-sm">
+                  <td colSpan={9} className="px-8 py-16 text-center text-slate-400 font-semibold text-sm">
                     {tr('academic.teachers.empty')}
                   </td>
                 </tr>
@@ -708,9 +714,9 @@ const TeachersManagement = () => {
                       {idx + 1}
                     </td>
 
-                    <td className="px-8 py-5 print:p-2">
-                      <div className="flex items-center gap-4">
-                        <div className="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 font-black text-base flex items-center justify-center border border-brand-100 dark:border-brand-900 print:hidden">
+                    <td className="px-6 py-4 print:p-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 font-black text-sm flex items-center justify-center border border-brand-100 dark:border-brand-900 print:hidden shrink-0">
                           {t.fullName?.[0]?.toUpperCase() || 'T'}
                         </div>
                         <div>
@@ -724,10 +730,10 @@ const TeachersManagement = () => {
                       </div>
                     </td>
 
-                    <td className="px-8 py-5 print:p-2">
+                    <td className="px-6 py-4 print:p-2">
                       {t.phone ? (
                         <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 text-xs font-semibold print:text-black print:text-[8.5pt]">
-                          <Phone size={13} className="text-slate-400 print:hidden" />
+                          <Phone size={13} className="text-slate-400 print:hidden shrink-0" />
                           <span className="font-mono">{t.phone}</span>
                         </div>
                       ) : (
@@ -735,7 +741,7 @@ const TeachersManagement = () => {
                       )}
                     </td>
 
-                    <td className="px-8 py-5 print:hidden">
+                    <td className="px-6 py-4 print:hidden">
                       {t.masuulName || t.masuulNumber ? (
                         <div className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                           <p>{t.masuulName || '—'}</p>
@@ -748,7 +754,7 @@ const TeachersManagement = () => {
                       )}
                     </td>
 
-                    <td className="px-8 py-5 print:hidden">
+                    <td className="px-6 py-4 print:hidden">
                       <div className="flex flex-col gap-1 items-start">
                         {t.paymentStatus === 'paid' && (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60">
@@ -779,25 +785,32 @@ const TeachersManagement = () => {
                       </div>
                     </td>
 
-                    <td className="px-8 py-5 print:p-2">
-                      <div className="font-black text-slate-900 dark:text-white text-sm print:text-black print:text-[8.5pt] print:font-bold">
+                    {/* Total Salary */}
+                    <td className="px-6 py-4 print:p-2 text-right">
+                      <span className="font-bold text-slate-900 dark:text-white text-sm print:text-black print:text-[8.5pt]">
                         ${(Number(t.salary) || 0).toLocaleString()}
-                      </div>
-                      <div className="text-[11px] font-bold mt-1 print:hidden flex flex-wrap items-center gap-2">
-                        {t.paid > 0 && (
-                          <span className="text-emerald-600 dark:text-emerald-400">
-                            {locale === 'so' ? 'La Bixiyey' : 'Paid'}: ${t.paid.toLocaleString()}
-                          </span>
-                        )}
-                        {t.salary > 0 && t.remaining > 0 && (
-                          <span className="text-rose-500 dark:text-rose-400">
-                            {locale === 'so' ? 'Dhiman' : 'Due'}: ${t.remaining.toLocaleString()}
-                          </span>
-                        )}
-                      </div>
+                      </span>
                     </td>
 
-                    <td className="px-8 py-5 text-right print:hidden">
+                    {/* Paid */}
+                    <td className="px-6 py-4 print:p-2 text-right">
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm print:text-black print:text-[8.5pt]">
+                        ${(Number(t.paid) || 0).toLocaleString()}
+                      </span>
+                    </td>
+
+                    {/* Remaining */}
+                    <td className="px-6 py-4 print:p-2 text-right">
+                      <span className={`font-bold text-sm print:text-black print:text-[8.5pt] ${
+                        t.remaining === 0
+                          ? 'text-slate-400 dark:text-slate-500'
+                          : 'text-rose-600 dark:text-rose-400'
+                      }`}>
+                        ${(Number(t.remaining) || 0).toLocaleString()}
+                      </span>
+                    </td>
+
+                    <td className="px-6 py-4 text-right print:hidden">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => setCardTeacher(t)}
@@ -824,14 +837,6 @@ const TeachersManagement = () => {
                     </td>
                   </tr>
                 ))
-              )}
-              {filteredTeachers.length > 0 && (
-                <tr className="hidden print:table-row print-summary-row">
-                  <td className="p-2 text-center font-black">#</td>
-                  <td className="p-2 font-black uppercase text-left">{locale === 'so' ? 'WADARTA GUUD' : 'TOTAL'}</td>
-                  <td className="p-2 font-bold text-center">{locale === 'so' ? `${filteredTeachers.length} Macallimiin` : `${filteredTeachers.length} Teachers`}</td>
-                  <td className="p-2 font-black text-left">${filteredTotalSalary.toLocaleString()}</td>
-                </tr>
               )}
             </tbody>
           </table>
