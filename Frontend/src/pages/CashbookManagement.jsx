@@ -117,8 +117,13 @@ const CashbookManagement = () => {
   const [categorySearch, setCategorySearch] = useState('');
 
   const [transactionForm, setTransactionForm] = useState(emptyTransactionForm());
+  const transactionFormRef = useRef(transactionForm);
+  transactionFormRef.current = transactionForm;
+  const lastLookedUpSenderRef = useRef('');
+  const lastLookedUpReceiverRef = useRef('');
   const [editingEntry, setEditingEntry] = useState(null);
   const editingEntryRef = useRef(null);
+
   const [filterType, setFilterType] = useState('All');
   const [filterCategory, setFilterCategory] = useState('All');
   const [dateFrom, setDateFrom] = useState('');
@@ -289,19 +294,20 @@ const CashbookManagement = () => {
     const cleaned = digitsOnly(phone);
     if (cleaned.length < 4) return;
 
+    const currentForm = transactionFormRef.current;
     // Only look up once the number matches the method's digit rule.
-    if (phoneError(transactionForm.method, cleaned)) {
+    if (phoneError(currentForm.method, cleaned)) {
       return;
     }
 
-    const monthToUse = overrideMonth || transactionForm.targetMonth || cycleKeyForDate(transactionForm.date || new Date());
+    const monthToUse = overrideMonth || currentForm.targetMonth || cycleKeyForDate(currentForm.date || new Date());
 
     try {
       const res = await api.get('/cashbook/lookup', {
         params: {
           phone: cleaned,
           purpose: side,
-          date: transactionForm.date,
+          date: currentForm.date,
           month: monthToUse,
           excludeEntryId: editingEntryRef.current?._id || undefined
         }
@@ -320,14 +326,30 @@ const CashbookManagement = () => {
             : info?.totalBalance !== undefined
             ? Number(info.totalBalance)
             : null;
-          setTransactionForm((prev) => ({
-            ...prev,
-            senderName: name,
-            senderEntityType: entityType === 'teacher' ? 'user' : entityType,
-            senderEntityId: entityId || '',
-            targetMonth: editingEntryRef.current ? prev.targetMonth : (hasArrears && oldestArrears ? oldestArrears : currentMonthStr),
-            amount: editingEntryRef.current ? prev.amount : (rem !== null && !isNaN(rem) ? rem : prev.amount)
-          }));
+
+          setTransactionForm((prev) => {
+            const isFreshPhoneLookup = !prev.senderEntityId || digitsOnly(prev.senderPhone) !== cleaned;
+            const chosenTargetMonth = editingEntryRef.current
+              ? prev.targetMonth
+              : isFreshPhoneLookup
+              ? (hasArrears && oldestArrears ? oldestArrears : currentMonthStr)
+              : prev.targetMonth || currentMonthStr;
+
+            const chosenAmount = editingEntryRef.current
+              ? prev.amount
+              : isFreshPhoneLookup
+              ? (rem !== null && !isNaN(rem) ? rem : prev.amount)
+              : prev.amount;
+
+            return {
+              ...prev,
+              senderName: name,
+              senderEntityType: entityType === 'teacher' ? 'user' : entityType,
+              senderEntityId: entityId || '',
+              targetMonth: chosenTargetMonth,
+              amount: chosenAmount
+            };
+          });
           setSenderLocked(true);
           setPayerInfo(info || null);
           if (!editingEntryRef.current) {
@@ -366,7 +388,7 @@ const CashbookManagement = () => {
         setReceiverLocked(false);
       }
     }
-  }, [transactionForm.method, transactionForm.date, transactionForm.targetMonth]);
+  }, [currentMonthStr]);
 
   const handleDateChange = (newDate) => {
     const newCycle = newDate ? cycleKeyForDate(newDate) : currentCycle();
@@ -375,11 +397,6 @@ const CashbookManagement = () => {
       date: newDate,
       targetMonth: newCycle
     }));
-    const activePhone = walletDirection === 'sender' ? transactionForm.receiverPhone : transactionForm.senderPhone;
-    const activeSide = walletDirection === 'sender' ? 'receiver' : 'sender';
-    if (activePhone && activeSide !== 'sender') {
-      lookupPhone(activePhone, activeSide, newCycle);
-    }
   };
 
   const handleTargetMonthChange = (newMonth) => {
@@ -387,38 +404,68 @@ const CashbookManagement = () => {
     const today = new Date().toISOString().split('T')[0];
     const newDate = (today >= range.from && today <= range.to) ? today : range.from;
 
+    // Automatically calculate amount remaining for the newly selected month:
+    let newAmount = transactionFormRef.current.amount;
+    if (payerInfo && payerInfo.kind === 'responsible') {
+      if (newMonth < currentMonthStr) {
+        // Arrears cycle: set amount to arrears of that specific month
+        const arr = payerInfo.arrears?.find((a) => a.month === newMonth);
+        newAmount = arr ? arr.balance : (payerInfo.totalMonthlyFee || 0);
+      } else if (newMonth === currentMonthStr) {
+        // Current cycle: remaining balance for current month
+        newAmount = payerInfo.totalBalance ?? (payerInfo.totalMonthlyFee || 0);
+      } else {
+        // Advance cycle: 1 cycle total fee
+        newAmount = payerInfo.totalMonthlyFee ?? 0;
+      }
+    } else if (payerInfo && payerInfo.kind === 'staff') {
+      newAmount = payerInfo.remainingBalance ?? payerInfo.salary ?? transactionFormRef.current.amount;
+    }
+
     setTransactionForm((prev) => ({
       ...prev,
       targetMonth: newMonth,
-      date: newDate
+      date: newDate,
+      amount: newAmount !== undefined && newAmount !== null && newAmount !== '' ? newAmount : prev.amount
     }));
-    const activePhone = walletDirection === 'sender' ? transactionForm.receiverPhone : transactionForm.senderPhone;
+
+    const activePhone = walletDirection === 'sender' ? transactionFormRef.current.receiverPhone : transactionFormRef.current.senderPhone;
     const activeSide = walletDirection === 'sender' ? 'receiver' : 'sender';
-    // For staff/teacher/accounts/expense, look up the target month's budget/salary.
-    // For responsible student fee payers, keep the comprehensive debt profile intact
-    // (do NOT re-query with a past month which would truncate current month fee data).
-    if (activePhone && activeSide !== 'sender') {
+    // For staff/teacher/accounts/expense only, look up the target month's budget/salary.
+    if (activePhone && activeSide !== 'sender' && payerInfo?.kind !== 'responsible') {
       lookupPhone(activePhone, activeSide, newMonth);
     }
   };
 
   useEffect(() => {
+    const cleaned = digitsOnly(transactionForm.senderPhone);
+    if (!cleaned || cleaned.length < 4 || walletDirection === 'sender') {
+      lastLookedUpSenderRef.current = '';
+      return;
+    }
+    if (cleaned === lastLookedUpSenderRef.current) return;
     const t = setTimeout(() => {
-      if (transactionForm.senderPhone && walletDirection !== 'sender') {
-        lookupPhone(transactionForm.senderPhone, 'sender');
-      }
+      lastLookedUpSenderRef.current = cleaned;
+      lookupPhone(cleaned, 'sender');
     }, 400);
     return () => clearTimeout(t);
   }, [transactionForm.senderPhone, lookupPhone, walletDirection]);
 
   useEffect(() => {
-    // Skip lookup when the receiver is assigned from the institute wallet.
     if (walletDirection === 'receiver') return;
+    const cleaned = digitsOnly(transactionForm.receiverPhone);
+    if (!cleaned || cleaned.length < 4) {
+      lastLookedUpReceiverRef.current = '';
+      return;
+    }
+    if (cleaned === lastLookedUpReceiverRef.current) return;
     const t = setTimeout(() => {
-      if (transactionForm.receiverPhone) lookupPhone(transactionForm.receiverPhone, 'receiver');
+      lastLookedUpReceiverRef.current = cleaned;
+      lookupPhone(cleaned, 'receiver');
     }, 400);
     return () => clearTimeout(t);
   }, [transactionForm.receiverPhone, lookupPhone, walletDirection]);
+
 
   const resetCategoryForm = () => {
     setCategoryForm(emptyCategoryForm());
@@ -1231,12 +1278,17 @@ const CashbookManagement = () => {
               const [y, m] = transactionForm.targetMonth.split('-').map(Number);
               const mName = monthNames()[m - 1];
               const curObj = getPayerMonthLabel(currentMonthStr, 0);
+              const isPayingTotal = payerInfo?.previousBalance && Number(transactionForm.amount) >= Number(payerInfo.totalDue ?? (payerInfo.totalBalance + payerInfo.previousBalance));
               return (
                 <div className="flex items-center justify-between p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
                     <span className="font-bold text-rose-700 dark:text-rose-300">
-                      {t('cashbook.payingArrearsBanner', { month: mName, year: y })}
+                      {isPayingTotal
+                        ? (locale === 'so'
+                            ? `Bixinta Wadarta Deynta: ${fmtMoney(payerInfo.previousBalance)} (Deyntii ${mName} ${y}) + ${fmtMoney(payerInfo.totalBalance)} (Bishan ${curObj.name})`
+                            : `Paying total owed: ${fmtMoney(payerInfo.previousBalance)} (Arrears ${mName} ${y}) + ${fmtMoney(payerInfo.totalBalance)} (Current ${curObj.name})`)
+                        : t('cashbook.payingArrearsBanner', { month: mName, year: y })}
                     </span>
                   </div>
                   <button
@@ -1249,6 +1301,7 @@ const CashbookManagement = () => {
                 </div>
               );
             })()}
+
 
             {/* Quick Action buttons for Responsible Payers */}
             {payerInfo && payerInfo.kind === 'responsible' && (Number(payerInfo.previousBalance || 0) > 0 || Number(payerInfo.totalBalance || 0) > 0) && (() => {
@@ -1435,9 +1488,13 @@ const CashbookManagement = () => {
 
             {payerInfo && payerInfo.kind === 'responsible' && payerInfo.count > 0 && (() => {
               const entered = Number(transactionForm.amount) || 0;
-              // What will still be owed after the amount currently in the form is paid.
-              const remainingAfter = Math.max(0, payerInfo.totalBalance - entered);
-              const isPartial = entered > 0 && entered < payerInfo.totalBalance;
+              const isTargetPast = transactionForm.targetMonth && transactionForm.targetMonth < currentMonthStr;
+              const targetArr = isTargetPast ? payerInfo.arrears?.find((a) => a.month === transactionForm.targetMonth) : null;
+              const targetFee = isTargetPast ? (targetArr ? targetArr.fee : payerInfo.totalMonthlyFee) : payerInfo.totalMonthlyFee;
+              const targetPaid = isTargetPast ? (targetArr ? targetArr.paid : 0) : payerInfo.totalPaid;
+              const targetBal = isTargetPast ? (targetArr ? targetArr.balance : 0) : payerInfo.totalBalance;
+              const activeCycle = transactionForm.targetMonth || payerInfo.month;
+
               return (
               <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 p-5">
                 <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
@@ -1445,41 +1502,42 @@ const CashbookManagement = () => {
                     {transactionForm.senderName ? `${transactionForm.senderName} · ` : ''}{t('cashbook.responsiblePayer')}
                   </p>
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    {t('students.studentCount', { count: payerInfo.count })} · {payerInfo.month}
+                    {t('students.studentCount', { count: payerInfo.count })} · {activeCycle} {isTargetPast ? `(${t('cashbook.arrearsTag')})` : ''}
                   </span>
                 </div>
 
-                {/* Money summary — total fee, paid, remaining. */}
+                {/* Money summary — total fee, paid, remaining for the chosen cycle. */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="rounded-xl bg-white/70 dark:bg-slate-900/50 border border-emerald-100 dark:border-emerald-900/50 px-4 py-3">
                     <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{t('cashbook.totalFee')}</p>
-                    <p className="text-xl font-black text-slate-800 dark:text-slate-100">{fmtMoney(payerInfo.totalMonthlyFee)}</p>
+                    <p className="text-xl font-black text-slate-800 dark:text-slate-100">{fmtMoney(targetFee)}</p>
                   </div>
                   <div className="rounded-xl bg-white/70 dark:bg-slate-900/50 border border-emerald-100 dark:border-emerald-900/50 px-4 py-3">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{t('common.paid')} ({payerInfo.month})</p>
-                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{fmtMoney(payerInfo.totalPaid)}</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{t('common.paid')} ({activeCycle})</p>
+                    <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">{fmtMoney(targetPaid)}</p>
                   </div>
                   <div className="rounded-xl bg-white/70 dark:bg-slate-900/50 border border-emerald-100 dark:border-emerald-900/50 px-4 py-3">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{t('common.remaining')}</p>
-                    <p className="text-xl font-black text-rose-600 dark:text-rose-400">{fmtMoney(payerInfo.totalBalance)}</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{t('common.remaining')} ({activeCycle})</p>
+                    <p className="text-xl font-black text-rose-600 dark:text-rose-400">{fmtMoney(targetBal)}</p>
                   </div>
                 </div>
 
                 {/* Progress bar of paid vs. total fee. */}
-                {payerInfo.totalMonthlyFee > 0 && (
+                {targetFee > 0 && (
                   <div className="mt-4">
                     <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
-                      <span>{t('cashbook.collectedAmount', { amount: fmtMoney(payerInfo.totalPaid) })}</span>
-                      <span>{Math.round((payerInfo.totalPaid / payerInfo.totalMonthlyFee) * 100)}%</span>
+                      <span>{t('cashbook.collectedAmount', { amount: fmtMoney(targetPaid) })}</span>
+                      <span>{Math.round((targetPaid / targetFee) * 100)}%</span>
                     </div>
                     <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
                       <div
                         className="h-full rounded-full bg-emerald-500"
-                        style={{ width: `${Math.min(100, (payerInfo.totalPaid / payerInfo.totalMonthlyFee) * 100)}%` }}
+                        style={{ width: `${Math.min(100, (targetPaid / targetFee) * 100)}%` }}
                       />
                     </div>
                   </div>
                 )}
+
 
                 {/* Arrears carried over from earlier months — shown alongside, never merged into, the current month. */}
                 {Number(payerInfo.previousBalance || 0) > 0 && Array.isArray(payerInfo.arrears) && (
