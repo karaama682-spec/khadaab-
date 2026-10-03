@@ -38,7 +38,14 @@ export const NAV_CONFIG = [
     path: '/quran',
     icon: BookOpen,
     roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER, UserRole.TEACHER],
-    subItems: []
+    subItems: [
+      {
+        label: 'Jadwalka Suuradaha',
+        translationKey: 'quranSurahs',
+        path: '/quran/surahs',
+        icon: BookOpen
+      }
+    ]
   },
   {
     label: 'Academic Management',

@@ -54,6 +54,9 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
       roleNormalized.includes('owner') ||
       roleNormalized === (UserRole.SUPER_ADMIN || '').toLowerCase()) return true;
 
+    const navItem = NAV_CONFIG.find(item => item.label === label);
+    if (navItem && navItem.roles?.includes(userRole)) return true;
+
     if (!user?.roles || user.roles.length === 0) {
       return false;
     }

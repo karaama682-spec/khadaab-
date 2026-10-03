@@ -270,7 +270,8 @@ const App = () => {
                 <RoleGuard currentRole={currentRole} user={user}>
                   <Routes>
                     <Route path="/" element={<DashboardOverview />} />
-                    <Route path="/quran" element={<QuranManagement />} />
+                    <Route path="/quran" element={<Navigate to="/quran/surahs" replace />} />
+                    <Route path="/quran/surahs" element={<QuranManagement />} />
 
                     {/* Academic Management */}
                     <Route path="/academic/classes" element={<ClassesManagement />} />
