@@ -7,7 +7,7 @@ const Class = require('../models/Class');
 // @access  Private
 const getQuranSurahRecords = async (req, res) => {
     try {
-        const { search, classId, status, startDate, endDate } = req.query;
+        const { search, classId, branchId, status, startDate, endDate } = req.query;
         const query = {};
 
         if (search) {
@@ -21,6 +21,10 @@ const getQuranSurahRecords = async (req, res) => {
 
         if (classId) {
             query.classId = classId;
+        }
+
+        if (branchId) {
+            query.branchId = branchId;
         }
 
         if (status) {
@@ -38,8 +42,9 @@ const getQuranSurahRecords = async (req, res) => {
         }
 
         const records = await QuranSurahRecord.find(query)
-            .populate('studentId', 'fullName studentCode rollNumber fatherPhone classId')
-            .populate('classId', 'name className')
+            .populate('studentId', 'fullName studentCode rollNumber fatherPhone classId branchId')
+            .populate('classId', 'name className branchId')
+            .populate('branchId', 'name')
             .populate('teacherId', 'fullName username')
             .sort({ date: -1, createdAt: -1 });
 
@@ -59,6 +64,7 @@ const createQuranSurahRecord = async (req, res) => {
             studentId,
             studentName,
             classId,
+            branchId,
             halaqahName,
             surahName,
             surahNumber,
@@ -78,6 +84,7 @@ const createQuranSurahRecord = async (req, res) => {
         let resolvedName = studentName;
         let resolvedClassId = classId;
         let resolvedHalaqah = halaqahName;
+        let resolvedBranchId = branchId;
 
         if (studentId) {
             const student = await Student.findById(studentId).populate('classId');
@@ -89,6 +96,9 @@ const createQuranSurahRecord = async (req, res) => {
                 if (!resolvedHalaqah && student.classId) {
                     resolvedHalaqah = student.classId.name || student.classId.className || '';
                 }
+                if (!resolvedBranchId) {
+                    resolvedBranchId = student.branchId || (student.classId && student.classId.branchId) || undefined;
+                }
             }
         }
 
@@ -96,6 +106,7 @@ const createQuranSurahRecord = async (req, res) => {
             studentId,
             studentName: resolvedName,
             classId: resolvedClassId,
+            branchId: resolvedBranchId,
             halaqahName: resolvedHalaqah || '',
             surahName: surahName.trim(),
             surahNumber: surahNumber ? Number(surahNumber) : undefined,
@@ -107,11 +118,13 @@ const createQuranSurahRecord = async (req, res) => {
 
         const savedRecord = await record.save();
         const populated = await QuranSurahRecord.findById(savedRecord._id)
-            .populate('studentId', 'fullName studentCode rollNumber fatherPhone classId')
-            .populate('classId', 'name className')
+            .populate('studentId', 'fullName studentCode rollNumber fatherPhone classId branchId')
+            .populate('classId', 'name className branchId')
+            .populate('branchId', 'name')
             .populate('teacherId', 'fullName username');
 
         res.status(201).json(populated);
+
     } catch (error) {
         console.error('Error creating Quran surah record:', error);
         res.status(500).json({ message: 'Failed to save Quran record', error: error.message });

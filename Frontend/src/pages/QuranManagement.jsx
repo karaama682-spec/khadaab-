@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   BookOpen, Sparkles, Plus, Search, Check, RotateCcw,
   Printer, FileDown, Trash2, Edit3, Filter, Calendar,
-  User, CheckCircle2, AlertCircle, X, ChevronDown, Award, RefreshCw
+  User, CheckCircle2, AlertCircle, X, ChevronDown, Award, RefreshCw, Building2
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import api from '../services/api';
@@ -27,6 +27,8 @@ const QuranManagement = () => {
   const [records, setRecords] = useState([]);
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [selectedBranchId, setSelectedBranchId] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -61,19 +63,31 @@ const QuranManagement = () => {
   const surahDropdownRef = useRef(null);
   const surahInputRef = useRef(null);
 
-  // Load records, students, and classes
+  // Load records, students, classes, and branches
   const loadData = async () => {
     try {
       setLoading(true);
-      const [recordsRes, studentsRes, classesRes] = await Promise.all([
+      const [recordsRes, studentsRes, classesRes, branchesRes] = await Promise.all([
         api.get('/quran/surahs').catch(() => ({ data: [] })),
         api.get('/students').catch(() => ({ data: [] })),
-        api.get('/classes').catch(() => ({ data: [] }))
+        api.get('/classes').catch(() => ({ data: [] })),
+        api.get('/branches').catch(() => ({ data: [] }))
       ]);
 
+      const branchList = branchesRes.data || [];
+      setBranches(branchList);
       setRecords(recordsRes.data || []);
       setStudents(studentsRes.data || []);
       setClasses(classesRes.data || []);
+
+      // Auto-detect the branch named or containing "dugsi" (case-insensitive)
+      const dugsiBranch = branchList.find(b => b.name && b.name.toLowerCase().includes('dugsi'));
+      if (dugsiBranch) {
+        setSelectedBranchId(dugsiBranch._id);
+      } else if (branchList.length > 0) {
+        // Fallback to first branch or All if dugsi is not found yet
+        setSelectedBranchId(branchList[0]._id);
+      }
     } catch (error) {
       console.error('Error loading Quran data:', error);
       showAlert({
@@ -104,18 +118,38 @@ const QuranManagement = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Filter students based on search query
+  // Filter students strictly by the active Dugsi branch
+  const branchStudents = useMemo(() => {
+    if (!selectedBranchId || selectedBranchId === 'All') return students;
+    return students.filter(s => {
+      const sBranchId = s.branchId?._id || s.branchId;
+      const cBranchId = s.classId?.branchId?._id || s.classId?.branchId;
+      return sBranchId === selectedBranchId || cBranchId === selectedBranchId;
+    });
+  }, [students, selectedBranchId]);
+
+  // Filter classes strictly by the active Dugsi branch
+  const branchClasses = useMemo(() => {
+    if (!selectedBranchId || selectedBranchId === 'All') return classes;
+    return classes.filter(c => {
+      const cBranchId = c.branchId?._id || c.branchId;
+      return cBranchId === selectedBranchId;
+    });
+  }, [classes, selectedBranchId]);
+
+  // Filter students based on search query (ONLY within Dugsi students)
   const filteredStudents = useMemo(() => {
-    if (!studentSearchQuery.trim()) return students.slice(0, 15);
+    if (!studentSearchQuery.trim()) return branchStudents.slice(0, 15);
     const q = studentSearchQuery.toLowerCase().trim();
-    return students.filter(s =>
+    return branchStudents.filter(s =>
       (s.fullName && s.fullName.toLowerCase().includes(q)) ||
       (s.studentCode && s.studentCode.toLowerCase().includes(q)) ||
       (s.rollNumber && s.rollNumber.toString().includes(q)) ||
       (s.classId?.name && s.classId.name.toLowerCase().includes(q)) ||
       (s.classId?.className && s.classId.className.toLowerCase().includes(q))
     ).slice(0, 20);
-  }, [students, studentSearchQuery]);
+  }, [branchStudents, studentSearchQuery]);
+
 
   // Filter 114 Surahs based on query
   const filteredSurahs = useMemo(() => {
@@ -211,6 +245,7 @@ const QuranManagement = () => {
         studentId: selectedStudent?._id,
         studentName: selectedStudent?.fullName || studentSearchQuery.trim(),
         classId: classId || undefined,
+        branchId: selectedBranchId !== 'All' ? selectedBranchId : (selectedStudent?.branchId?._id || selectedStudent?.branchId || undefined),
         halaqahName: halaqahName.trim(),
         surahName: surahNameValue,
         surahNumber: selectedSurah?.number || undefined,
@@ -301,9 +336,17 @@ const QuranManagement = () => {
     });
   };
 
-  // Filtered records for table & print
+  // Filtered records for table & print (scoped to the selected Dugsi branch)
   const displayedRecords = useMemo(() => {
     return records.filter(r => {
+      const matchBranch = !selectedBranchId || selectedBranchId === 'All' ||
+        r.branchId?._id === selectedBranchId ||
+        r.branchId === selectedBranchId ||
+        r.studentId?.branchId === selectedBranchId ||
+        r.studentId?.branchId?._id === selectedBranchId ||
+        r.classId?.branchId === selectedBranchId ||
+        r.classId?.branchId?._id === selectedBranchId;
+
       const matchSearch = !searchFilter.trim() ||
         (r.studentName && r.studentName.toLowerCase().includes(searchFilter.toLowerCase())) ||
         (r.halaqahName && r.halaqahName.toLowerCase().includes(searchFilter.toLowerCase())) ||
@@ -314,9 +357,9 @@ const QuranManagement = () => {
       const matchStatus = statusFilter === 'All' || r.status === statusFilter;
       const matchDate = !dateFilter || (r.date && r.date.slice(0, 10) === dateFilter);
 
-      return matchSearch && matchHalaqah && matchStatus && matchDate;
+      return matchBranch && matchSearch && matchHalaqah && matchStatus && matchDate;
     });
-  }, [records, searchFilter, halaqahFilter, statusFilter, dateFilter]);
+  }, [records, selectedBranchId, searchFilter, halaqahFilter, statusFilter, dateFilter]);
 
   // Unique halaqahs for filter
   const uniqueHalaqahs = useMemo(() => {
@@ -324,12 +367,13 @@ const QuranManagement = () => {
     records.forEach(r => {
       if (r.halaqahName) set.add(r.halaqahName);
     });
-    classes.forEach(c => {
+    branchClasses.forEach(c => {
       if (c.name) set.add(c.name);
       if (c.className) set.add(c.className);
     });
     return Array.from(set).filter(Boolean);
-  }, [records, classes]);
+  }, [records, branchClasses]);
+
 
   // KPI statistics
   const stats = useMemo(() => {
@@ -488,7 +532,30 @@ const QuranManagement = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 w-full lg:w-auto">
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+            {/* Branch Indicator & Switcher */}
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white/10 dark:bg-slate-800/80 border border-emerald-500/30 backdrop-blur-md">
+              <Building2 size={16} className="text-emerald-400 shrink-0" />
+              <div className="flex flex-col">
+                <span className="text-[9px] font-black uppercase tracking-wider text-emerald-300/80">Laanta:</span>
+                <select
+                  value={selectedBranchId}
+                  onChange={(e) => setSelectedBranchId(e.target.value)}
+                  className="bg-transparent text-emerald-200 font-black text-xs border-none focus:outline-none cursor-pointer pr-2"
+                >
+                  {branches.map(b => {
+                    const isDugsi = b.name && b.name.toLowerCase().includes('dugsi');
+                    return (
+                      <option key={b._id} value={b._id} className="bg-slate-900 text-white">
+                        {b.name} {isDugsi ? '(Dugsiga)' : ''}
+                      </option>
+                    );
+                  })}
+                  <option value="All" className="bg-slate-900 text-white">Dhammaan Laamaha (All)</option>
+                </select>
+              </div>
+            </div>
+
             <button
               onClick={handleExportPDF}
               className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-5 py-3.5 bg-slate-800/80 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all border border-slate-700/80 shadow-md active:scale-95"
@@ -504,6 +571,7 @@ const QuranManagement = () => {
               <span>Daabac Waraaqda</span>
             </button>
           </div>
+
         </div>
       </div>
 
@@ -588,8 +656,9 @@ const QuranManagement = () => {
                 Diiwaangeli Imtixaanka Suuradda (تسجيل اختبار سورة)
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Gali magaca ardayga si ay xalaqaddiisu toos ugu soo baxdo, inta kalena u buuxi.
+                Gali magaca ardayga si ay xalaqaddiisu toos ugu soo baxdo (ardayda laanta {branches.find(b => b._id === selectedBranchId)?.name || 'Dugsiga'}).
               </p>
+
             </div>
           </div>
 
