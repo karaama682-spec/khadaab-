@@ -43,6 +43,7 @@ import { UserRole } from './types.js';
 import { NAV_CONFIG } from './constants.jsx';
 import { userHasPermission } from './utils/permissionUtils';
 import { useLanguage } from './i18n/LanguageContext.jsx';
+import ErrorBoundary from './components/common/ErrorBoundary.jsx';
 
 const RoleGuard = ({ children, currentRole, user }) => {
   const location = useLocation();
@@ -238,93 +239,95 @@ const App = () => {
   }
 
   return (
-    <Router>
-      {!user ? (
-        <Login onLogin={handleLogin} />
-      ) : (
-        <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors">
-          <Sidebar
-            user={user}
-            userRole={currentRole}
-            isMobileOpen={isSidebarOpen}
-            setIsMobileOpen={setIsSidebarOpen}
-            onNavigate={(path) => {
-              window.location.hash = path;
-            }}
-            onLogout={handleLogout}
-          />
-
-          <div className="flex flex-col flex-1 min-w-0">
-            <Navbar
+    <ErrorBoundary>
+      <Router>
+        {!user ? (
+          <Login onLogin={handleLogin} />
+        ) : (
+          <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors">
+            <Sidebar
               user={user}
-              currentRole={currentRole}
-              onMenuClick={() => setIsSidebarOpen(true)}
-              isDarkMode={isDarkMode}
-              toggleDarkMode={toggleDarkMode}
+              userRole={currentRole}
+              isMobileOpen={isSidebarOpen}
+              setIsMobileOpen={setIsSidebarOpen}
+              onNavigate={(path) => {
+                window.location.hash = path;
+              }}
               onLogout={handleLogout}
             />
 
-            <main className="flex-1 bg-slate-50 dark:bg-slate-950 overflow-y-auto overflow-x-hidden">
-              <RoleGuard currentRole={currentRole} user={user}>
-                <Routes>
-                  <Route path="/" element={<DashboardOverview />} />
-                  <Route path="/quran" element={<QuranManagement />} />
+            <div className="flex flex-col flex-1 min-w-0">
+              <Navbar
+                user={user}
+                currentRole={currentRole}
+                onMenuClick={() => setIsSidebarOpen(true)}
+                isDarkMode={isDarkMode}
+                toggleDarkMode={toggleDarkMode}
+                onLogout={handleLogout}
+              />
 
-                  {/* Academic Management */}
-                  <Route path="/academic/classes" element={<ClassesManagement />} />
-                  <Route path="/academic/teachers" element={<TeachersManagement />} />
-                  <Route path="/academic/students" element={<StudentsManagement />} />
-                  <Route path="/academic/guardians" element={<GuardiansManagement />} />
-                  <Route path="/academic/exit-students" element={<ExitStudents />} />
-                  <Route path="/academic/promotion" element={<ClassPromotion />} />
+              <main className="flex-1 bg-slate-50 dark:bg-slate-950 overflow-y-auto overflow-x-hidden">
+                <RoleGuard currentRole={currentRole} user={user}>
+                  <Routes>
+                    <Route path="/" element={<DashboardOverview />} />
+                    <Route path="/quran" element={<QuranManagement />} />
 
-                  {/* Attendance & Reports Management */}
-                  <Route path="/attendance/students" element={<StudentAttendanceManagement />} />
-                  <Route path="/reports/payments" element={<FeePaymentReport />} />
-                  <Route path="/reports/attendance" element={<StudentAttendanceReport />} />
-                  <Route path="/reports/responsibility" element={<GuardianPaymentReport />} />
-                  <Route path="/reports/category-summary" element={<CashbookCategoryReport />} />
-                  <Route path="/reports/payment-report" element={<CashbookPaymentReport />} />
-                  <Route path="/attendance/teachers" element={<TeacherAttendanceManagement />} />
-                  <Route path="/attendance/session-settings" element={<SessionSettings />} />
+                    {/* Academic Management */}
+                    <Route path="/academic/classes" element={<ClassesManagement />} />
+                    <Route path="/academic/teachers" element={<TeachersManagement />} />
+                    <Route path="/academic/students" element={<StudentsManagement />} />
+                    <Route path="/academic/guardians" element={<GuardiansManagement />} />
+                    <Route path="/academic/exit-students" element={<ExitStudents />} />
+                    <Route path="/academic/promotion" element={<ClassPromotion />} />
 
-                  {/* Examinations */}
-                  <Route path="/exams" element={<ExamsManagement />} />
-                  <Route path="/exams/marks" element={<ExamMarks />} />
-                  <Route path="/exams/results" element={<ExamResults />} />
+                    {/* Attendance & Reports Management */}
+                    <Route path="/attendance/students" element={<StudentAttendanceManagement />} />
+                    <Route path="/reports/payments" element={<FeePaymentReport />} />
+                    <Route path="/reports/attendance" element={<StudentAttendanceReport />} />
+                    <Route path="/reports/responsibility" element={<GuardianPaymentReport />} />
+                    <Route path="/reports/category-summary" element={<CashbookCategoryReport />} />
+                    <Route path="/reports/payment-report" element={<CashbookPaymentReport />} />
+                    <Route path="/attendance/teachers" element={<TeacherAttendanceManagement />} />
+                    <Route path="/attendance/session-settings" element={<SessionSettings />} />
 
-                  {/* Finance Management */}
-                  <Route path="/finance/cashbook" element={<CashbookManagement />} />
-                  <Route path="/finance/payers" element={<PayersManagement />} />
-                  <Route path="/finance/monthly-payments" element={<MonthlyPayments />} />
-                  <Route path="/finance/payments" element={<Navigate to="/finance/cashbook" replace />} />
-                  <Route path="/finance/salaries" element={<SalariesManagement />} />
-                  <Route path="/finance/expenses" element={<ExpensesManagement />} />
-                  <Route path="/finance/transactions" element={<TransactionsManagement />} />
-                  <Route path="/finance/wallets" element={<WalletsManagement />} />
+                    {/* Examinations */}
+                    <Route path="/exams" element={<ExamsManagement />} />
+                    <Route path="/exams/marks" element={<ExamMarks />} />
+                    <Route path="/exams/results" element={<ExamResults />} />
 
-                  {/* Structure */}
-                  <Route path="/structure/branches" element={<BranchesManagement />} />
+                    {/* Finance Management */}
+                    <Route path="/finance/cashbook" element={<CashbookManagement />} />
+                    <Route path="/finance/payers" element={<PayersManagement />} />
+                    <Route path="/finance/monthly-payments" element={<MonthlyPayments />} />
+                    <Route path="/finance/payments" element={<Navigate to="/finance/cashbook" replace />} />
+                    <Route path="/finance/salaries" element={<SalariesManagement />} />
+                    <Route path="/finance/expenses" element={<ExpensesManagement />} />
+                    <Route path="/finance/transactions" element={<TransactionsManagement />} />
+                    <Route path="/finance/wallets" element={<WalletsManagement />} />
 
-                  {/* Access & Users */}
-                  <Route path="/access/users" element={<UsersList />} />
-                  <Route path="/access/roles" element={<RolesPermissions />} />
-                  <Route path="/access/logs" element={<ActivityLogs />} />
-                  <Route path="/settings/profile" element={<BusinessProfile />} />
-                  <Route path="/settings/preferences" element={<SystemPreferences />} />
+                    {/* Structure */}
+                    <Route path="/structure/branches" element={<BranchesManagement />} />
 
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </RoleGuard>
-            </main>
+                    {/* Access & Users */}
+                    <Route path="/access/users" element={<UsersList />} />
+                    <Route path="/access/roles" element={<RolesPermissions />} />
+                    <Route path="/access/logs" element={<ActivityLogs />} />
+                    <Route path="/settings/profile" element={<BusinessProfile />} />
+                    <Route path="/settings/preferences" element={<SystemPreferences />} />
 
-            <footer className="py-4 px-8 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 text-xs text-center">
-              &copy; {new Date().getFullYear()} {t('nav.instituteManagement')}
-            </footer>
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </RoleGuard>
+              </main>
+
+              <footer className="py-4 px-8 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 text-xs text-center">
+                &copy; {new Date().getFullYear()} {t('nav.instituteManagement')}
+              </footer>
+            </div>
           </div>
-        </div>
-      )}
-    </Router>
+        )}
+      </Router>
+    </ErrorBoundary>
   );
 };
 

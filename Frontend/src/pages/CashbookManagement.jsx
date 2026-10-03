@@ -42,6 +42,8 @@ const phoneError = (method, value) => {
   return isValidSomaliMobile(value) ? '' : translate('cashbook.phone.mobileRule');
 };
 
+const fmtMoney = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 const emptyCategoryForm = () => ({
   title: '',
   type: 'Income',
@@ -103,7 +105,7 @@ const emptyTransactionForm = () => ({
 
 const CashbookManagement = () => {
   const { showAlert, showConfirm } = useAlert();
-  const { t, tv, locale } = useLanguage();
+  const { t, tv, language, locale } = useLanguage();
   const [activePanel, setActivePanel] = useState('category');
 
   const [categories, setCategories] = useState([]);
@@ -701,8 +703,6 @@ const CashbookManagement = () => {
   const receiverPhoneErr = walletDirection === 'receiver' ? '' : phoneError(transactionForm.method, transactionForm.receiverPhone);
   const phoneHint = PHONE_RULES[transactionForm.method] ? t(PHONE_RULES[transactionForm.method].labelKey) : '';
 
-  const fmtMoney = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
   if (loading) {
     return <div className="p-10 text-center text-slate-500">{t('cashbook.loading')}</div>;
   }
@@ -1285,7 +1285,7 @@ const CashbookManagement = () => {
                     <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
                     <span className="font-bold text-rose-700 dark:text-rose-300">
                       {isPayingTotal
-                        ? (locale === 'so'
+                        ? (language === 'so'
                             ? `Bixinta Wadarta Deynta: ${fmtMoney(payerInfo.previousBalance)} (Deyntii ${mName} ${y}) + ${fmtMoney(payerInfo.totalBalance)} (Bishan ${curObj.name})`
                             : `Paying total owed: ${fmtMoney(payerInfo.previousBalance)} (Arrears ${mName} ${y}) + ${fmtMoney(payerInfo.totalBalance)} (Current ${curObj.name})`)
                         : t('cashbook.payingArrearsBanner', { month: mName, year: y })}
@@ -1494,6 +1494,8 @@ const CashbookManagement = () => {
               const targetPaid = isTargetPast ? (targetArr ? targetArr.paid : 0) : payerInfo.totalPaid;
               const targetBal = isTargetPast ? (targetArr ? targetArr.balance : 0) : payerInfo.totalBalance;
               const activeCycle = transactionForm.targetMonth || payerInfo.month;
+              const remainingAfter = Math.max(0, targetBal - entered);
+              const isPartial = entered > 0 && entered < targetBal;
 
               return (
               <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 p-5">
