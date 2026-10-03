@@ -69,6 +69,7 @@ const createQuranSurahRecord = async (req, res) => {
             surahName,
             surahNumber,
             status,
+            repeatCount,
             note,
             date
         } = req.body;
@@ -111,6 +112,7 @@ const createQuranSurahRecord = async (req, res) => {
             surahName: surahName.trim(),
             surahNumber: surahNumber ? Number(surahNumber) : undefined,
             status: status === 'repeat' ? 'repeat' : 'passed',
+            repeatCount: status === 'repeat' ? Math.max(1, Number(repeatCount) || 1) : 1,
             note: note ? note.trim() : '',
             date: date ? new Date(date) : new Date(),
             teacherId: req.user ? req.user._id : undefined
@@ -145,6 +147,7 @@ const updateQuranSurahRecord = async (req, res) => {
             surahName,
             surahNumber,
             status,
+            repeatCount,
             note,
             date
         } = req.body;
@@ -161,6 +164,11 @@ const updateQuranSurahRecord = async (req, res) => {
         if (surahName) record.surahName = surahName.trim();
         if (surahNumber !== undefined) record.surahNumber = surahNumber ? Number(surahNumber) : undefined;
         if (status) record.status = status;
+        if (repeatCount !== undefined) {
+            record.repeatCount = Math.max(1, Number(repeatCount) || 1);
+        } else if (status === 'passed') {
+            record.repeatCount = 1;
+        }
         if (note !== undefined) record.note = note.trim();
         if (date) record.date = new Date(date);
 

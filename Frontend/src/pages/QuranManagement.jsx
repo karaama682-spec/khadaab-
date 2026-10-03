@@ -19,6 +19,8 @@ const QUICK_NOTES = [
   'قراءة طيبة'
 ];
 
+const REPEAT_CHIPS = [1, 2, 3, 5, 7, 10];
+
 const QuranManagement = () => {
   const { locale } = useLanguage();
   const { showAlert, showConfirm } = useAlert();
@@ -47,6 +49,7 @@ const QuranManagement = () => {
   // Remaining test fields (kept blank/ready for teacher input)
   const [note, setNote] = useState('');
   const [status, setStatus] = useState('passed'); // 'passed' (✓) or 'repeat' (•)
+  const [repeatCount, setRepeatCount] = useState(3);
   const [recordDate, setRecordDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   // Edit modal state
@@ -188,6 +191,7 @@ const QuranManagement = () => {
     setSurahSearchQuery('');
     setNote('');
     setStatus('passed');
+    setRepeatCount(3);
     setTimeout(() => {
       if (surahInputRef.current) surahInputRef.current.focus();
     }, 50);
@@ -210,6 +214,7 @@ const QuranManagement = () => {
     setSurahSearchQuery('');
     setNote('');
     setStatus('passed');
+    setRepeatCount(3);
     setRecordDate(new Date().toISOString().slice(0, 10));
   };
 
@@ -250,6 +255,7 @@ const QuranManagement = () => {
         surahName: surahNameValue,
         surahNumber: selectedSurah?.number || undefined,
         status,
+        repeatCount: status === 'repeat' ? Math.max(1, Number(repeatCount) || 1) : 1,
         note: note.trim(),
         date: recordDate
       };
@@ -478,7 +484,7 @@ const QuranManagement = () => {
       doc.text((r.surahName || '-').slice(0, 15), colX.surah, curY + 5);
       doc.text((r.note || '-').slice(0, 14), colX.note, curY + 5);
 
-      const statusSymbol = r.status === 'passed' ? 'Pass (Gudbay)' : 'Repeat (Tikraar)';
+      const statusSymbol = r.status === 'passed' ? 'Pass (Gudbay)' : `Tikraar (${r.repeatCount || 1}x)`;
       if (r.status === 'passed') {
         doc.setTextColor(5, 150, 105);
       } else {
@@ -910,6 +916,51 @@ const QuranManagement = () => {
                   <span>Tikraar (تكرار)</span>
                 </button>
               </div>
+
+              {status === 'repeat' && (
+                <div className="mt-3 p-3.5 rounded-2xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                      <RotateCcw size={13} className="text-amber-600" />
+                      Tirada Tikraarka:
+                    </span>
+                    <span className="text-[11px] font-black text-amber-800 dark:text-amber-200 bg-amber-200/70 dark:bg-amber-900/70 px-2.5 py-0.5 rounded-full">
+                      {repeatCount} jeer
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      required
+                      value={repeatCount}
+                      onChange={(e) => setRepeatCount(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-20 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-sm font-black text-amber-950 dark:text-amber-100 text-center focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
+                    />
+                    <div className="flex flex-wrap items-center gap-1.5 flex-1">
+                      {REPEAT_CHIPS.map((num) => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => setRepeatCount(num)}
+                          className={`px-2.5 py-1.5 rounded-xl text-xs font-black transition-all ${
+                            repeatCount === num
+                              ? 'bg-amber-500 text-white shadow-sm ring-2 ring-amber-400/30'
+                              : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-slate-800 border border-amber-200/60 dark:border-slate-800'
+                          }`}
+                        >
+                          {num}x
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold italic">
+                    Ardayga waxaa lagu celinayaa {repeatCount} jeer si uu u soo adkeeyo suuradda.
+                  </p>
+                </div>
+              )}
             </div>
 
           </div>
@@ -1131,9 +1182,9 @@ const QuranManagement = () => {
                           <span>Gudbay</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-xs font-black print:bg-transparent print:text-slate-900">
-                          <span className="text-lg leading-none">•</span>
-                          <span>Tikraar</span>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-xs font-black border border-amber-200/80 dark:border-amber-800/60 shadow-sm print:bg-transparent print:text-slate-900">
+                          <RotateCcw size={12} className="text-amber-600 shrink-0 print:hidden" />
+                          <span>Tikraar ({record.repeatCount || 1} jeer)</span>
                         </span>
                       )}
                     </td>
@@ -1286,7 +1337,7 @@ const QuranManagement = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setEditingRecord({ ...editingRecord, status: 'repeat' })}
+                    onClick={() => setEditingRecord({ ...editingRecord, status: 'repeat', repeatCount: editingRecord.repeatCount || 3 })}
                     className={`py-2.5 px-3 rounded-xl font-bold text-xs border ${
                       editingRecord.status === 'repeat'
                         ? 'bg-amber-500 text-white border-amber-500'
@@ -1296,6 +1347,48 @@ const QuranManagement = () => {
                     • Tikraar
                   </button>
                 </div>
+
+                {editingRecord.status === 'repeat' && (
+                  <div className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[10px] font-black uppercase text-amber-800 dark:text-amber-300">
+                        Tirada Tikraarka:
+                      </label>
+                      <span className="text-[10px] font-bold text-amber-800 dark:text-amber-200 bg-amber-200/60 dark:bg-amber-900/60 px-2 py-0.5 rounded-full">
+                        {editingRecord.repeatCount || 1} jeer
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={editingRecord.repeatCount || 1}
+                        onChange={(e) => setEditingRecord({
+                          ...editingRecord,
+                          repeatCount: Math.max(1, parseInt(e.target.value) || 1)
+                        })}
+                        className="w-20 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-sm font-bold text-center"
+                      />
+                      <div className="flex flex-wrap gap-1">
+                        {REPEAT_CHIPS.map(n => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setEditingRecord({ ...editingRecord, repeatCount: n })}
+                            className={`px-2 py-1 rounded text-xs font-bold ${
+                              (editingRecord.repeatCount || 1) === n
+                                ? 'bg-amber-500 text-white'
+                                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-amber-200/40'
+                            }`}
+                          >
+                            {n}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">

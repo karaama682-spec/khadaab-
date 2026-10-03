@@ -34,6 +34,11 @@ const quranSurahRecordSchema = new mongoose.Schema({
         enum: ['passed', 'repeat'],
         default: 'passed'
     },
+    repeatCount: {
+        type: Number,
+        default: 1,
+        min: 1
+    },
     note: {
         type: String,
         trim: true,
