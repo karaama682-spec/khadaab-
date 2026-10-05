@@ -19,7 +19,8 @@ import {
   Settings,
   ClipboardList,
   PenSquare,
-  Award
+  Award,
+  BookmarkCheck
 } from 'lucide-react';
 import { UserRole } from './types.js';
 
@@ -33,6 +34,27 @@ export const NAV_CONFIG = [
     subItems: []
   },
   {
+    label: "Qur'aan",
+    translationKey: 'quran',
+    path: '/quran',
+    icon: BookOpen,
+    roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER, UserRole.TEACHER],
+    subItems: [
+      {
+        label: 'Jadwalka Suuradaha',
+        translationKey: 'quranSurahs',
+        path: '/quran/surahs',
+        icon: BookOpen
+      },
+      {
+        label: 'Jadwalka Cashirada',
+        translationKey: 'quranLessons',
+        path: '/quran/lessons',
+        icon: BookmarkCheck
+      }
+    ]
+  },
+  {
     label: 'Academic Management',
     translationKey: 'academicManagement',
     path: '/academic',
@@ -42,6 +64,7 @@ export const NAV_CONFIG = [
       { label: 'Classes', translationKey: 'classes', path: '/academic/classes', icon: BookOpen },
       { label: 'Teachers', translationKey: 'teachers', path: '/academic/teachers', icon: GraduationCap },
       { label: 'Students', translationKey: 'students', path: '/academic/students', icon: Users },
+      { label: 'Guardians', translationKey: 'guardians', path: '/academic/guardians', icon: Users },
       { label: 'Exit Students', translationKey: 'exitStudents', path: '/academic/exit-students', icon: UserCheck },
       { label: 'Class Promotion', translationKey: 'classPromotion', path: '/academic/promotion', icon: UserCheck },
     ]

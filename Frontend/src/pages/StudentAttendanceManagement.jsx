@@ -22,6 +22,7 @@ import {
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { classLabel } from '../utils/classLabel';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const today = () => new Date().toISOString().split('T')[0];
 
@@ -39,6 +40,7 @@ const defaultSessionRow = (defaultTime = '') => ({
 
 const StudentAttendanceManagement = () => {
   const { showAlert, showConfirm } = useAlert();
+  const { t, tv } = useLanguage();
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
   const [selectedBranchId, setSelectedBranchId] = useState('');
@@ -82,7 +84,7 @@ const StudentAttendanceManagement = () => {
     const map = new Map();
     classes.forEach(item => {
       const branch = item.branchId;
-      if (branch && branch._id) map.set(String(branch._id), branch.name || 'Branch');
+      if (branch && branch._id) map.set(String(branch._id), branch.name || t('common.branch'));
     });
     return [...map.entries()].map(([_id, name]) => ({ _id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [classes]);
@@ -129,7 +131,7 @@ const StudentAttendanceManagement = () => {
     if (branchId) setSelectedBranchId(String(branchId));
     if (student.classId) setSelectedClassId(String(student.classId?._id || student.classId));
     setSelectedSearchedStudentId(String(student._id));
-    setStudentSearch(`${student.fullName} — ${student.studentCode || student.rollNumber || 'No code'}`);
+    setStudentSearch(`${student.fullName} — ${student.studentCode || student.rollNumber || t('attendance.student.noCode')}`);
     setShowSearchResults(false);
   };
 
@@ -186,7 +188,7 @@ const StudentAttendanceManagement = () => {
         setStudents(studentResponse.data || []);
       } catch (error) {
         console.error('Failed to load attendance data', error);
-        showAlert({ type: 'danger', title: 'Unable to load data', message: 'Please refresh the page and try again.' });
+        showAlert({ type: 'danger', title: t('attendance.student.unableToLoad'), message: t('attendance.student.refreshAndRetry') });
       } finally {
         setLoading(false);
       }
@@ -378,15 +380,15 @@ const StudentAttendanceManagement = () => {
       setTimeout(() => setSavedSuccessId(prev => (prev === `daily-${studentId}` ? null : prev)), 2500);
       showAlert({
         type: 'success',
-        title: wasSaved ? 'Daily Attendance updated' : 'Daily Attendance saved',
-        message: `${student.fullName}: recorded as ${row.status}.`
+        title: wasSaved ? t('attendance.student.dailyUpdated') : t('attendance.student.dailySaved'),
+        message: t('attendance.student.recordedAs', { name: student.fullName, status: tv(row.status) })
       });
     } catch (error) {
       console.error('Failed to save daily attendance', error);
       showAlert({
         type: 'danger',
-        title: 'Could not save attendance',
-        message: error.response?.data?.message || 'Please try again.'
+        title: t('attendance.student.couldNotSave'),
+        message: error.response?.data?.message || t('attendance.student.tryAgain')
       });
     } finally {
       setSavingStudentId(null);
@@ -403,10 +405,10 @@ const StudentAttendanceManagement = () => {
 
     const ok = await showConfirm({
       type: 'warning',
-      title: 'Delete Daily Attendance?',
-      message: `Are you sure you want to delete the daily attendance record for "${student.fullName}"?`,
-      confirmText: 'Yes, delete',
-      cancelText: 'Cancel',
+      title: t('attendance.student.deleteDailyTitle'),
+      message: t('attendance.student.deleteDailyConfirm', { name: student.fullName }),
+      confirmText: t('common.yesDelete'),
+      cancelText: t('common.cancel'),
       danger: true
     });
     if (!ok) return;
@@ -420,15 +422,15 @@ const StudentAttendanceManagement = () => {
       }));
       showAlert({
         type: 'success',
-        title: 'Daily Attendance removed',
-        message: `Daily attendance for ${student.fullName} has been reset to unsaved.`
+        title: t('attendance.student.dailyRemoved'),
+        message: t('attendance.student.dailyRemovedMsg', { name: student.fullName })
       });
     } catch (error) {
       console.error('Failed to delete daily attendance', error);
       showAlert({
         type: 'danger',
-        title: 'Could not delete attendance',
-        message: error.response?.data?.message || 'Please try again.'
+        title: t('attendance.student.couldNotDelete'),
+        message: error.response?.data?.message || t('attendance.student.tryAgain')
       });
     } finally {
       setDeletingStudentId(null);
@@ -445,8 +447,8 @@ const StudentAttendanceManagement = () => {
     if (dailyRow?.isSaved && dailyRow?.status === 'Absent') {
       showAlert({
         type: 'danger',
-        title: 'Session Attendance Locked',
-        message: 'Student is marked as Absent for Daily Attendance. To record Session Attendance, change Daily Attendance to Present using Edit Daily.'
+        title: t('attendance.student.sessionLocked'),
+        message: t('attendance.student.sessionLockedMsg')
       });
       return;
     }
@@ -487,15 +489,15 @@ const StudentAttendanceManagement = () => {
       setTimeout(() => setSavedSuccessId(prev => (prev === `session-${key}` ? null : prev)), 2500);
       showAlert({
         type: 'success',
-        title: wasSaved ? `${sessionName} Attendance updated` : `${sessionName} Attendance saved`,
-        message: `${student.fullName}: recorded as ${row.status} in ${sessionName}.`
+        title: wasSaved ? t('attendance.student.sessionUpdated', { session: tv(sessionName) }) : t('attendance.student.sessionSaved', { session: tv(sessionName) }),
+        message: t('attendance.student.recordedAsIn', { name: student.fullName, status: tv(row.status), session: tv(sessionName) })
       });
     } catch (error) {
       console.error('Failed to save session attendance', error);
       showAlert({
         type: 'danger',
-        title: 'Could not save session attendance',
-        message: error.response?.data?.message || 'Please try again.'
+        title: t('attendance.student.couldNotSaveSession'),
+        message: error.response?.data?.message || t('attendance.student.tryAgain')
       });
     } finally {
       setSavingStudentId(null);
@@ -513,10 +515,10 @@ const StudentAttendanceManagement = () => {
 
     const ok = await showConfirm({
       type: 'warning',
-      title: `Delete ${sessionName} Attendance?`,
-      message: `Are you sure you want to delete the ${sessionName} attendance record for "${student.fullName}"? Daily Attendance will remain intact.`,
-      confirmText: 'Yes, delete',
-      cancelText: 'Cancel',
+      title: t('attendance.student.deleteSessionTitle', { session: tv(sessionName) }),
+      message: t('attendance.student.deleteSessionConfirm', { session: tv(sessionName), name: student.fullName }),
+      confirmText: t('common.yesDelete'),
+      cancelText: t('common.cancel'),
       danger: true
     });
     if (!ok) return;
@@ -530,15 +532,15 @@ const StudentAttendanceManagement = () => {
       }));
       showAlert({
         type: 'success',
-        title: `${sessionName} Attendance removed`,
-        message: `${sessionName} record for ${student.fullName} has been deleted.`
+        title: t('attendance.student.sessionRemoved', { session: tv(sessionName) }),
+        message: t('attendance.student.sessionRemovedMsg', { session: tv(sessionName), name: student.fullName })
       });
     } catch (error) {
       console.error('Failed to delete session attendance', error);
       showAlert({
         type: 'danger',
-        title: 'Could not delete session attendance',
-        message: error.response?.data?.message || 'Please try again.'
+        title: t('attendance.student.couldNotDeleteSession'),
+        message: error.response?.data?.message || t('attendance.student.tryAgain')
       });
     } finally {
       setDeletingStudentId(null);
@@ -587,15 +589,15 @@ const StudentAttendanceManagement = () => {
       const absentCount = targetStudents.filter(s => dailyRoster[s._id]?.status === 'Absent').length;
       showAlert({
         type: 'success',
-        title: 'Daily Attendance saved',
-        message: `${presentCount} present, ${absentCount} absent recorded for ${selectedClassName || 'this class'}.`
+        title: t('attendance.student.dailySaved'),
+        message: t('attendance.student.batchSaved', { present: presentCount, absent: absentCount, className: selectedClassName || t('attendance.student.thisClass') })
       });
     } catch (error) {
       console.error('Failed to save daily register', error);
       showAlert({
         type: 'danger',
-        title: 'Could not save attendance',
-        message: error.response?.data?.message || 'Please try again.'
+        title: t('attendance.student.couldNotSave'),
+        message: error.response?.data?.message || t('attendance.student.tryAgain')
       });
     } finally {
       setSavingDailyBatch(false);
@@ -603,7 +605,7 @@ const StudentAttendanceManagement = () => {
   };
 
   if (loading) {
-    return <div className="p-10 text-center text-sm font-semibold text-slate-400">Loading Attendance System...</div>;
+    return <div className="p-10 text-center text-sm font-semibold text-slate-400">{t('attendance.student.loading')}</div>;
   }
 
   return (
@@ -615,10 +617,10 @@ const StudentAttendanceManagement = () => {
         </div>
         <div>
           <h1 className="text-4xl font-black uppercase leading-none tracking-tight text-slate-900 dark:text-white">
-            Student Attendance
+            {t('attendance.student.title')}
           </h1>
           <p className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-            Daily Attendance (Present | Absent) · Session Attendance (Late | Partial)
+            {t('attendance.student.subtitle')}
           </p>
         </div>
       </div>
@@ -626,7 +628,7 @@ const StudentAttendanceManagement = () => {
       {/* Quick Student Search */}
       <section className="rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500">
-          <Search size={14} className="text-brand-500" /> Search Student (ID / Code or Name)
+          <Search size={14} className="text-brand-500" /> {t('attendance.student.searchLabel')}
         </label>
         <div className="relative" ref={searchContainerRef}>
           <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -646,7 +648,7 @@ const StudentAttendanceManagement = () => {
                 handleSelectSearchedStudent(searchSuggestions[0]);
               }
             }}
-            placeholder="Search by Student Name or Student ID/Code..."
+            placeholder={t('attendance.student.searchPlaceholder')}
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3.5 pl-11 pr-11 text-sm font-bold text-slate-900 outline-none focus:border-brand-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
           {studentSearch && (
@@ -654,7 +656,7 @@ const StudentAttendanceManagement = () => {
               type="button"
               onClick={clearStudentSearch}
               className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-white transition-colors"
-              title="Clear search and show all students"
+              title={t('attendance.student.clearSearch')}
             >
               <X size={16} />
             </button>
@@ -673,7 +675,7 @@ const StudentAttendanceManagement = () => {
                 >
                   <span className="text-sm font-bold text-slate-900 dark:text-white">{student.fullName}</span>
                   <span className="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                    Code: {student.studentCode || student.rollNumber || '—'}
+                    {t('common.code')}: {student.studentCode || student.rollNumber || '—'}
                   </span>
                 </button>
               ))}
@@ -681,7 +683,7 @@ const StudentAttendanceManagement = () => {
           )}
           {showSearchResults && studentSearch.trim() && searchSuggestions.length === 0 && (
             <div className="absolute left-0 right-0 top-full z-20 mt-2 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-semibold text-slate-400 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-              No student found matching "{studentSearch.trim()}".
+              {t('attendance.student.noMatchGlobal', { query: studentSearch.trim() })}
             </div>
           )}
         </div>
@@ -691,14 +693,14 @@ const StudentAttendanceManagement = () => {
       <section className="grid grid-cols-1 gap-5 rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 md:grid-cols-3">
         <div>
           <label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500">
-            <Building2 size={14} className="text-indigo-500" /> Branch
+            <Building2 size={14} className="text-indigo-500" /> {t('common.branch')}
           </label>
           <select
             value={selectedBranchId}
             onChange={e => setSelectedBranchId(e.target.value)}
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-bold text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           >
-            <option value="">All Branches</option>
+            <option value="">{t('common.allBranches')}</option>
             {branches.map(item => (
               <option key={item._id} value={item._id}>{item.name}</option>
             ))}
@@ -707,14 +709,14 @@ const StudentAttendanceManagement = () => {
 
         <div>
           <label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500">
-            <BookOpen size={14} className="text-brand-500" /> Class
+            <BookOpen size={14} className="text-brand-500" /> {t('common.class')}
           </label>
           <select
             value={selectedClassId}
             onChange={e => setSelectedClassId(e.target.value)}
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm font-bold text-slate-900 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           >
-            <option value="">Select class...</option>
+            <option value="">{t('attendance.student.selectClass')}</option>
             {visibleClasses.map(item => (
               <option key={item._id} value={item._id}>{classLabel(item)}</option>
             ))}
@@ -723,7 +725,7 @@ const StudentAttendanceManagement = () => {
 
         <div>
           <label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500">
-            <Calendar size={14} className="text-emerald-500" /> Date
+            <Calendar size={14} className="text-emerald-500" /> {t('common.date')}
           </label>
           <input
             type="date"
@@ -739,7 +741,7 @@ const StudentAttendanceManagement = () => {
       {!selectedClassId && (
         <div className="rounded-[32px] border border-dashed border-slate-200 bg-white p-12 text-center dark:border-slate-700 dark:bg-slate-900">
           <Users className="mx-auto mb-3 text-slate-300" size={40} />
-          <p className="text-sm font-bold text-slate-500">Select a class to load its students.</p>
+          <p className="text-sm font-bold text-slate-500">{t('attendance.student.selectClassHint')}</p>
         </div>
       )}
 
@@ -758,7 +760,7 @@ const StudentAttendanceManagement = () => {
                       {activeIndividualStudent.fullName}
                     </h3>
                     <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      ID/Code: <span className="font-bold text-slate-700 dark:text-slate-300">{activeIndividualStudent.studentCode || activeIndividualStudent.rollNumber || '—'}</span> · Class: <span className="font-bold">{selectedClassName}</span> {currentBranchName && `(${currentBranchName})`}
+                      {t('attendance.student.idCode')}: <span className="font-bold text-slate-700 dark:text-slate-300">{activeIndividualStudent.studentCode || activeIndividualStudent.rollNumber || '—'}</span> · {t('common.class')}: <span className="font-bold">{selectedClassName}</span> {currentBranchName && `(${currentBranchName})`}
                     </p>
                   </div>
                 </div>
@@ -767,7 +769,7 @@ const StudentAttendanceManagement = () => {
                   onClick={clearStudentSearch}
                   className="rounded-2xl border border-brand-300 bg-white px-4 py-2 text-xs font-black uppercase tracking-wider text-brand-700 shadow-sm hover:bg-brand-50 dark:border-brand-800 dark:bg-slate-900 dark:text-brand-300 dark:hover:bg-slate-800 transition-all"
                 >
-                  Show all {classStudents.length} students
+                  {t('attendance.student.showAll', { count: classStudents.length })}
                 </button>
               </div>
 
@@ -787,10 +789,10 @@ const StudentAttendanceManagement = () => {
                         <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-4 dark:border-slate-800">
                           <div>
                             <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                              Daily Attendance
+                              {t('attendance.student.dailyAttendance')}
                             </span>
                             <h4 className="text-lg font-black text-slate-900 dark:text-white">
-                              Present / Absent
+                              {t('attendance.student.presentAbsent')}
                             </h4>
                           </div>
                           <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${
@@ -798,18 +800,18 @@ const StudentAttendanceManagement = () => {
                               ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400'
                               : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
                           }`}>
-                            {row.isSaved ? 'Daily Saved' : 'Not Saved'}
+                            {row.isSaved ? t('attendance.student.dailySavedBadge') : t('attendance.student.notSaved')}
                           </span>
                         </div>
 
                         <p className="mt-4 text-xs font-semibold text-slate-500">
-                          Daily Attendance applies once per day for the entire day. It operates independently from sessions.
+                          {t('attendance.student.dailyHint')}
                         </p>
 
                         {/* Status Toggle Buttons: Present | Absent */}
                         <div className="mt-5">
                           <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-2">
-                            Daily Status
+                            {t('attendance.student.dailyStatus')}
                           </label>
                           <div className="grid grid-cols-2 gap-3">
                             <button
@@ -821,7 +823,7 @@ const StudentAttendanceManagement = () => {
                                   : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-emerald-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-800/80'
                               }`}
                             >
-                              <CheckCircle2 size={16} /> Present
+                              <CheckCircle2 size={16} /> {tv('Present')}
                             </button>
 
                             <button
@@ -833,7 +835,7 @@ const StudentAttendanceManagement = () => {
                                   : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-rose-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-800/80'
                               }`}
                             >
-                              <X size={16} /> Absent
+                              <X size={16} /> {tv('Absent')}
                             </button>
                           </div>
                         </div>
@@ -842,13 +844,13 @@ const StudentAttendanceManagement = () => {
                         {row.status === 'Absent' && (
                           <div className="mt-4 animate-in fade-in duration-300">
                             <label className="text-[10px] font-black uppercase tracking-wider text-rose-500 block mb-1.5">
-                              Absence Reason
+                              {t('attendance.student.absenceReason')}
                             </label>
                             <input
                               type="text"
                               value={row.description}
                               onChange={e => setDailyDescription(sId, e.target.value)}
-                              placeholder="e.g. Illness, family emergency..."
+                              placeholder={t('attendance.student.absencePlaceholder')}
                               className="w-full rounded-2xl border border-rose-200 bg-rose-50/50 px-4 py-3 text-xs font-semibold text-slate-900 outline-none focus:border-rose-400 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-white"
                             />
                           </div>
@@ -871,11 +873,11 @@ const StudentAttendanceManagement = () => {
                             >
                               {isSavedSuccess ? (
                                 <>
-                                  <CheckCircle2 size={14} /> Updated
+                                  <CheckCircle2 size={14} /> {t('attendance.student.updated')}
                                 </>
                               ) : (
                                 <>
-                                  <Pencil size={14} /> {isSavingThis ? 'Saving...' : 'Edit Daily'}
+                                  <Pencil size={14} /> {isSavingThis ? t('common.saving') : t('attendance.student.editDaily')}
                                 </>
                               )}
                             </button>
@@ -885,9 +887,9 @@ const StudentAttendanceManagement = () => {
                               onClick={() => deleteDailySingle(sId)}
                               disabled={isSavingThis || isDeletingThis}
                               className="flex items-center gap-1.5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-black uppercase tracking-wider text-rose-600 hover:bg-rose-100 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-400 disabled:opacity-50 transition-all"
-                              title="Delete daily attendance record"
+                              title={t('attendance.student.deleteDailyRecord')}
                             >
-                              <Trash2 size={14} /> {isDeletingThis ? 'Deleting...' : 'Delete'}
+                              <Trash2 size={14} /> {isDeletingThis ? t('attendance.student.deleting') : t('common.delete')}
                             </button>
                           </>
                         ) : (
@@ -903,11 +905,11 @@ const StudentAttendanceManagement = () => {
                           >
                             {isSavedSuccess ? (
                               <>
-                                <CheckCircle2 size={14} /> Saved
+                                <CheckCircle2 size={14} /> {t('attendance.student.saved')}
                               </>
                             ) : (
                               <>
-                                <Save size={14} /> {isSavingThis ? 'Saving...' : 'Save Daily'}
+                                <Save size={14} /> {isSavingThis ? t('common.saving') : t('attendance.student.saveDaily')}
                               </>
                             )}
                           </button>
@@ -938,15 +940,15 @@ const StudentAttendanceManagement = () => {
                         <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-4 dark:border-slate-800">
                           <div>
                             <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">
-                              Session Attendance
+                              {t('attendance.student.sessionAttendance')}
                             </span>
                             <h4 className="text-lg font-black text-slate-900 dark:text-white">
-                              Late / Partial
+                              {t('attendance.student.latePartial')}
                             </h4>
                           </div>
                           {isDailyAbsent ? (
                             <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-rose-700 dark:bg-rose-950/60 dark:text-rose-400">
-                              <Lock size={12} strokeWidth={2.5} /> Locked (Daily Absent)
+                              <Lock size={12} strokeWidth={2.5} /> {t('attendance.student.lockedDailyAbsent')}
                             </span>
                           ) : (
                             <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${
@@ -954,7 +956,7 @@ const StudentAttendanceManagement = () => {
                                 ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400'
                                 : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
                             }`}>
-                              {row.isSaved ? `${selectedSession} Saved` : `${selectedSession} Not Saved`}
+                              {row.isSaved ? t('attendance.student.sessionSavedBadge', { session: tv(selectedSession) }) : t('attendance.student.sessionNotSaved', { session: tv(selectedSession) })}
                             </span>
                           )}
                         </div>
@@ -965,10 +967,10 @@ const StudentAttendanceManagement = () => {
                             <AlertCircle size={18} className="shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
                             <div>
                               <p className="font-black text-rose-900 dark:text-rose-200 text-xs uppercase tracking-wider">
-                                Session Attendance Locked
+                                {t('attendance.student.sessionLocked')}
                               </p>
                               <p className="mt-1 text-xs font-semibold text-rose-700 dark:text-rose-300">
-                                This student is marked as <strong>Absent</strong> for Daily Attendance. To record Morning, Breakfast, or Evening attendance, first change Daily Attendance to <strong>Present</strong> and click <strong>Edit Daily</strong>.
+                                {t('attendance.student.lockNotice')}
                               </p>
                             </div>
                           </div>
@@ -977,7 +979,7 @@ const StudentAttendanceManagement = () => {
                         {/* Session Selector (Morning / Breakfast / Evening) */}
                         <div className="mt-4">
                           <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-2">
-                            Select Session
+                            {t('attendance.student.selectSession')}
                           </label>
                           <div className="grid grid-cols-3 gap-2">
                             {SESSIONS.map(sessionName => {
@@ -1002,7 +1004,7 @@ const StudentAttendanceManagement = () => {
                                     <span className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
                                   )}
                                   <SessionIcon size={16} />
-                                  <span className="text-[11px] font-black uppercase tracking-wider">{sessionName}</span>
+                                  <span className="text-[11px] font-black uppercase tracking-wider">{tv(sessionName)}</span>
                                   {sessTime && (
                                     <span className="text-[9px] opacity-70 font-semibold">{sessTime}</span>
                                   )}
@@ -1015,7 +1017,7 @@ const StudentAttendanceManagement = () => {
                         {/* Session Status Options: Late | Partial */}
                         <div className="mt-5">
                           <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-2">
-                            {selectedSession} Status
+                            {t('attendance.student.sessionStatus', { session: tv(selectedSession) })}
                           </label>
                           <div className="grid grid-cols-2 gap-3">
                             <button
@@ -1028,7 +1030,7 @@ const StudentAttendanceManagement = () => {
                                   : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-amber-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
                               }`}
                             >
-                              <Clock size={16} /> Late
+                              <Clock size={16} /> {tv('Late')}
                             </button>
 
                             <button
@@ -1041,7 +1043,7 @@ const StudentAttendanceManagement = () => {
                                   : 'border border-slate-200 bg-slate-50 text-slate-600 hover:bg-indigo-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
                               }`}
                             >
-                              <AlertCircle size={16} /> Partial
+                              <AlertCircle size={16} /> {tv('Partial')}
                             </button>
                           </div>
                         </div>
@@ -1051,7 +1053,7 @@ const StudentAttendanceManagement = () => {
                           {row.status === 'Late' && (
                             <div>
                               <label className="text-[10px] font-black uppercase tracking-wider text-amber-600 block mb-1">
-                                Actual Arrival Time
+                                {t('attendance.student.arrivalTime')}
                               </label>
                               <input
                                 type="time"
@@ -1065,14 +1067,14 @@ const StudentAttendanceManagement = () => {
 
                           <div>
                             <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">
-                              {row.status === 'Late' ? 'Late Reason (optional)' : 'Reason for Partial Attendance'}
+                              {row.status === 'Late' ? t('attendance.student.lateReason') : t('attendance.student.partialReason')}
                             </label>
                             <input
                               type="text"
                               value={row.description}
                               onChange={e => setSessionField(sId, selectedSession, 'description', e.target.value)}
                               disabled={isDailyAbsent}
-                              placeholder={row.status === 'Late' ? 'e.g. Bus delayed, medical visit...' : 'e.g. Left early at 10:30, attended 1st period only...'}
+                              placeholder={row.status === 'Late' ? t('attendance.student.latePlaceholder') : t('attendance.student.partialPlaceholder')}
                               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold text-slate-900 outline-none focus:border-brand-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white disabled:opacity-40 disabled:cursor-not-allowed"
                             />
                           </div>
@@ -1095,15 +1097,15 @@ const StudentAttendanceManagement = () => {
                             >
                               {isDailyAbsent ? (
                                 <>
-                                  <Lock size={14} /> Locked
+                                  <Lock size={14} /> {t('attendance.student.locked')}
                                 </>
                               ) : isSavedSuccess ? (
                                 <>
-                                  <CheckCircle2 size={14} /> Updated
+                                  <CheckCircle2 size={14} /> {t('attendance.student.updated')}
                                 </>
                               ) : (
                                 <>
-                                  <Pencil size={14} /> {isSavingThis ? 'Saving...' : `Edit ${selectedSession}`}
+                                  <Pencil size={14} /> {isSavingThis ? t('common.saving') : t('attendance.student.editSession', { session: tv(selectedSession) })}
                                 </>
                               )}
                             </button>
@@ -1113,9 +1115,9 @@ const StudentAttendanceManagement = () => {
                               onClick={() => deleteSessionSingle(sId, selectedSession)}
                               disabled={isSavingThis || isDeletingThis}
                               className="flex items-center gap-1.5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-black uppercase tracking-wider text-rose-600 hover:bg-rose-100 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-400 disabled:opacity-50 transition-all"
-                              title={`Delete ${selectedSession} session record`}
+                              title={t('attendance.student.deleteSessionRecord', { session: tv(selectedSession) })}
                             >
-                              <Trash2 size={14} /> {isDeletingThis ? 'Deleting...' : 'Delete'}
+                              <Trash2 size={14} /> {isDeletingThis ? t('attendance.student.deleting') : t('common.delete')}
                             </button>
                           </>
                         ) : (
@@ -1131,15 +1133,15 @@ const StudentAttendanceManagement = () => {
                           >
                             {isDailyAbsent ? (
                               <>
-                                <Lock size={14} /> Locked (Daily Absent)
+                                <Lock size={14} /> {t('attendance.student.lockedDailyAbsent')}
                               </>
                             ) : isSavedSuccess ? (
                               <>
-                                <CheckCircle2 size={14} /> Saved
+                                <CheckCircle2 size={14} /> {t('attendance.student.saved')}
                               </>
                             ) : (
                               <>
-                                <Save size={14} /> {isSavingThis ? 'Saving...' : `Save ${selectedSession} Attendance`}
+                                <Save size={14} /> {isSavingThis ? t('common.saving') : t('attendance.student.saveSession', { session: tv(selectedSession) })}
                               </>
                             )}
                           </button>
@@ -1158,39 +1160,39 @@ const StudentAttendanceManagement = () => {
                   <AlertCircle className="text-brand-500" size={20} />
                   <div>
                     <h2 className="font-black text-slate-900 dark:text-white">
-                      Class Register — {selectedClassName || 'Selected Class'}
+                      {t('attendance.student.classRegister', { className: selectedClassName || t('attendance.student.selectedClass') })}
                     </h2>
                     <p className="mt-1 text-xs font-semibold text-slate-500">
-                      Daily Attendance (Present | Absent) · {selectedDate} {currentBranchName && `· ${currentBranchName}`}
+                      {t('attendance.student.registerSubtitle')} · {selectedDate} {currentBranchName && `· ${currentBranchName}`}
                     </p>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-black uppercase text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
-                    {dailySummary.present} Present
+                    {t('attendance.student.presentCount', { count: dailySummary.present })}
                   </span>
                   <span className="rounded-full bg-rose-100 px-3 py-1 text-[10px] font-black uppercase text-rose-700 dark:bg-rose-500/15 dark:text-rose-400">
-                    {dailySummary.absent} Absent
+                    {t('attendance.student.absentCount', { count: dailySummary.absent })}
                   </span>
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                    {dailySummary.total} Total
+                    {t('attendance.student.totalCount', { count: dailySummary.total })}
                   </span>
                 </div>
               </div>
 
               {loadingRoster ? (
-                <div className="p-10 text-center text-sm font-semibold text-slate-400">Loading students...</div>
+                <div className="p-10 text-center text-sm font-semibold text-slate-400">{t('attendance.student.loadingStudents')}</div>
               ) : !classStudents.length ? (
-                <div className="p-12 text-center text-sm font-semibold text-slate-400">No students are assigned to this class.</div>
+                <div className="p-12 text-center text-sm font-semibold text-slate-400">{t('attendance.student.noStudents')}</div>
               ) : !displayedStudents.length ? (
                 <div className="p-12 text-center text-sm font-semibold text-slate-400">
-                  No student in this class matches "{studentSearch.trim()}".
+                  {t('attendance.student.noMatchClass', { query: studentSearch.trim() })}
                   <button
                     type="button"
                     onClick={clearStudentSearch}
                     className="ml-2 font-bold text-brand-500 hover:underline"
                   >
-                    Show all {classStudents.length} students
+                    {t('attendance.student.showAll', { count: classStudents.length })}
                   </button>
                 </div>
               ) : (
@@ -1198,10 +1200,10 @@ const StudentAttendanceManagement = () => {
                   <table className="w-full text-left">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/70 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:border-slate-800 dark:bg-slate-800/30">
-                        <th className="px-7 py-4">Student</th>
-                        <th className="px-7 py-4">Daily Status</th>
-                        <th className="px-7 py-4">Reason (if absent)</th>
-                        <th className="px-7 py-4 text-right">Action</th>
+                        <th className="px-7 py-4">{t('common.student')}</th>
+                        <th className="px-7 py-4">{t('attendance.student.dailyStatus')}</th>
+                        <th className="px-7 py-4">{t('attendance.student.reasonIfAbsent')}</th>
+                        <th className="px-7 py-4 text-right">{t('attendance.student.action')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1215,7 +1217,7 @@ const StudentAttendanceManagement = () => {
                           <tr key={student._id} className="align-top hover:bg-slate-50/60 dark:hover:bg-slate-800/20">
                             <td className="px-7 py-5">
                               <p className="font-bold text-slate-900 dark:text-white">{student.fullName}</p>
-                              <p className="mt-0.5 text-xs font-semibold text-slate-400">{student.rollNumber || student.studentCode || 'No ID'}</p>
+                              <p className="mt-0.5 text-xs font-semibold text-slate-400">{student.rollNumber || student.studentCode || t('attendance.student.noId')}</p>
                             </td>
 
                             <td className="px-7 py-5 whitespace-nowrap">
@@ -1229,7 +1231,7 @@ const StudentAttendanceManagement = () => {
                                       : 'text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10'
                                   }`}
                                 >
-                                  Present
+                                  {tv('Present')}
                                 </button>
                                 <button
                                   type="button"
@@ -1240,7 +1242,7 @@ const StudentAttendanceManagement = () => {
                                       : 'text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10'
                                   }`}
                                 >
-                                  Absent
+                                  {tv('Absent')}
                                 </button>
                               </div>
                             </td>
@@ -1251,7 +1253,7 @@ const StudentAttendanceManagement = () => {
                                   type="text"
                                   value={row.description}
                                   onChange={e => setDailyDescription(student._id, e.target.value)}
-                                  placeholder="Reason for absence (e.g. sick, travel)..."
+                                  placeholder={t('attendance.student.absenceTablePlaceholder')}
                                   className="w-full min-w-[220px] rounded-2xl border border-rose-200 bg-rose-50/40 px-4 py-2 text-xs font-semibold text-slate-900 outline-none focus:border-rose-400 dark:border-rose-900/50 dark:bg-rose-950/20 dark:text-white"
                                 />
                               ) : (
@@ -1272,15 +1274,15 @@ const StudentAttendanceManagement = () => {
                                         ? 'bg-emerald-600 text-white'
                                         : 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-800 dark:hover:bg-slate-700'
                                     } disabled:opacity-50`}
-                                    title="Update daily attendance for this student"
+                                    title={t('attendance.student.updateDailyTitle')}
                                   >
                                     {isSavedSuccess ? (
                                       <>
-                                        <CheckCircle2 size={13} strokeWidth={2.5} /> Updated
+                                        <CheckCircle2 size={13} strokeWidth={2.5} /> {t('attendance.student.updated')}
                                       </>
                                     ) : (
                                       <>
-                                        <Pencil size={13} strokeWidth={2.5} /> {isSavingThis ? 'Saving...' : 'Edit Daily'}
+                                        <Pencil size={13} strokeWidth={2.5} /> {isSavingThis ? t('common.saving') : t('attendance.student.editDaily')}
                                       </>
                                     )}
                                   </button>
@@ -1291,10 +1293,10 @@ const StudentAttendanceManagement = () => {
                                     onClick={() => deleteDailySingle(student._id)}
                                     disabled={isSavingThis || isDeletingThis || savingDailyBatch}
                                     className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:hover:bg-rose-950/80 border border-rose-200 dark:border-rose-900/60 transition-all active:scale-95 shadow-sm disabled:opacity-50"
-                                    title="Delete daily attendance record"
+                                    title={t('attendance.student.deleteDailyRecord')}
                                   >
                                     <Trash2 size={13} strokeWidth={2.5} />
-                                    {isDeletingThis ? 'Deleting...' : 'Delete'}
+                                    {isDeletingThis ? t('attendance.student.deleting') : t('common.delete')}
                                   </button>
                                 </div>
                               ) : (
@@ -1308,15 +1310,15 @@ const StudentAttendanceManagement = () => {
                                       ? 'bg-emerald-600 text-white'
                                       : 'bg-brand-600 hover:bg-brand-700 text-white shadow-brand-600/20'
                                   } disabled:opacity-50`}
-                                  title="Save daily attendance for this student only"
+                                  title={t('attendance.student.saveDailyTitle')}
                                 >
                                   {isSavedSuccess ? (
                                     <>
-                                      <CheckCircle2 size={14} strokeWidth={2.5} /> Saved
+                                      <CheckCircle2 size={14} strokeWidth={2.5} /> {t('attendance.student.saved')}
                                     </>
                                   ) : (
                                     <>
-                                      <Save size={14} strokeWidth={2.5} /> {isSavingThis ? 'Saving...' : 'Save Daily'}
+                                      <Save size={14} strokeWidth={2.5} /> {isSavingThis ? t('common.saving') : t('attendance.student.saveDaily')}
                                     </>
                                   )}
                                 </button>
@@ -1335,7 +1337,7 @@ const StudentAttendanceManagement = () => {
                 <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 px-6 py-5 dark:border-slate-800">
                   <p className="flex items-center gap-2 text-xs font-semibold text-slate-500">
                     <CheckCircle2 size={14} className="text-emerald-500" />
-                    All students are Present by default — only change those who are Absent.
+                    {t('attendance.student.defaultPresent')}
                   </p>
                   <button
                     type="button"
@@ -1344,7 +1346,7 @@ const StudentAttendanceManagement = () => {
                     className="flex items-center justify-center gap-2 rounded-2xl bg-brand-600 px-6 py-3.5 text-[10px] font-black uppercase tracking-wider text-white shadow-lg transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Save size={16} strokeWidth={3} />
-                    {savingDailyBatch ? 'Saving...' : `Save Daily Attendance (${displayedStudents.length})`}
+                    {savingDailyBatch ? t('common.saving') : t('attendance.student.saveBatch', { count: displayedStudents.length })}
                   </button>
                 </div>
               )}

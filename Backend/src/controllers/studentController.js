@@ -1,6 +1,7 @@
 const asyncHandler = require('../middleware/asyncHandler');
 const Student = require('../models/Student');
 const { generateStudentCode, withRetry } = require('../utils/generateCode');
+const { currentCycle, addCycles, cycleKeyForDate } = require('../utils/billingCycle');
 
 const getStudents = asyncHandler(async (req, res) => {
     // Status handling for the Exit/Archive feature:
@@ -57,6 +58,14 @@ const createStudent = asyncHandler(async (req, res) => {
         payload.fee = Number(payload.monthlyFee) || 0;
     }
 
+    const startFee = Number(payload.monthlyFee || payload.fee || 0);
+    const startCycle = (payload.registrationDate && cycleKeyForDate(payload.registrationDate)) || currentCycle();
+    if (!Array.isArray(payload.feeHistory) || !payload.feeHistory.length) {
+        payload.feeHistory = [
+            { effectiveCycle: startCycle, amount: startFee, changedAt: payload.registrationDate || new Date() }
+        ];
+    }
+
     const data = await Student.create(payload);
     const populated = await Student.findById(data._id).populate('guardianId').populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } });
     res.status(201).json(populated || data);
@@ -74,6 +83,67 @@ const updateStudent = asyncHandler(async (req, res) => {
     }
     if (payload.monthlyFee !== undefined && payload.fee === undefined) {
         payload.fee = Number(payload.monthlyFee) || 0;
+    }
+
+    const existing = await Student.findById(req.params.id);
+    if (!existing) {
+        res.status(404);
+        throw new Error('Student not found');
+    }
+
+    if (payload.monthlyFee !== undefined) {
+        const newFee = Number(payload.monthlyFee);
+        const oldFee = Number(existing.monthlyFee ?? existing.fee ?? 0);
+        const feeScope = payload.feeScope || 'current'; // 'current' | 'all' | 'previous'
+
+        if (newFee !== oldFee || payload.feeScope) {
+            const current = currentCycle();
+
+            if (feeScope === 'all') {
+                // Completely reset fee across ALL cycles (heals historical ghost arrears when an accidental increase or error is corrected)
+                payload.feeHistory = [
+                    { effectiveCycle: '2000-01', amount: newFee, changedAt: new Date() }
+                ];
+            } else if (feeScope === 'previous') {
+                const prev = addCycles(current, -1);
+                payload.feeHistory = [
+                    { effectiveCycle: '2000-01', amount: oldFee, changedAt: existing.registrationDate || new Date() },
+                    { effectiveCycle: prev, amount: newFee, changedAt: new Date() }
+                ];
+            } else {
+                // feeScope === 'current' (default)
+                let history = Array.isArray(existing.feeHistory) ? [...existing.feeHistory] : [];
+
+                // Smart reversion: If reducing the fee (e.g. admin reverting an accidental increase
+                // without choosing a scope), update any previous baseline entry that held the inflated oldFee
+                // so the reduction cleanly heals the previous cycle instead of leaving it trapped at oldFee.
+                if (newFee < oldFee) {
+                    history = history.map((h) => (h.amount === oldFee ? { ...h, amount: newFee, changedAt: new Date() } : h));
+                }
+
+                const hasPrior = history.some((h) => h.effectiveCycle < current);
+                if (!hasPrior && (newFee < oldFee ? newFee : oldFee) > 0) {
+                    history.push({
+                        effectiveCycle: '2000-01',
+                        amount: newFee < oldFee ? newFee : oldFee,
+                        changedAt: existing.registrationDate || new Date()
+                    });
+                }
+                const currentEntry = history.find((h) => h.effectiveCycle === current);
+                if (currentEntry) {
+                    currentEntry.amount = newFee;
+                    currentEntry.changedAt = new Date();
+                } else {
+                    history.push({
+                        effectiveCycle: current,
+                        amount: newFee,
+                        changedAt: new Date()
+                    });
+                }
+                history.sort((a, b) => (a.effectiveCycle || '').localeCompare(b.effectiveCycle || ''));
+                payload.feeHistory = history;
+            }
+        }
     }
 
     const data = await Student.findByIdAndUpdate(req.params.id, payload, { new: true }).populate('guardianId').populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } });
@@ -188,6 +258,27 @@ const getStudentArchive = asyncHandler(async (req, res) => {
     });
 });
 
+// @desc    Restore an exited student back to Active status
+// @route   POST /api/students/:id/restore
+const restoreStudent = asyncHandler(async (req, res) => {
+    const student = await Student.findById(req.params.id);
+    if (!student) {
+        res.status(404);
+        throw new Error('Student not found');
+    }
+    student.status = 'Active';
+    student.exitReason = '';
+    student.exitDate = null;
+    student.exitedBy = null;
+    student.exitedAt = null;
+    await student.save();
+
+    const populated = await Student.findById(student._id)
+        .populate('guardianId')
+        .populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } });
+    res.json(populated);
+});
+
 module.exports = {
     getStudents,
     getStudentById,
@@ -195,5 +286,6 @@ module.exports = {
     updateStudent,
     deleteStudent,
     exitStudent,
+    restoreStudent,
     getStudentArchive
 };

@@ -25,6 +25,8 @@ import api from '../services/api';
 import { NAV_CONFIG } from '../constants';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { PERMISSION_ACTIONS, normalizePermissions } from '../utils/permissionUtils';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
+import { navLabel } from '../utils/navLabel';
 
 const NON_PERMISSION_MODULES = ['Settings', 'Users & Access'];
 
@@ -59,6 +61,7 @@ const mergePermissions = (existing) => normalizePermissions(existing, INITIAL_PE
 
 const RolesPermissions = () => {
   const { showAlert, showConfirm } = useAlert();
+  const { t, tv, locale } = useLanguage();
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeRole, setActiveRole] = useState(null);
@@ -112,7 +115,7 @@ const RolesPermissions = () => {
 
   const handleClone = (role) => {
     setFormData({
-      name: `${role.name} (Copy)`,
+      name: `${role.name} ${t('access.roles.copySuffix')}`,
       description: role.description,
       permissions: mergePermissions(role.permissions)
     });
@@ -232,9 +235,9 @@ const RolesPermissions = () => {
       console.error("Failed to save role", error);
       showAlert({
         type: 'error',
-        title: 'Uh oh!',
-        message: error.response?.data?.message || 'Failed to save role.',
-        buttonText: 'Try again'
+        title: t('common.alert.error'),
+        message: error.response?.data?.message || t('access.roles.saveFailed'),
+        buttonText: t('settings.profile.tryAgain')
       });
     }
   };
@@ -242,10 +245,10 @@ const RolesPermissions = () => {
   const handleDelete = async (role) => {
     const ok = await showConfirm({
       type: 'warning',
-      title: 'Delete role?',
-      message: `Are you sure you want to delete ${role.name}? This cannot be undone.`,
-      confirmText: 'Yes, delete',
-      cancelText: 'Cancel',
+      title: t('access.roles.deleteTitle'),
+      message: t('access.roles.deleteConfirm', { name: role.name }),
+      confirmText: t('common.yesDelete'),
+      cancelText: t('common.cancel'),
       danger: true
     });
     if (!ok) return;
@@ -257,9 +260,9 @@ const RolesPermissions = () => {
       console.error("Failed to delete role", error);
       showAlert({
         type: 'error',
-        title: 'Uh oh!',
-        message: error.response?.data?.message || 'Failed to delete role.',
-        buttonText: 'Try again'
+        title: t('common.alert.error'),
+        message: error.response?.data?.message || t('access.roles.deleteFailed'),
+        buttonText: t('settings.profile.tryAgain')
       });
     }
   };
@@ -272,15 +275,15 @@ const RolesPermissions = () => {
             <ShieldCheck size={32} strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Access Roles</h1>
-            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">Security Tiers & Hierarchical Permission Orchestration</p>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">{t('access.roles.title')}</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">{t('access.roles.subtitle')}</p>
           </div>
         </div>
         <button
           onClick={() => { setActiveRole(null); setFormData({ name: '', description: '', permissions: INITIAL_PERMISSIONS }); setIsModalOpen(true); }}
           className="flex items-center gap-3 px-8 py-4 bg-slate-900 dark:bg-brand-600 text-white rounded-[20px] font-black text-[10px] uppercase tracking-[0.2em] hover:bg-slate-800 shadow-xl transition-all active:scale-95 group border border-slate-700"
         >
-          <Plus size={18} strokeWidth={3} /> Define New Role
+          <Plus size={18} strokeWidth={3} /> {t('access.roles.defineNew')}
         </button>
       </div>
 
@@ -290,14 +293,14 @@ const RolesPermissions = () => {
             <Search size={20} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-600 transition-colors" />
             <input
               type="text"
-              placeholder="Search roles..."
+              placeholder={t('access.roles.searchPlaceholder')}
               className="w-full pl-16 pr-6 py-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[24px] text-sm font-semibold outline-none focus:ring-8 focus:ring-brand-500/5 transition-all dark:text-white shadow-sm"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
           <button onClick={fetchRoles} className="flex items-center gap-2 text-[10px] font-black uppercase text-brand-600 dark:text-brand-400 tracking-widest hover:gap-3 transition-all">
-            <RefreshCw size={14} /> Refresh Registry
+            <RefreshCw size={14} /> {t('access.roles.refresh')}
           </button>
         </div>
 
@@ -305,12 +308,12 @@ const RolesPermissions = () => {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                <th className="px-10 py-6">Role Name</th>
-                <th className="px-10 py-6">Description</th>
-                <th className="px-10 py-6 text-center">Users Count</th>
-                <th className="px-10 py-6">Created Date</th>
-                <th className="px-10 py-6">Status</th>
-                <th className="px-10 py-6 text-right">Actions</th>
+                <th className="px-10 py-6">{t('access.roles.colName')}</th>
+                <th className="px-10 py-6">{t('common.description')}</th>
+                <th className="px-10 py-6 text-center">{t('access.roles.colUsers')}</th>
+                <th className="px-10 py-6">{t('access.roles.colCreated')}</th>
+                <th className="px-10 py-6">{t('common.status')}</th>
+                <th className="px-10 py-6 text-right">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -321,7 +324,7 @@ const RolesPermissions = () => {
                       <div className="w-12 h-12 rounded-2xl bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center text-brand-600 font-black text-lg border border-brand-100 dark:border-brand-800 group-hover:scale-110 transition-transform">
                         <Shield size={20} />
                       </div>
-                      <span className="text-base font-black text-slate-900 dark:text-white tracking-tight uppercase">{role.name}</span>
+                      <span className="text-base font-black text-slate-900 dark:text-white tracking-tight uppercase">{tv(role.name)}</span>
                     </div>
                   </td>
                   <td className="px-10 py-8">
@@ -335,14 +338,14 @@ const RolesPermissions = () => {
                   <td className="px-10 py-8">
                     <div className="flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
                       <Calendar size={14} className="text-brand-400" />
-                      {new Date(role.createdAt || Date.now()).toLocaleDateString()}
+                      {new Date(role.createdAt || Date.now()).toLocaleDateString(locale)}
                     </div>
                   </td>
                   <td className="px-10 py-8">
                     <div className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] w-fit flex items-center gap-2 border shadow-sm ${!role.isSystemRole ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-600 border-slate-100'
                       }`}>
                       <div className={`w-1.5 h-1.5 rounded-full ${!role.isSystemRole ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'}`} />
-                      {role.isSystemRole ? 'System' : 'Custom'}
+                      {role.isSystemRole ? t('access.roles.system') : t('access.roles.custom')}
                     </div>
                   </td>
                   <td className="px-10 py-8 text-right relative overflow-visible">
@@ -363,23 +366,23 @@ const RolesPermissions = () => {
                           <div className="absolute bottom-0 right-24 w-72 bg-white dark:bg-slate-900 rounded-[44px] shadow-[0_48px_128px_-12px_rgba(0,0,0,0.4)] border border-slate-100 dark:border-slate-800 p-4 z-50 animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-300 text-left">
                             <div className="p-6 mb-3 bg-slate-50 dark:bg-slate-800/80 rounded-[32px] border border-slate-100 dark:border-slate-800/50">
                               <p className="text-[10px] font-black text-brand-600 uppercase tracking-[0.3em] mb-2 flex items-center gap-3">
-                                <Command size={14} strokeWidth={3} /> Role Hub
+                                <Command size={14} strokeWidth={3} /> {t('access.roles.hub')}
                               </p>
-                              <p className="text-xs font-black text-slate-900 dark:text-white truncate uppercase tracking-tight">{role.name}</p>
+                              <p className="text-xs font-black text-slate-900 dark:text-white truncate uppercase tracking-tight">{tv(role.name)}</p>
                             </div>
                             <div className="space-y-1 p-1">
                               {[
                                 {
                                   icon: <Edit2 size={16} />,
-                                  label: 'Edit Role',
+                                  label: t('access.roles.edit'),
                                   color: role.name === 'Owner' ? 'text-slate-300' : 'text-brand-600',
                                   action: role.name === 'Owner' ? null : () => handleEdit(role)
                                 },
-                                { icon: <Copy size={16} />, label: 'Clone Role', color: 'text-emerald-600', action: () => handleClone(role) },
+                                { icon: <Copy size={16} />, label: t('access.roles.clone'), color: 'text-emerald-600', action: () => handleClone(role) },
                                 { separator: true },
                                 {
                                   icon: <Trash2 size={16} />,
-                                  label: 'Delete Role',
+                                  label: t('access.roles.delete'),
                                   color: role.isRequired ? 'text-slate-300' : 'text-rose-500',
                                   action: role.isRequired ? null : () => handleDelete(role)
                                 },
@@ -424,9 +427,9 @@ const RolesPermissions = () => {
                 </div>
                 <div>
                   <h3 className="text-2xl font-black text-white tracking-tight uppercase leading-none">
-                    {activeRole ? 'Modify Access Tier' : 'Define Access Tier'}
+                    {activeRole ? t('access.roles.modifyTier') : t('access.roles.defineTier')}
                   </h3>
-                  <p className="text-sm text-slate-400 mt-2">Configure system-wide role parameters and hierarchical permission matrix.</p>
+                  <p className="text-sm text-slate-400 mt-2">{t('access.roles.modalHint')}</p>
                 </div>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="p-4 bg-white/10 rounded-full text-white hover:bg-rose-500 transition-all"><X size={24} /></button>
@@ -435,11 +438,11 @@ const RolesPermissions = () => {
             <form onSubmit={handleSave} className="p-12 space-y-10 max-h-[75vh] overflow-y-auto custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Role Identifier Name</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">{t('access.roles.nameLabel')}</label>
                   <input
                     required
                     type="text"
-                    placeholder="e.g. Regional Compliance Lead"
+                    placeholder={t('access.roles.namePlaceholder')}
                     className="w-full px-8 py-5 bg-slate-50 dark:bg-slate-800 border-none rounded-[28px] text-sm font-black dark:text-white outline-none focus:ring-4 focus:ring-brand-500/10 shadow-inner transition-all placeholder:text-slate-400/50"
                     value={formData.name}
                     onChange={e => setFormData({ ...formData, name: e.target.value })}
@@ -447,11 +450,11 @@ const RolesPermissions = () => {
                 </div>
 
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Functional Description</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">{t('access.roles.descriptionLabel')}</label>
                   <input
                     required
                     type="text"
-                    placeholder="Describe the scope of authority..."
+                    placeholder={t('access.roles.descriptionPlaceholder')}
                     className="w-full px-8 py-5 bg-slate-50 dark:bg-slate-800 border-none rounded-[28px] text-sm font-medium dark:text-white outline-none focus:ring-4 focus:ring-brand-500/10 shadow-inner transition-all placeholder:text-slate-400/50"
                     value={formData.description}
                     onChange={e => setFormData({ ...formData, description: e.target.value })}
@@ -462,7 +465,7 @@ const RolesPermissions = () => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between px-2">
                   <h4 className="text-lg font-black dark:text-white uppercase tracking-tight flex items-center gap-3">
-                    <Shield size={20} className="text-brand-500" /> Hierarchical Matrix
+                    <Shield size={20} className="text-brand-500" /> {t('access.roles.matrix')}
                   </h4>
                   <div className="flex items-center gap-4">
                     <button
@@ -470,9 +473,9 @@ const RolesPermissions = () => {
                       onClick={handleToggleGlobal}
                       className="px-4 py-2 bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-300 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-colors"
                     >
-                      Toggle All System Access
+                      {t('access.roles.toggleAll')}
                     </button>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest hidden md:inline-block">Toggle granular sub-module capabilities</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest hidden md:inline-block">{t('access.roles.toggleHint')}</span>
                   </div>
                 </div>
 
@@ -490,7 +493,7 @@ const RolesPermissions = () => {
                             <div className="w-10 h-10 rounded-xl bg-brand-600 text-white flex items-center justify-center shadow-lg">
                               <Command size={18} />
                             </div>
-                            <span className="text-sm font-black dark:text-white uppercase tracking-widest">{module}</span>
+                            <span className="text-sm font-black dark:text-white uppercase tracking-widest">{navLabel(module)}</span>
                           </div>
 
                           <div className="flex items-center gap-4">
@@ -500,7 +503,7 @@ const RolesPermissions = () => {
                                 onClick={() => handleToggleModule(module)}
                                 className="px-3 py-1.5 bg-white dark:bg-slate-700/50 text-slate-500 dark:text-slate-300 rounded-lg text-[9px] font-bold uppercase tracking-wider hover:text-brand-500 dark:hover:text-brand-400 transition-colors border border-slate-200 dark:border-slate-700"
                               >
-                                Select Section
+                                {t('access.roles.selectSection')}
                               </button>
                             </div>
                             {isExpanded ? <ChevronDown size={20} className="text-slate-400" /> : <ChevronRight size={20} className="text-slate-400" />}
@@ -511,9 +514,9 @@ const RolesPermissions = () => {
                           <div className="p-6 pt-0 space-y-4 animate-in slide-in-from-top-2 duration-300">
                             {Object.keys(PERMISSION_HIERARCHY[module]).map((sub) => (
                               <div key={sub} className="flex flex-col md:flex-row md:items-center gap-4 p-5 bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm group">
-                                <div className="md:w-64 flex items-center gap-3 shrink-0 cursor-pointer" onClick={() => handleToggleSubModule(module, sub)} title="Toggle all actions for this feature">
+                                <div className="md:w-64 flex items-center gap-3 shrink-0 cursor-pointer" onClick={() => handleToggleSubModule(module, sub)} title={t('access.roles.toggleFeature')}>
                                   <div className={`w-1.5 h-1.5 rounded-full ${Object.values(formData.permissions[module][sub]).every(x => x) ? 'bg-brand-500' : 'bg-slate-300'}`} />
-                                  <span className="text-[11px] font-black dark:text-slate-200 uppercase tracking-tight hover:text-brand-600 transition-colors">{sub}</span>
+                                  <span className="text-[11px] font-black dark:text-slate-200 uppercase tracking-tight hover:text-brand-600 transition-colors">{navLabel(sub)}</span>
                                 </div>
                                 <div className="flex flex-wrap gap-3">
                                   {PERMISSION_HIERARCHY[module][sub].map((action) => (
@@ -527,7 +530,7 @@ const RolesPermissions = () => {
                                         }`}
                                     >
                                       {formData.permissions[module] && formData.permissions[module][sub] && formData.permissions[module][sub][action] && <Check size={12} strokeWidth={4} />}
-                                      {action}
+                                      {t(`access.actions.${action}`, { defaultValue: action })}
                                     </button>
                                   ))}
                                 </div>
@@ -542,9 +545,9 @@ const RolesPermissions = () => {
               </div>
 
               <div className="flex flex-col sm:flex-row items-center gap-5 pt-8 border-t border-slate-100 dark:border-slate-800">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="w-full sm:w-auto px-12 py-5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-[32px] text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95">Cancel</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="w-full sm:w-auto px-12 py-5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-[32px] text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95">{t('common.cancel')}</button>
                 <button type="submit" className="flex-1 w-full px-12 py-5 bg-brand-600 text-white rounded-[32px] text-xs font-black uppercase tracking-[0.3em] hover:bg-brand-700 shadow-2xl shadow-brand-600/30 transition-all active:scale-95 flex items-center justify-center gap-4 group">
-                  Commit Configuration <ArrowRight size={20} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
+                  {t('access.roles.commit')} <ArrowRight size={20} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
                 </button>
               </div>
             </form>

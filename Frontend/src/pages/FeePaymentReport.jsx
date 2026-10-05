@@ -16,6 +16,8 @@ import { jsPDF } from 'jspdf';
 import api from '../services/api';
 import { walletNameOf, walletIdOf } from '../utils/wallet';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
+import { getStudentFeeForCycle } from '../utils/studentFee';
 
 // jsPDF draws at fixed offsets and never clips, so each cell is fitted to its
 // column width and given an ellipsis only when it genuinely cannot fit.
@@ -32,6 +34,7 @@ const fitPdfText = (doc, text, width) => {
 
 const FeePaymentReport = () => {
   const { showAlert } = useAlert();
+  const { t, locale } = useLanguage();
 
   const [payments, setPayments] = useState([]);
   const [students, setStudents] = useState([]);
@@ -57,7 +60,7 @@ const FeePaymentReport = () => {
       setWallets(resWallets.data || []);
     } catch (error) {
       console.error('Failed to fetch fee payment report data', error);
-      showAlert({ type: 'danger', title: 'Error', message: 'Failed to load payment report data.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: t('reports.fee.loadFailed') });
     } finally {
       setLoading(false);
     }
@@ -78,8 +81,8 @@ const FeePaymentReport = () => {
   const getPayerInfo = (student) => {
     const guardian = student?.guardianId && typeof student.guardianId === 'object' ? student.guardianId : null;
     return {
-      name: guardian?.fullName || student?.fatherName || student?.fullName || 'Unknown Payer',
-      phone: guardian?.phone || student?.fatherPhone || 'N/A'
+      name: guardian?.fullName || student?.fatherName || student?.fullName || t('reports.common.unknownPayer'),
+      phone: guardian?.phone || student?.fatherPhone || t('common.notAvailable')
     };
   };
 
@@ -97,7 +100,7 @@ const FeePaymentReport = () => {
 
   const getRemaining = (student, item) => {
     const sid = typeof item.studentId === 'object' ? item.studentId?._id : item.studentId;
-    const fee = Number(student.monthlyFee ?? student.fee ?? 0);
+    const fee = getStudentFeeForCycle(student, item.billingCycle || item.month);
     const paid = paidByStudentMonth[`${sid}:${item.month}`] || 0;
     return Math.max(0, fee - paid);
   };
@@ -162,7 +165,7 @@ const FeePaymentReport = () => {
       // no guardian are grouped separately rather than silently dropped.
       const payer = payment.guardianId || payment.studentId?.guardianId;
       const key = String(payer?._id || payer || 'unassigned');
-      const name = payer?.fullName || 'No responsible party';
+      const name = payer?.fullName || t('reports.fee.noResponsible');
 
       const current = byPayer.get(key) || { key, name, amount: 0, count: 0 };
       current.amount += Number(payment.amount || 0);
@@ -190,10 +193,10 @@ const FeePaymentReport = () => {
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
-    doc.text('MACHAD INSTITUTE - FEE PAYMENT REPORT', 14, 12);
+    doc.text(t('reports.fee.pdf.title'), 14, 12);
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Generated: ${new Date().toLocaleString()}   |   Total Entries: ${filtered.length}`, 14, 20);
+    doc.text(`${t('payers.pdf.generated')}: ${new Date().toLocaleString(locale)}   |   ${t('reports.fee.pdf.totalEntries')}: ${filtered.length}`, 14, 20);
 
     let y = 35;
     // Portrait A4 is 210mm wide; the table lives between 12 and 200. Widths were
@@ -216,12 +219,12 @@ const FeePaymentReport = () => {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.text('#', cols.no.x, y);
-    doc.text('PAYER NAME', cols.name.x, y);
-    doc.text('PAYER PHONE', cols.number.x, y);
-    doc.text('MONTH', cols.month.x, y);
-    doc.text('WALLET', cols.wallet.x, y);
-    doc.text('PAID ($)', cols.amount.x, y);
-    doc.text('UNPAID ($)', cols.status.x, y);
+    doc.text(t('payers.pdf.payerName'), cols.name.x, y);
+    doc.text(t('reports.fee.pdf.payerPhone'), cols.number.x, y);
+    doc.text(t('reports.fee.pdf.month'), cols.month.x, y);
+    doc.text(t('reports.fee.pdf.wallet'), cols.wallet.x, y);
+    doc.text(t('reports.fee.pdf.paid'), cols.amount.x, y);
+    doc.text(t('reports.fee.pdf.unpaid'), cols.status.x, y);
 
     y += 8;
 
@@ -252,7 +255,7 @@ const FeePaymentReport = () => {
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(71, 85, 105);
       doc.text(fitPdfText(doc, payer.phone, cols.number.w), cols.number.x, y);
-      doc.text(fitPdfText(doc, item.month || 'Current', cols.month.w), cols.month.x, y);
+      doc.text(fitPdfText(doc, item.month || t('reports.fee.current'), cols.month.w), cols.month.x, y);
       // Same wallet the screen shows, from the payment's own relationship.
       doc.text(fitPdfText(doc, walletNameOf(item, wallets), cols.wallet.w), cols.wallet.x, y);
 
@@ -276,15 +279,15 @@ const FeePaymentReport = () => {
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
-    doc.text('TOTAL PAID:', 75, y + 1);
+    doc.text(`${t('reports.fee.pdf.totalPaid')}:`, 75, y + 1);
     doc.setTextColor(74, 222, 128);
     doc.text(`$${completedAmount.toLocaleString()}`, 145, y + 1);
 
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
-    doc.text(`Paid: ${completedList.length} ($${completedAmount.toLocaleString()}) | Pending: ${pendingList.length} ($${pendingAmount.toLocaleString()})`, 10, pageH - 8);
+    doc.text(`${t('common.paid')}: ${completedList.length} ($${completedAmount.toLocaleString()}) | ${t('values.Pending')}: ${pendingList.length} ($${pendingAmount.toLocaleString()})`, 10, pageH - 8);
 
-    doc.save(`Machad_Fee_Payment_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+    doc.save(`${t('reports.fee.pdf.file')}_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   const handlePrint = () => {
@@ -294,7 +297,7 @@ const FeePaymentReport = () => {
   if (loading) {
     return (
       <div className="p-10 text-center text-slate-500 font-bold">
-        Loading Fee Payment Report...
+        {t('reports.fee.loading')}
       </div>
     );
   }
@@ -309,10 +312,10 @@ const FeePaymentReport = () => {
           </div>
           <div>
             <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">
-              Fee Payment Report
+              {t('nav.feePaymentReport')}
             </h1>
             <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-1.5 uppercase tracking-[0.2em]">
-              Machad Institute Student Fee Collection & Financial Statements
+              {t('reports.fee.subtitle')}
             </p>
           </div>
         </div>
@@ -322,13 +325,13 @@ const FeePaymentReport = () => {
             onClick={handleExportPDF}
             className="flex items-center gap-2 px-5 py-3.5 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
           >
-            <FileDown size={16} /> Export PDF
+            <FileDown size={16} /> {t('exams.results.exportPdf')}
           </button>
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 px-6 py-3.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-brand-600/30 active:scale-95"
           >
-            <Printer size={16} /> Print Report
+            <Printer size={16} /> {t('reports.common.printReport')}
           </button>
         </div>
       </div>
@@ -337,35 +340,35 @@ const FeePaymentReport = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 print:hidden">
         <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">Total Money Collected</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">{t('reports.fee.totalCollected')}</span>
             <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
               <DollarSign size={18} />
             </div>
           </div>
           <p className="text-3xl font-black text-slate-900 dark:text-white">${completedAmount.toLocaleString()}</p>
-          <p className="text-xs text-slate-500 mt-1 font-semibold">{completedList.length} Paid entries</p>
+          <p className="text-xs text-slate-500 mt-1 font-semibold">{t('reports.fee.paidEntries', { count: completedList.length })}</p>
         </div>
 
         <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400">Total Pending Fee</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400">{t('reports.fee.totalPending')}</span>
             <div className="w-9 h-9 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
               <Clock size={18} />
             </div>
           </div>
           <p className="text-3xl font-black text-slate-900 dark:text-white">${pendingAmount.toLocaleString()}</p>
-          <p className="text-xs text-slate-500 mt-1 font-semibold">{pendingList.length} Pending entries</p>
+          <p className="text-xs text-slate-500 mt-1 font-semibold">{t('reports.fee.pendingEntries', { count: pendingList.length })}</p>
         </div>
 
         <div className="bg-white dark:bg-slate-900 rounded-[28px] border border-slate-100 dark:border-slate-800 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-600 dark:text-brand-400">Grand Total Money</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-600 dark:text-brand-400">{t('reports.fee.grandTotal')}</span>
             <div className="w-9 h-9 rounded-xl bg-brand-500/20 flex items-center justify-center text-brand-600 dark:text-brand-400">
               <TrendingUp size={18} />
             </div>
           </div>
           <p className="text-3xl font-black text-slate-900 dark:text-white">${totalAmount.toLocaleString()}</p>
-          <p className="text-xs text-slate-500 mt-1 font-semibold">Sum of all {filtered.length} report rows</p>
+          <p className="text-xs text-slate-500 mt-1 font-semibold">{t('reports.fee.sumRows', { count: filtered.length })}</p>
         </div>
       </div>
 
@@ -375,7 +378,7 @@ const FeePaymentReport = () => {
           <Search size={18} className="text-slate-400 mr-3 shrink-0" />
           <input
             type="text"
-            placeholder="Search payer name or phone..."
+            placeholder={t('reports.common.searchPayer')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400"
@@ -384,14 +387,14 @@ const FeePaymentReport = () => {
 
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5">
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">From</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('common.from')}</span>
             <input
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               className="text-xs font-bold bg-transparent text-slate-700 dark:text-slate-200 outline-none"
             />
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">To</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('common.to')}</span>
             <input
               type="date"
               value={dateTo}
@@ -403,7 +406,7 @@ const FeePaymentReport = () => {
                 onClick={() => { setDateFrom(''); setDateTo(''); }}
                 className="text-[10px] font-black uppercase tracking-widest text-rose-500 hover:text-rose-600 ml-1"
               >
-                Clear
+                {t('common.clear')}
               </button>
             )}
           </div>
@@ -419,7 +422,7 @@ const FeePaymentReport = () => {
                     : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
                 }`}
               >
-                {status}
+                {t(`reports.fee.status.${status}`)}
               </button>
             ))}
           </div>
@@ -427,13 +430,13 @@ const FeePaymentReport = () => {
           {/* Wallet filter — options come from the wallets already loaded from
               the database, so no wallet record is created or duplicated here. */}
           <div className="flex items-center gap-3">
-            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Wallet</label>
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('common.wallet')}</label>
             <select
               value={walletFilter}
               onChange={(e) => setWalletFilter(e.target.value)}
               className="px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-brand-500"
             >
-              <option value="All">All Wallets</option>
+              <option value="All">{t('reports.common.allWallets')}</option>
               {wallets.map((w) => (
                 <option key={w._id} value={w._id}>{w.name}</option>
               ))}
@@ -450,13 +453,13 @@ const FeePaymentReport = () => {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Building2 size={24} className="text-brand-600 dark:text-brand-400" />
-              <h2 className="text-2xl font-black uppercase tracking-wide text-slate-900 dark:text-white">MACHAD EDUCATIONAL INSTITUTE</h2>
+              <h2 className="text-2xl font-black uppercase tracking-wide text-slate-900 dark:text-white">{t('reports.common.instituteName')}</h2>
             </div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Official Fee Payment & Collection Report</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t('reports.fee.officialTitle')}</p>
           </div>
           <div className="text-right">
-            <p className="text-xs font-bold text-slate-400 uppercase">Report Date:</p>
-            <p className="text-sm font-black text-slate-800 dark:text-slate-200">{new Date().toLocaleDateString()}</p>
+            <p className="text-xs font-bold text-slate-400 uppercase">{t('reports.common.reportDate')}:</p>
+            <p className="text-sm font-black text-slate-800 dark:text-slate-200">{new Date().toLocaleDateString(locale)}</p>
           </div>
         </div>
 
@@ -465,14 +468,14 @@ const FeePaymentReport = () => {
         <div className="mb-6 rounded-[24px] border border-slate-100 bg-slate-50/60 p-5 dark:border-slate-800 dark:bg-slate-800/20">
           <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
             <div>
-              <h3 className="text-sm font-black uppercase tracking-wide text-slate-900 dark:text-white">Payer Payment Subtotal</h3>
+              <h3 className="text-sm font-black uppercase tracking-wide text-slate-900 dark:text-white">{t('reports.fee.subtotalTitle')}</h3>
               <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
-                Completed payments grouped by responsible party, matching the filters above.
+                {t('reports.fee.subtotalHint')}
               </p>
             </div>
             <div className="text-right">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                Subtotal · {payerSubtotals.payerCount} payer{payerSubtotals.payerCount === 1 ? '' : 's'}
+                {t('reports.fee.subtotalCount', { count: payerSubtotals.payerCount })}
               </p>
               <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
                 ${payerSubtotals.total.toLocaleString()}
@@ -482,16 +485,16 @@ const FeePaymentReport = () => {
 
           {payerSubtotals.rows.length === 0 ? (
             <p className="py-4 text-center text-xs font-semibold text-slate-400">
-              No completed payments match the current filters.
+              {t('reports.fee.noCompleted')}
             </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:border-slate-700">
-                    <th className="px-4 py-2">Responsible Party</th>
-                    <th className="px-4 py-2 text-right">Payments</th>
-                    <th className="px-4 py-2 text-right">Subtotal</th>
+                    <th className="px-4 py-2">{t('reports.fee.responsibleParty')}</th>
+                    <th className="px-4 py-2 text-right">{t('reports.fee.payments')}</th>
+                    <th className="px-4 py-2 text-right">{t('reports.fee.subtotal')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200/70 dark:divide-slate-700/70">
@@ -505,7 +508,7 @@ const FeePaymentReport = () => {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-300 dark:border-slate-600">
-                    <td className="px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">Total</td>
+                    <td className="px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-500">{t('common.total')}</td>
                     <td className="px-4 py-2.5 text-right text-sm font-semibold text-slate-500">
                       {payerSubtotals.rows.reduce((sum, row) => sum + row.count, 0)}
                     </td>
@@ -525,12 +528,12 @@ const FeePaymentReport = () => {
             <thead>
               <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest">
                 <th className="px-6 py-4">#</th>
-                <th className="px-6 py-4">Payer Name</th>
-                <th className="px-6 py-4">Payer Phone</th>
-                <th className="px-6 py-4">Month / Date</th>
-                <th className="px-6 py-4">Deposit Wallet</th>
-                <th className="px-6 py-4">Paid ($)</th>
-                <th className="px-6 py-4">Unpaid ($)</th>
+                <th className="px-6 py-4">{t('payers.colName')}</th>
+                <th className="px-6 py-4">{t('reports.fee.payerPhone')}</th>
+                <th className="px-6 py-4">{t('reports.fee.monthDate')}</th>
+                <th className="px-6 py-4">{t('reports.fee.depositWallet')}</th>
+                <th className="px-6 py-4">{t('reports.fee.paidCol')}</th>
+                <th className="px-6 py-4">{t('reports.fee.unpaidCol')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -548,7 +551,7 @@ const FeePaymentReport = () => {
                     </td>
                     <td className="px-6 py-4">
                       <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{payer.name}</p>
-                      <p className="text-[11px] text-slate-400 font-medium">Student: {student.fullName || 'Unknown'}</p>
+                      <p className="text-[11px] text-slate-400 font-medium">{t('common.student')}: {student.fullName || t('common.unknown')}</p>
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-slate-600 dark:text-slate-300">
                       <span className="font-mono bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200">
@@ -556,8 +559,8 @@ const FeePaymentReport = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-slate-500 dark:text-slate-400">
-                      <p className="font-bold text-slate-800 dark:text-slate-200">{item.month || 'Current'}</p>
-                      <p className="text-[11px] text-slate-400">{new Date(item.paymentDate || item.createdAt).toLocaleDateString()}</p>
+                      <p className="font-bold text-slate-800 dark:text-slate-200">{item.month || t('reports.fee.current')}</p>
+                      <p className="text-[11px] text-slate-400">{new Date(item.paymentDate || item.createdAt).toLocaleDateString(locale)}</p>
                     </td>
                     <td className="px-6 py-4 text-sm font-semibold text-slate-700 dark:text-slate-300">
                       <span className="px-3 py-1 text-[10px] font-black uppercase rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -584,7 +587,7 @@ const FeePaymentReport = () => {
 
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan="7" className="px-8 py-12 text-center text-slate-400 text-sm font-medium">No fee payment records found.</td>
+                  <td colSpan="7" className="px-8 py-12 text-center text-slate-400 text-sm font-medium">{t('reports.fee.empty')}</td>
                 </tr>
               )}
             </tbody>
@@ -594,7 +597,7 @@ const FeePaymentReport = () => {
               <tfoot>
                 <tr className="bg-slate-900 text-white font-black text-sm border-t-2 border-slate-700">
                   <td colSpan="5" className="px-6 py-5 text-right uppercase tracking-wider text-slate-300">
-                    TOTAL PAID / UNPAID:
+                    {t('reports.fee.totalPaidUnpaid')}:
                   </td>
                   <td className="px-6 py-5 text-xl font-black text-emerald-400">
                     ${completedAmount.toLocaleString()}
@@ -612,11 +615,11 @@ const FeePaymentReport = () => {
         <div className="hidden print:grid grid-cols-2 gap-12 pt-16 text-center text-xs font-bold text-slate-600">
           <div>
             <div className="border-b border-slate-400 mb-2 h-10" />
-            <p className="uppercase tracking-wider">Accountant / Cashier Signature</p>
+            <p className="uppercase tracking-wider">{t('reports.common.accountantSignature')}</p>
           </div>
           <div>
             <div className="border-b border-slate-400 mb-2 h-10" />
-            <p className="uppercase tracking-wider">Director / Management Stamp</p>
+            <p className="uppercase tracking-wider">{t('reports.common.directorStamp')}</p>
           </div>
         </div>
 

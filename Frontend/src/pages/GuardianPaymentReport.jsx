@@ -16,6 +16,7 @@ import { jsPDF } from 'jspdf';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { currentCycle, cycleKeyForDate, cycleLabel } from '../utils/billingCycle';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 // A payment belongs to the current billing cycle if it carries this cycle key
 // (new records) or its real paymentDate falls in the cycle (historical records).
@@ -24,6 +25,11 @@ const paymentInCycle = (p, cycle) =>
 
 const GuardianPaymentReport = () => {
   const { showAlert, showConfirm } = useAlert();
+  const { t, locale } = useLanguage();
+  const relationshipLabel = (g) => {
+    const value = g.relationship || g.type || 'Parent';
+    return t(`academic.guardians.relationships.${value}`, { defaultValue: t(`values.${value}`, { defaultValue: value }) });
+  };
   const printRef = useRef(null);
 
   const [guardians, setGuardians] = useState([]);
@@ -50,7 +56,7 @@ const GuardianPaymentReport = () => {
       setStudents(resS.data || []);
       setPayments(resP.data || []);
     } catch {
-      showAlert({ type: 'danger', title: 'Error', message: 'Failed to load data.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: t('reports.guardian.loadFailed') });
     } finally {
       setLoading(false);
     }
@@ -118,17 +124,17 @@ const GuardianPaymentReport = () => {
     const unpaid = gStudents.filter(s => !status.paidStudentIds?.has(String(s._id)));
 
     if (unpaid.length === 0) {
-      showAlert({ type: 'info', title: 'Already Paid', message: 'All students already paid for this month.' });
+      showAlert({ type: 'info', title: t('reports.guardian.alreadyPaidTitle'), message: t('reports.guardian.alreadyPaid') });
       return;
     }
 
     const totalAmount = unpaid.reduce((sum, s) => sum + (s.monthlyFee || s.fee || 0), 0);
     const confirmed = await showConfirm({
       type: 'info',
-      title: 'Confirm Payment',
-      message: `Record payment for ${unpaid.length} student(s) under "${guardian.fullName}"?\nTotal: $${totalAmount} (${thisMonth})`,
-      confirmText: 'Yes, Record',
-      cancelText: 'Cancel',
+      title: t('reports.guardian.confirmTitle'),
+      message: t('reports.guardian.confirmMessage', { count: unpaid.length, name: guardian.fullName, amount: totalAmount, month: thisMonth }),
+      confirmText: t('reports.guardian.yesRecord'),
+      cancelText: t('common.cancel'),
     });
     if (!confirmed) return;
 
@@ -144,11 +150,11 @@ const GuardianPaymentReport = () => {
           status: 'Completed',
         });
       }
-      showAlert({ type: 'success', title: 'Payment Recorded', message: `All fees recorded for ${guardian.fullName}.` });
+      showAlert({ type: 'success', title: t('reports.guardian.recordedTitle'), message: t('reports.guardian.recorded', { name: guardian.fullName }) });
       const { data } = await api.get('/payments');
       setPayments(data || []);
     } catch (err) {
-      showAlert({ type: 'danger', title: 'Error', message: err.response?.data?.message || 'Failed to record payment.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: err.response?.data?.message || t('reports.guardian.recordFailed') });
     } finally {
       setProcessingId(null);
     }
@@ -166,10 +172,10 @@ const GuardianPaymentReport = () => {
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(13);
-    doc.text('PAYMENT RESPONSIBILITY REPORT', 14, 11);
+    doc.text(t('reports.guardian.pdf.title'), 14, 11);
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Month: ${thisMonth}   |   Generated: ${new Date().toLocaleString()}`, 14, 18);
+    doc.text(`${t('common.month')}: ${thisMonth}   |   ${t('payers.pdf.generated')}: ${new Date().toLocaleString(locale)}`, 14, 18);
 
     // Column config (portrait A4 = 210mm wide, margins 14)
     let y = 32;
@@ -182,11 +188,11 @@ const GuardianPaymentReport = () => {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.text('#', cols.no, y);
-    doc.text('PAYER NAME', cols.name, y);
-    doc.text('PHONE', cols.phone, y);
-    doc.text('RELATIONSHIP', cols.rel, y);
-    doc.text('STUDENTS', cols.students, y);
-    doc.text('PAID', cols.status, y);
+    doc.text(t('payers.pdf.payerName'), cols.name, y);
+    doc.text(t('reports.guardian.pdf.phone'), cols.phone, y);
+    doc.text(t('reports.guardian.pdf.relationship'), cols.rel, y);
+    doc.text(t('payers.pdf.students'), cols.students, y);
+    doc.text(t('payers.pdf.paid'), cols.status, y);
 
     y += 8;
 
@@ -215,7 +221,7 @@ const GuardianPaymentReport = () => {
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(71, 85, 105);
       doc.text(g.phone || '—', cols.phone, y);
-      doc.text(g.relationship || g.type || 'Parent', cols.rel, y);
+      doc.text(relationshipLabel(g), cols.rel, y);
       doc.text(`${gStatus.paidCount} / ${gStatus.total}`, cols.students, y);
 
       // Tick box for Paid column
@@ -246,9 +252,9 @@ const GuardianPaymentReport = () => {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
-    doc.text(`Total records: ${filtered.length}   |   Institute Management System`, 14, pageH - 8);
+    doc.text(`${t('reports.guardian.totalRecords')}: ${filtered.length}   |   ${t('reports.common.systemName')}`, 14, pageH - 8);
 
-    doc.save(`Payment_Responsibility_${thisMonth}.pdf`);
+    doc.save(`${t('reports.guardian.pdf.file')}_${thisMonth}.pdf`);
   };
 
   // ─── Print (payers only) ──────────────────────────────────────────
@@ -261,11 +267,11 @@ const GuardianPaymentReport = () => {
           <td style="padding:9px 14px;color:#64748b;font-size:11px;">${i + 1}</td>
           <td style="padding:9px 14px;font-weight:700;font-size:12px;color:#0f172a;">${g.fullName}</td>
           <td style="padding:9px 14px;font-size:12px;color:#475569;font-family:monospace;">${g.phone || '—'}</td>
-          <td style="padding:9px 14px;font-size:11px;color:#64748b;">${g.relationship || g.type || 'Parent'}</td>
+          <td style="padding:9px 14px;font-size:11px;color:#64748b;">${relationshipLabel(g)}</td>
           <td style="padding:9px 14px;font-size:12px;font-weight:700;color:#0f172a;">${gStatus.paidCount} / ${gStatus.total}</td>
           <td style="padding:9px 14px;">
             <span style="font-size:11px;font-weight:800;padding:4px 12px;border-radius:8px;background:${gStatus.paid ? '#dcfce7' : '#fee2e2'};color:${gStatus.paid ? '#16a34a' : '#dc2626'};">
-              ${gStatus.paid ? '✓ PAID' : '✗ PENDING'}
+              ${gStatus.paid ? `✓ ${t('reports.guardian.paidUpper')}` : `✗ ${t('reports.guardian.pendingUpper')}`}
             </span>
           </td>
         </tr>
@@ -277,7 +283,7 @@ const GuardianPaymentReport = () => {
       <html>
       <head>
         <meta charset="UTF-8" />
-        <title>Payment Responsibility — ${thisMonth}</title>
+        <title>${t('reports.guardian.title')} — ${thisMonth}</title>
         <style>
           * { margin:0; padding:0; box-sizing:border-box; }
           body { font-family: 'Helvetica Neue', Arial, sans-serif; background:#fff; color:#0f172a; }
@@ -301,36 +307,36 @@ const GuardianPaymentReport = () => {
       <body>
         <div class="header">
           <div>
-            <h1>Payment Responsibility Report</h1>
-            <p>Month: ${thisMonth} &nbsp;|&nbsp; Generated: ${new Date().toLocaleString()}</p>
+            <h1>${t('reports.guardian.printTitle')}</h1>
+            <p>${t('common.month')}: ${thisMonth} &nbsp;|&nbsp; ${t('payers.pdf.generated')}: ${new Date().toLocaleString(locale)}</p>
           </div>
           <div style="font-size:11px;opacity:0.75;text-align:right;">
-            Institute Management System
+            ${t('reports.common.systemName')}
           </div>
         </div>
         <div class="kpi">
           <div class="kpi-item">
-            <div class="kpi-label">Total Guardians</div>
+            <div class="kpi-label">${t('reports.guardian.totalGuardians')}</div>
             <div class="kpi-value" style="color:#0f172a;">${stats.total}</div>
           </div>
           <div class="kpi-item">
-            <div class="kpi-label">Paid This Month</div>
+            <div class="kpi-label">${t('reports.guardian.paidThisMonth')}</div>
             <div class="kpi-value" style="color:#16a34a;">${stats.paid}</div>
           </div>
           <div class="kpi-item">
-            <div class="kpi-label">Not Yet Paid</div>
+            <div class="kpi-label">${t('reports.guardian.notYetPaid')}</div>
             <div class="kpi-value" style="color:#dc2626;">${stats.pending}</div>
           </div>
         </div>
         <table>
           <thead>
             <tr>
-              <th>Guardian / Responsible</th>
-              <th>Phone Number</th>
-              <th>Relationship</th>
-              <th>Students</th>
-              <th>Total Fees</th>
-              <th>Status</th>
+              <th>${t('reports.guardian.colGuardian')}</th>
+              <th>${t('reports.guardian.colPhone')}</th>
+              <th>${t('academic.guardians.colRelationship')}</th>
+              <th>${t('nav.students')}</th>
+              <th>${t('reports.guardian.totalFees')}</th>
+              <th>${t('common.status')}</th>
             </tr>
           </thead>
           <tbody>${printContent}</tbody>
@@ -349,7 +355,7 @@ const GuardianPaymentReport = () => {
     return (
       <div className="flex items-center justify-center p-20">
         <Loader2 size={32} className="animate-spin text-brand-500" />
-        <span className="ml-3 text-slate-500 font-bold text-sm">Loading payment responsibility data...</span>
+        <span className="ml-3 text-slate-500 font-bold text-sm">{t('reports.guardian.loading')}</span>
       </div>
     );
   }
@@ -365,10 +371,10 @@ const GuardianPaymentReport = () => {
           </div>
           <div>
             <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">
-              Payment Responsibility
+              {t('reports.guardian.title')}
             </h1>
             <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-1 uppercase tracking-[0.2em]">
-              {thisMonth} · Who has paid student fees
+              {thisMonth} · {t('reports.guardian.subtitle')}
             </p>
           </div>
         </div>
@@ -380,14 +386,14 @@ const GuardianPaymentReport = () => {
             className="flex items-center gap-2 px-5 py-3 bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-md"
           >
             <FileDown size={16} />
-            Export PDF
+            {t('exams.results.exportPdf')}
           </button>
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 px-5 py-3 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-brand-600/30"
           >
             <Printer size={16} />
-            Print
+            {t('common.print')}
           </button>
         </div>
       </div>
@@ -395,9 +401,9 @@ const GuardianPaymentReport = () => {
       {/* ── KPI strip ── */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Total Guardians',  value: stats.total,   color: 'text-slate-900 dark:text-white' },
-          { label: 'Paid This Month',  value: stats.paid,    color: 'text-emerald-600 dark:text-emerald-400' },
-          { label: 'Not Yet Paid',     value: stats.pending, color: 'text-rose-600 dark:text-rose-400' },
+          { label: t('reports.guardian.totalGuardians'),  value: stats.total,   color: 'text-slate-900 dark:text-white' },
+          { label: t('reports.guardian.paidThisMonth'),  value: stats.paid,    color: 'text-emerald-600 dark:text-emerald-400' },
+          { label: t('reports.guardian.notYetPaid'),     value: stats.pending, color: 'text-rose-600 dark:text-rose-400' },
         ].map(k => (
           <div key={k.label} className="bg-white dark:bg-slate-900 rounded-[24px] border border-slate-100 dark:border-slate-800 p-5 shadow-sm">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{k.label}</p>
@@ -412,7 +418,7 @@ const GuardianPaymentReport = () => {
           <Search size={17} className="text-slate-400 shrink-0" />
           <input
             type="text"
-            placeholder="Search by guardian name or phone number..."
+            placeholder={t('reports.guardian.searchPlaceholder')}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400 font-semibold"
@@ -427,7 +433,7 @@ const GuardianPaymentReport = () => {
       <div ref={printRef} className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
 
         <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_80px] px-8 py-4 bg-slate-50/70 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800">
-          {['Guardian / Responsible', 'Phone Number', 'Relationship', 'Students', 'Paid?'].map(h => (
+          {[t('reports.guardian.colGuardian'), t('reports.guardian.colPhone'), t('academic.guardians.colRelationship'), t('nav.students'), t('reports.guardian.colPaid')].map(h => (
             <span key={h} className="text-[10px] font-black uppercase tracking-widest text-slate-400">{h}</span>
           ))}
         </div>
@@ -435,7 +441,7 @@ const GuardianPaymentReport = () => {
         <div className="divide-y divide-slate-100 dark:divide-slate-800">
           {filtered.length === 0 && (
             <div className="px-8 py-16 text-center text-slate-400 text-sm font-semibold">
-              {searchQuery ? 'No guardians match your search.' : 'No guardians found.'}
+              {searchQuery ? t('reports.guardian.noMatch') : t('reports.guardian.none')}
             </div>
           )}
 
@@ -467,14 +473,14 @@ const GuardianPaymentReport = () => {
 
                   <div>
                     <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                      {guardian.relationship || guardian.type || 'Parent'}
+                      {relationshipLabel(guardian)}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <Users size={14} className="text-slate-400" />
                     <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                      {gStatus.paidCount}/{gStatus.total} students
+                      {t('reports.guardian.studentsPaid', { paid: gStatus.paidCount, total: gStatus.total })}
                     </span>
                   </div>
 
@@ -496,7 +502,7 @@ const GuardianPaymentReport = () => {
                   <div className="px-8 pb-6 pt-2 bg-slate-50/40 dark:bg-slate-800/10 animate-in slide-in-from-top-1 duration-200">
                     <div className="rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden">
                       <div className="grid grid-cols-[2fr_1fr_1fr_1fr] px-5 py-3 bg-slate-100/60 dark:bg-slate-800/60 text-[9px] font-black uppercase tracking-widest text-slate-400">
-                        <span>Student Name</span><span>Code</span><span>Monthly Fee</span><span>This Month</span>
+                        <span>{t('students.studentName')}</span><span>{t('common.code')}</span><span>{t('monthlyPayments.monthlyFee')}</span><span>{t('reports.guardian.thisMonth')}</span>
                       </div>
                       {gStudents.map(student => {
                         const isPaid = gStatus.paidStudentIds?.has(String(student._id));
@@ -506,19 +512,19 @@ const GuardianPaymentReport = () => {
                             <span className="text-xs font-mono text-slate-500">{student.studentCode || student.rollNumber || '—'}</span>
                             <span className="text-sm font-bold text-slate-700 dark:text-slate-300 font-mono">${student.monthlyFee || student.fee || 0}</span>
                             <span className={`text-xs font-black uppercase ${isPaid ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
-                              {isPaid ? '✓ Paid' : '✗ Unpaid'}
+                              {isPaid ? `✓ ${t('common.paid')}` : `✗ ${t('values.Unpaid')}`}
                             </span>
                           </div>
                         );
                       })}
                       <div className="grid grid-cols-[2fr_1fr_1fr_1fr] px-5 py-3.5 border-t-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/30">
-                        <span className="text-xs font-black uppercase text-slate-400">Total</span>
+                        <span className="text-xs font-black uppercase text-slate-400">{t('common.total')}</span>
                         <span />
                         <span className="text-sm font-black text-slate-900 dark:text-white font-mono">
                           ${gStudents.reduce((s, st) => s + (st.monthlyFee || st.fee || 0), 0)}
                         </span>
                         <span className={`text-xs font-black uppercase ${gStatus.paid ? 'text-emerald-600' : 'text-rose-500'}`}>
-                          {gStatus.paid ? 'All Paid' : `${gStatus.total - gStatus.paidCount} remaining`}
+                          {gStatus.paid ? t('reports.guardian.allPaid') : t('reports.guardian.remaining', { count: gStatus.total - gStatus.paidCount })}
                         </span>
                       </div>
                     </div>
@@ -528,7 +534,7 @@ const GuardianPaymentReport = () => {
                         disabled={isProcessing}
                         className="mt-4 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm disabled:opacity-60"
                       >
-                        {isProcessing ? 'Recording...' : `Mark All Paid — ${guardian.fullName}`}
+                        {isProcessing ? t('reports.guardian.recording') : `${t('reports.guardian.markAllPaid')} — ${guardian.fullName}`}
                       </button>
                     )}
                   </div>
@@ -536,7 +542,7 @@ const GuardianPaymentReport = () => {
 
                 {isExpanded && gStudents.length === 0 && (
                   <div className="px-8 pb-6 pt-2 text-sm text-slate-400 font-semibold flex items-center gap-2">
-                    <AlertCircle size={15} /> No students connected to this guardian.
+                    <AlertCircle size={15} /> {t('reports.guardian.noStudents')}
                   </div>
                 )}
               </div>

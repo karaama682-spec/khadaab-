@@ -25,6 +25,7 @@ import {
   Trash2,
   AlertTriangle
 } from 'lucide-react';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const MOCK_LOGS = [
   { id: 'LOG-1021', timestamp: 'Oct 24, 2024 • 02:45 PM', user: 'Hussein Mohamed', role: 'Owner', action: 'Sale Created', module: 'Sales', reference: 'TXN-8821', ip: '197.12.0.1', actionType: 'Create' },
@@ -40,6 +41,13 @@ const MODULES = ['Sales', 'Inventory', 'Accounts', 'Access', 'Security', 'HR', '
 const ACTION_TYPES = ['Create', 'Update', 'Delete', 'Auth', 'System'];
 
 const ActivityLogs = () => {
+  const { t, language, monthsShort } = useLanguage();
+  // Demo timestamps are stored as "Oct 24, 2024 • 02:45 PM"; month and AM/PM are
+  // shown in the selected language.
+  const localizeStamp = (text) => (language === 'en' ? text : text
+    .replace(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/, (m) => monthsShort[['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(m)])
+    .replace(/\bAM\b/, t('access.logs.am')).replace(/\bPM\b/, t('access.logs.pm')));
+  const L = (group, value) => t(`access.logs.${group}.${value}`, { defaultValue: value });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState('All Users');
   const [selectedModule, setSelectedModule] = useState('All Modules');
@@ -72,14 +80,14 @@ const ActivityLogs = () => {
             <Terminal size={32} strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Security Audit</h1>
-            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">Immutable Global Activity Ledger & Forensic Trail</p>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">{t('access.logs.title')}</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">{t('access.logs.subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <button className="flex items-center gap-3 px-8 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 rounded-[20px] font-black text-[10px] uppercase tracking-[0.2em] hover:bg-slate-50 transition-all shadow-sm group">
             <Download size={18} className="text-brand-500 group-hover:translate-y-0.5 transition-transform" />
-            Export PDF/CSV
+            {t('access.logs.export')}
           </button>
         </div>
       </div>
@@ -88,29 +96,29 @@ const ActivityLogs = () => {
       <div className="bg-white dark:bg-slate-900 rounded-[40px] border border-slate-100 dark:border-slate-800 shadow-sm p-8 space-y-6">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-black dark:text-white uppercase tracking-widest flex items-center gap-2">
-            <Filter size={16} className="text-brand-600" /> Forensic Filters
+            <Filter size={16} className="text-brand-600" /> {t('access.logs.filters')}
           </h3>
-          <button className="text-[10px] font-black text-slate-400 hover:text-brand-600 uppercase tracking-widest transition-all">Reset Matrix</button>
+          <button className="text-[10px] font-black text-slate-400 hover:text-brand-600 uppercase tracking-widest transition-all">{t('access.logs.reset')}</button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Date Range - Mock */}
           <div className="space-y-2">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Date Range</label>
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{t('access.logs.dateRange')}</label>
             <div className="relative group">
               <Calendar size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-600" />
               <select className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-[11px] font-black dark:text-white outline-none focus:ring-4 focus:ring-brand-500/10 appearance-none shadow-inner">
-                <option>Today</option>
-                <option>Last 7 Days</option>
-                <option>Last 30 Days</option>
-                <option>Custom Range</option>
+                <option value="Today">{t('common.today')}</option>
+                <option value="Last 7 Days">{t('access.logs.last7')}</option>
+                <option value="Last 30 Days">{t('access.logs.last30')}</option>
+                <option value="Custom Range">{t('access.logs.customRange')}</option>
               </select>
             </div>
           </div>
 
           {/* User Filter */}
           <div className="space-y-2">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">System Operator</label>
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{t('access.logs.operator')}</label>
             <div className="relative group">
               <UserIcon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-600" />
               <select
@@ -118,18 +126,18 @@ const ActivityLogs = () => {
                 onChange={(e) => setSelectedUser(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-[11px] font-black dark:text-white appearance-none outline-none focus:ring-4 focus:ring-brand-500/10 shadow-inner"
               >
-                <option>All Users</option>
-                <option>Hussein Mohamed</option>
-                <option>Fatima N.</option>
-                <option>Ahmed Nur</option>
-                <option>System Bot</option>
+                <option value="All Users">{t('access.users.tabAll')}</option>
+                <option value="Hussein Mohamed">Hussein Mohamed</option>
+                <option value="Fatima N.">Fatima N.</option>
+                <option value="Ahmed Nur">Ahmed Nur</option>
+                <option value="System Bot">{L('users', 'System Bot')}</option>
               </select>
             </div>
           </div>
 
           {/* Module Filter */}
           <div className="space-y-2">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">System Module</label>
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{t('access.logs.module')}</label>
             <div className="relative group">
               <Activity size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-600" />
               <select
@@ -137,15 +145,15 @@ const ActivityLogs = () => {
                 onChange={(e) => setSelectedModule(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-[11px] font-black dark:text-white appearance-none outline-none focus:ring-4 focus:ring-brand-500/10 shadow-inner"
               >
-                <option>All Modules</option>
-                {MODULES.map(m => <option key={m} value={m}>{m}</option>)}
+                <option value="All Modules">{t('access.logs.allModules')}</option>
+                {MODULES.map(m => <option key={m} value={m}>{L('modules', m)}</option>)}
               </select>
             </div>
           </div>
 
           {/* Action Type Filter */}
           <div className="space-y-2">
-            <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Action Protocol</label>
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{t('access.logs.actionType')}</label>
             <div className="relative group">
               <ShieldCheck size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-600" />
               <select
@@ -153,8 +161,8 @@ const ActivityLogs = () => {
                 onChange={(e) => setSelectedActionType(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-[11px] font-black dark:text-white appearance-none outline-none focus:ring-4 focus:ring-brand-500/10 shadow-inner"
               >
-                <option>All Types</option>
-                {ACTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                <option value="All Types">{t('access.logs.allTypes')}</option>
+                {ACTION_TYPES.map(type => <option key={type} value={type}>{L('types', type)}</option>)}
               </select>
             </div>
           </div>
@@ -165,7 +173,7 @@ const ActivityLogs = () => {
           <Search size={20} className="absolute left-6 top-1/2 translate-y-1 text-slate-400 group-focus-within:text-brand-600 transition-colors" />
           <input
             type="text"
-            placeholder="Deep Search Logs by Reference ID, Specific Action or IP Signature..."
+            placeholder={t('access.logs.searchPlaceholder')}
             className="w-full pl-16 pr-6 py-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[28px] text-sm font-semibold outline-none focus:ring-8 focus:ring-brand-500/5 transition-all dark:text-white shadow-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -179,13 +187,13 @@ const ActivityLogs = () => {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                <th className="px-10 py-6">Date & Time</th>
-                <th className="px-10 py-6">User Operator</th>
-                <th className="px-10 py-6">Action Executed</th>
-                <th className="px-10 py-6">Module Hub</th>
-                <th className="px-10 py-6">Record Reference</th>
-                <th className="px-10 py-6">IP Signature</th>
-                <th className="px-10 py-6 text-right">Details</th>
+                <th className="px-10 py-6">{t('access.logs.colDate')}</th>
+                <th className="px-10 py-6">{t('access.logs.colUser')}</th>
+                <th className="px-10 py-6">{t('access.logs.colAction')}</th>
+                <th className="px-10 py-6">{t('access.logs.colModule')}</th>
+                <th className="px-10 py-6">{t('access.logs.colReference')}</th>
+                <th className="px-10 py-6">{t('access.logs.colIp')}</th>
+                <th className="px-10 py-6 text-right">{t('common.details')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -193,8 +201,8 @@ const ActivityLogs = () => {
                 <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors group">
                   <td className="px-10 py-8">
                     <div className="space-y-1">
-                      <p className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight">{log.timestamp.split(' • ')[0]}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{log.timestamp.split(' • ')[1]}</p>
+                      <p className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight">{localizeStamp(log.timestamp.split(' • ')[0])}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{localizeStamp(log.timestamp.split(' • ')[1])}</p>
                     </div>
                   </td>
                   <td className="px-10 py-8">
@@ -203,18 +211,18 @@ const ActivityLogs = () => {
                         <UserIcon size={18} />
                       </div>
                       <div>
-                        <p className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight leading-none">{log.user}</p>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">{log.role}</p>
+                        <p className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight leading-none">{L('users', log.user)}</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1.5">{L('roles', log.role)}</p>
                       </div>
                     </div>
                   </td>
                   <td className="px-10 py-8">
                     <div className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest w-fit flex items-center gap-2 border shadow-sm ${getActionColor(log.actionType)}`}>
-                      <span className="shrink-0">{log.action}</span>
+                      <span className="shrink-0">{L('actions', log.action)}</span>
                     </div>
                   </td>
                   <td className="px-10 py-8">
-                    <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700 uppercase tracking-widest">{log.module}</span>
+                    <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-700 uppercase tracking-widest">{L('modules', log.module)}</span>
                   </td>
                   <td className="px-10 py-8">
                     <div className="flex items-center gap-2 text-[11px] font-black text-brand-600 dark:text-brand-400 uppercase tracking-widest">
@@ -241,19 +249,19 @@ const ActivityLogs = () => {
         <div className="p-10 bg-slate-50/50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-8">
             <div className="flex flex-col">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Snapshot Integrity</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('access.logs.integrity')}</p>
               <div className="flex items-center gap-2 text-emerald-500 font-bold text-xs uppercase tracking-tight">
-                <ShieldCheck size={16} /> All Logs Cryptographically Signed
+                <ShieldCheck size={16} /> {t('access.logs.signed')}
               </div>
             </div>
             <div className="w-px h-10 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
             <div className="flex flex-col hidden sm:block">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Retention Policy</p>
-              <p className="text-xs font-black dark:text-white uppercase tracking-tight">90 Days Rolling Archive (Active)</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('access.logs.retention')}</p>
+              <p className="text-xs font-black dark:text-white uppercase tracking-tight">{t('access.logs.retentionValue')}</p>
             </div>
           </div>
           <button className="flex items-center gap-3 px-8 py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-[22px] text-[10px] font-black uppercase tracking-[0.25em] hover:gap-5 transition-all group shadow-xl active:scale-95 border border-slate-700">
-            Audit Lifecycle Manager <ArrowRight size={16} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
+            {t('access.logs.lifecycle')} <ArrowRight size={16} strokeWidth={3} className="group-hover:translate-x-1 transition-transform" />
           </button>
         </div>
       </div>

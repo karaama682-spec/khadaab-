@@ -37,6 +37,8 @@ import {
 } from 'recharts';
 import { jsPDF } from 'jspdf';
 import { classLabel } from '../utils/classLabel';
+import { useLanguage, dateLocale } from '../i18n/LanguageContext.jsx';
+import { monthNames } from '../i18n/core.js';
 
 // Current month as 'YYYY-MM' for the Daily View month picker.
 const currentMonth = () => new Date().toISOString().slice(0, 7);
@@ -52,6 +54,7 @@ const formatDMY = (iso) => {
 const monthLabel = (ym) => {
   if (!ym) return '';
   const [y, m] = ym.split('-');
+  if (dateLocale()) return `${monthNames()[Number(m) - 1]} ${y}`;
   return new Date(Number(y), Number(m) - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
 };
 
@@ -60,6 +63,9 @@ const SESSION_ORDER = { Morning: 0, Breakfast: 1, Evening: 2 };
 
 const StudentAttendanceReport = () => {
   const { showAlert } = useAlert();
+  const { t, tv, locale } = useLanguage();
+  // Attendance statuses/sessions are stored in English; show them localized.
+  const statusLabel = (value) => (value && value !== '-' ? tv(value) : value);
 
   // Navigation tabs
   const [activeTab, setActiveTab] = useState('class'); // class (Attendance Ledger) | daily | student | dashboard
@@ -126,7 +132,7 @@ const StudentAttendanceReport = () => {
       }
     } catch (error) {
       console.error('Failed to load reports data', error);
-      showAlert({ type: 'danger', title: 'Error', message: 'Failed to load report datasets.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: t('attendanceReport.loadFailed') });
     } finally {
       setLoading(false);
     }
@@ -154,7 +160,7 @@ const StudentAttendanceReport = () => {
       setSavingStudentId(student._id);
       const classId = student.classId?._id || student.classId || (classes[0]?._id);
       if (!classId) {
-        showAlert({ type: 'warning', title: 'Class Missing', message: 'Student is not assigned to a class.' });
+        showAlert({ type: 'warning', title: t('attendanceReport.classMissingTitle'), message: t('attendanceReport.classMissing') });
         return;
       }
 
@@ -173,15 +179,15 @@ const StudentAttendanceReport = () => {
       await refreshAttendance();
       showAlert({
         type: 'success',
-        title: 'Status Saved to Database',
-        message: `${student.fullName} marked as ${newStatus} for ${dailyDate}.`
+        title: t('attendanceReport.statusSavedTitle'),
+        message: t('attendanceReport.statusSaved', { name: student.fullName, status: statusLabel(newStatus), date: dailyDate })
       });
     } catch (err) {
       console.error('Failed to save status', err);
       showAlert({
         type: 'danger',
-        title: 'Update Error',
-        message: err.response?.data?.message || 'Could not record attendance change in database.'
+        title: t('payers.updateErrorTitle'),
+        message: err.response?.data?.message || t('attendanceReport.statusSaveFailed')
       });
     } finally {
       setSavingStudentId(null);
@@ -220,12 +226,12 @@ const StudentAttendanceReport = () => {
       await refreshAttendance();
       showAlert({
         type: 'success',
-        title: 'Record Updated',
-        message: 'Attendance record updated successfully in database.'
+        title: t('attendanceReport.recordUpdatedTitle'),
+        message: t('attendanceReport.recordUpdated')
       });
     } catch (err) {
       console.error('Failed to update historical record', err);
-      showAlert({ type: 'danger', title: 'Update Error', message: 'Failed to save historical update.' });
+      showAlert({ type: 'danger', title: t('payers.updateErrorTitle'), message: t('attendanceReport.historyUpdateFailed') });
     }
   };
 
@@ -389,14 +395,14 @@ const StudentAttendanceReport = () => {
     const map = new Map();
     if (branchesList.length > 0) {
       branchesList.forEach(b => {
-        if (b && b._id) map.set(String(b._id), { _id: String(b._id), name: b.name || 'Branch' });
+        if (b && b._id) map.set(String(b._id), { _id: String(b._id), name: b.name || t('common.branch') });
       });
     }
     classes.forEach(item => {
       const branch = item.branchId;
       if (branch && (branch._id || typeof branch === 'string')) {
         const id = String(branch._id || branch);
-        const name = branch.name || 'Branch';
+        const name = branch.name || t('common.branch');
         if (!map.has(id)) map.set(id, { _id: id, name });
       }
     });
@@ -512,7 +518,7 @@ const StudentAttendanceReport = () => {
         counts,
         descriptions,
         studentRecs,
-        className: classLabel(studentClass || student.classId) || studentClass?.name || 'Class',
+        className: classLabel(studentClass || student.classId) || studentClass?.name || t('common.class'),
         percentage: rate
       };
     });
@@ -582,16 +588,16 @@ const StudentAttendanceReport = () => {
 
     let warningText = '';
     if (isLateWarning && isAbsentWarning) {
-      warningText = `marked Late ${stats.late} times and Absent ${stats.absent} times.`;
+      warningText = t('attendanceReport.warn.both', { late: stats.late, absent: stats.absent });
     } else if (isLateWarning) {
-      warningText = `marked Late ${stats.late} times.`;
+      warningText = t('attendanceReport.warn.late', { late: stats.late });
     } else if (isAbsentWarning) {
-      warningText = `marked Absent ${stats.absent} times.`;
+      warningText = t('attendanceReport.warn.absent', { absent: stats.absent });
     }
 
-    const parentName = selectedStudent.guardianId?.fullName || selectedStudent.fatherName || 'Parent';
+    const parentName = selectedStudent.guardianId?.fullName || selectedStudent.fatherName || t('values.Parent');
     const parentPhone = selectedStudent.guardianId?.phone || selectedStudent.fatherPhone || '';
-    const message = `Hello ${parentName}, this is an official notification that your child ${selectedStudent.fullName} has reached high attendance concerns: ${warningText} Please coordinate with the management.`;
+    const message = t('attendanceReport.warn.message', { parent: parentName, student: selectedStudent.fullName, details: warningText });
     const waUrl = parentPhone ? `https://wa.me/${parentPhone.replace(/\s+/g, '')}?text=${encodeURIComponent(message)}` : '';
 
     return {
@@ -605,7 +611,7 @@ const StudentAttendanceReport = () => {
         parentName
       }
     };
-  }, [selectedStudent, allAttendance]);
+  }, [selectedStudent, allAttendance, t]);
 
   // ==========================================
   // REPORT EXPORTS (PDF & CSV)
@@ -627,7 +633,7 @@ const StudentAttendanceReport = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showAlert({ type: 'success', title: 'Export Complete', message: `CSV exported successfully as ${filename}` });
+    showAlert({ type: 'success', title: t('attendanceReport.exportCompleteTitle'), message: t('attendanceReport.exportComplete', { file: filename }) });
   };
 
   // jsPDF draws each cell at a fixed offset and never clips, so a value wider than
@@ -663,20 +669,20 @@ const StudentAttendanceReport = () => {
   // 1. Export Daily CSV (monthly ledger for one student)
   const exportDailyCSV = () => {
     if (!dailyMatchedStudent || dailyReportData.length === 0) {
-      showAlert({ type: 'warning', title: 'Nothing to export', message: 'Search a Student ID/Code and month with records first.' });
+      showAlert({ type: 'warning', title: t('attendanceReport.nothingExportTitle'), message: t('attendanceReport.nothingExport') });
       return;
     }
-    const headers = ['Date', 'Student Name', 'Code', 'Session', 'Status', 'Arrival', 'Description'];
+    const headers = [t('common.date'), t('students.studentName'), t('common.code'), t('academic.exit.session'), t('common.status'), t('academic.exit.arrival'), t('common.description')];
     const rows = dailyReportData.map(item => [
       formatDMY(item.date),
       item.student.fullName,
       item.code,
-      item.session,
-      item.status,
+      statusLabel(item.session),
+      statusLabel(item.status),
       item.arrivalTime || '-',
       item.description || '-'
     ]);
-    handleExportCSV(headers, rows, `Attendance_${item0Code()}_${dailyMonth}.csv`);
+    handleExportCSV(headers, rows, `${t('attendanceReport.file.attendance')}_${item0Code()}_${dailyMonth}.csv`);
   };
 
   // Small helper so the export filename carries the student code safely.
@@ -685,9 +691,9 @@ const StudentAttendanceReport = () => {
   // 2. Export Class CSV
   const exportClassCSV = () => {
     const targetName = selectedClassId 
-      ? (classes.find(c => String(c._id) === String(selectedClassId))?.name || 'Class')
-      : (branches.find(b => String(b._id) === String(selectedBranchId))?.name || 'All_Classes');
-    const headers = ['Student Name', 'Student Code', 'Class', 'Total Present', 'Total Late', 'Total Absent', 'Total Partial', 'Attendance Rate'];
+      ? (classes.find(c => String(c._id) === String(selectedClassId))?.name || t('common.class'))
+      : (branches.find(b => String(b._id) === String(selectedBranchId))?.name || t('attendanceReport.file.allClasses'));
+    const headers = [t('students.studentName'), t('academic.promotion.colCode'), t('common.class'), t('attendanceReport.csv.totalPresent'), t('attendanceReport.csv.totalLate'), t('attendanceReport.csv.totalAbsent'), t('attendanceReport.csv.totalPartial'), t('attendanceReport.csv.rate')];
     const rows = classReportData.studentsList.map(item => [
       item.student.fullName,
       item.student.studentCode || item.student.rollNumber || '-',
@@ -698,23 +704,23 @@ const StudentAttendanceReport = () => {
       item.counts.partial,
       `${item.percentage}%`
     ]);
-    handleExportCSV(headers, rows, `Attendance_${targetName.replace(/\s+/g, '_')}.csv`);
+    handleExportCSV(headers, rows, `${t('attendanceReport.file.attendance')}_${targetName.replace(/\s+/g, '_')}.csv`);
   };
 
   // 3. Export Student CSV
   const exportStudentCSV = () => {
     if (!selectedStudent || !studentReportData) return;
-    const headers = ['Date', 'Class', 'Session', 'Status', 'Arrival Time', 'Description', 'Recorded By'];
+    const headers = [t('common.date'), t('common.class'), t('academic.exit.session'), t('common.status'), t('attendanceReport.arrivalTime'), t('common.description'), t('attendanceReport.recordedBy')];
     const rows = studentReportData.history.map(rec => [
       rec.date,
       classLabel(rec.classId),
-      rec.session || 'Morning',
-      rec.status,
+      statusLabel(rec.session || 'Morning'),
+      statusLabel(rec.status),
       rec.arrivalTime || '-',
       rec.description || '',
-      rec.markedBy?.fullName || 'System Admin'
+      rec.markedBy?.fullName || t('academic.promotion.systemAdmin')
     ]);
-    handleExportCSV(headers, rows, `Student_Attendance_${selectedStudent.fullName.replace(/\s+/g, '_')}.csv`);
+    handleExportCSV(headers, rows, `${t('attendanceReport.file.studentAttendance')}_${selectedStudent.fullName.replace(/\s+/g, '_')}.csv`);
   };
 
   // 1. Export Daily PDF (monthly ledger for one student)
@@ -730,10 +736,10 @@ const StudentAttendanceReport = () => {
     if (!dailyMatchedStudent || printRows.length === 0) {
       showAlert({
         type: 'warning',
-        title: 'Nothing to print',
+        title: t('attendanceReport.nothingPrintTitle'),
         message: dailyStatusFilter === 'All'
-          ? 'No Late/Absent records to print for this student and month.'
-          : 'No matching records to print for this student and month.'
+          ? t('attendanceReport.nothingPrintAll')
+          : t('attendanceReport.nothingPrintFiltered')
       });
       return;
     }
@@ -748,15 +754,15 @@ const StudentAttendanceReport = () => {
     const doc = new jsPDF();
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
-    doc.text('MONTHLY ATTENDANCE LEDGER', 14, 20);
+    doc.text(t('attendanceReport.pdf.monthlyLedger'), 14, 20);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     // Stacked header: Student / Code / Class / Month / Generated At.
-    doc.text(`Student: ${dailyMatchedStudent.fullName}`, 14, 30);
-    doc.text(`Code: ${dailyMatchedStudent.studentCode || dailyMatchedStudent.rollNumber || '-'}`, 14, 36);
-    doc.text(`Class: ${studentClassName}`, 14, 42);
-    doc.text(`Month: ${monthLabel(dailyMonth)}`, 14, 48);
-    doc.text(`Generated At: ${new Date().toLocaleString()}`, 14, 54);
+    doc.text(`${t('common.student')}: ${dailyMatchedStudent.fullName}`, 14, 30);
+    doc.text(`${t('common.code')}: ${dailyMatchedStudent.studentCode || dailyMatchedStudent.rollNumber || '-'}`, 14, 36);
+    doc.text(`${t('common.class')}: ${studentClassName}`, 14, 42);
+    doc.text(`${t('common.month')}: ${monthLabel(dailyMonth)}`, 14, 48);
+    doc.text(`${t('attendanceReport.pdf.generatedAt')}: ${new Date().toLocaleString(locale)}`, 14, 54);
 
     doc.line(14, 59, 196, 59);
 
@@ -774,13 +780,13 @@ const StudentAttendanceReport = () => {
       description: { x: 151, w: 45 }
     };
 
-    doc.text('Date', col.date.x, y);
-    doc.text('Student Name', col.name.x, y);
-    doc.text('Code', col.code.x, y);
-    doc.text('Session', col.session.x, y);
-    doc.text('Status', col.status.x, y);
-    doc.text('Arrival', col.arrival.x, y);
-    doc.text('Description', col.description.x, y);
+    doc.text(t('common.date'), col.date.x, y);
+    doc.text(t('students.studentName'), col.name.x, y);
+    doc.text(t('common.code'), col.code.x, y);
+    doc.text(t('academic.exit.session'), col.session.x, y);
+    doc.text(t('common.status'), col.status.x, y);
+    doc.text(t('academic.exit.arrival'), col.arrival.x, y);
+    doc.text(t('common.description'), col.description.x, y);
 
     doc.line(14, y + 3, 196, y + 3);
     doc.setFont('helvetica', 'normal');
@@ -795,40 +801,40 @@ const StudentAttendanceReport = () => {
       doc.text(fitPdfText(doc, formatDMY(item.date), col.date.w), col.date.x, y);
       doc.text(fitPdfText(doc, item.student.fullName, col.name.w), col.name.x, y);
       doc.text(fitPdfText(doc, item.code, col.code.w), col.code.x, y);
-      doc.text(fitPdfText(doc, item.session, col.session.w), col.session.x, y);
-      doc.text(fitPdfText(doc, item.status, col.status.w), col.status.x, y);
+      doc.text(fitPdfText(doc, statusLabel(item.session), col.session.w), col.session.x, y);
+      doc.text(fitPdfText(doc, statusLabel(item.status), col.status.w), col.status.x, y);
       doc.text(fitPdfText(doc, item.arrivalTime || '-', col.arrival.w), col.arrival.x, y);
       doc.text(descriptionLines, col.description.x, y);
       y += Math.max(8, descriptionLines.length * 5);
     });
 
-    doc.save(`Attendance_${item0Code()}_${dailyMonth}.pdf`);
+    doc.save(`${t('attendanceReport.file.attendance')}_${item0Code()}_${dailyMonth}.pdf`);
   };
 
   // 2. Export Class PDF
   const exportClassPDF = () => {
     const doc = new jsPDF();
     const targetName = selectedClassId 
-      ? (classes.find(c => String(c._id) === String(selectedClassId))?.name || 'Class')
-      : (branches.find(b => String(b._id) === String(selectedBranchId))?.name || 'Branch');
+      ? (classes.find(c => String(c._id) === String(selectedClassId))?.name || t('common.class'))
+      : (branches.find(b => String(b._id) === String(selectedBranchId))?.name || t('common.branch'));
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
-    doc.text(`ATTENDANCE REPORT: ${targetName.toUpperCase()}`, 14, 20);
+    doc.text(`${t('attendanceReport.pdf.classReport')}: ${targetName.toUpperCase()}`, 14, 20);
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Total Present: ${classReportData.stats.present} | Total Late: ${classReportData.stats.late} | Total Absent: ${classReportData.stats.absent} | Total Partial: ${classReportData.stats.partial}`, 14, 26);
-    doc.text(`Overall Attendance Rate: ${classReportData.stats.percentage}%`, 14, 31);
+    doc.text(`${t('attendanceReport.csv.totalPresent')}: ${classReportData.stats.present} | ${t('attendanceReport.csv.totalLate')}: ${classReportData.stats.late} | ${t('attendanceReport.csv.totalAbsent')}: ${classReportData.stats.absent} | ${t('attendanceReport.csv.totalPartial')}: ${classReportData.stats.partial}`, 14, 26);
+    doc.text(`${t('attendanceReport.pdf.overallRate')}: ${classReportData.stats.percentage}%`, 14, 31);
     
     doc.line(14, 35, 196, 35);
     
     let y = 45;
     doc.setFont('helvetica', 'bold');
-    doc.text('Student Name', 14, y);
-    doc.text('Code', 70, y);
-    doc.text('Present', 100, y);
-    doc.text('Late', 125, y);
-    doc.text('Absent', 150, y);
-    doc.text('Rate', 175, y);
+    doc.text(t('students.studentName'), 14, y);
+    doc.text(t('common.code'), 70, y);
+    doc.text(tv('Present'), 100, y);
+    doc.text(tv('Late'), 125, y);
+    doc.text(tv('Absent'), 150, y);
+    doc.text(t('attendanceReport.pdf.rate'), 175, y);
     
     doc.line(14, y + 3, 196, y + 3);
     doc.setFont('helvetica', 'normal');
@@ -848,7 +854,7 @@ const StudentAttendanceReport = () => {
       y += 8;
     });
 
-    doc.save(`Attendance_${targetName.replace(/\s+/g, '_')}.pdf`);
+    doc.save(`${t('attendanceReport.file.attendance')}_${targetName.replace(/\s+/g, '_')}.pdf`);
   };
 
   // 3. Export Student PDF
@@ -857,17 +863,17 @@ const StudentAttendanceReport = () => {
     const doc = new jsPDF();
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
-    doc.text(`STUDENT ATTENDANCE DOSSIER`, 14, 20);
+    doc.text(t('attendanceReport.pdf.dossier'), 14, 20);
     
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Student: ${selectedStudent.fullName}`, 14, 28);
-    doc.text(`Code: ${selectedStudent.studentCode || selectedStudent.rollNumber || '-'}`, 14, 34);
-    doc.text(`Class: ${classes.find(c => String(c._id) === String(selectedStudent.classId?._id || selectedStudent.classId))?.name || '-'}`, 14, 40);
+    doc.text(`${t('common.student')}: ${selectedStudent.fullName}`, 14, 28);
+    doc.text(`${t('common.code')}: ${selectedStudent.studentCode || selectedStudent.rollNumber || '-'}`, 14, 34);
+    doc.text(`${t('common.class')}: ${classes.find(c => String(c._id) === String(selectedStudent.classId?._id || selectedStudent.classId))?.name || '-'}`, 14, 40);
     
-    doc.text(`Total Days: ${studentReportData.stats.total}`, 120, 28);
-    doc.text(`Present: ${studentReportData.stats.present} | Late: ${studentReportData.stats.late} | Absent: ${studentReportData.stats.absent}`, 120, 34);
-    doc.text(`Attendance Rate: ${studentReportData.stats.percentage}%`, 120, 40);
+    doc.text(`${t('attendanceReport.pdf.totalDays')}: ${studentReportData.stats.total}`, 120, 28);
+    doc.text(`${tv('Present')}: ${studentReportData.stats.present} | ${tv('Late')}: ${studentReportData.stats.late} | ${tv('Absent')}: ${studentReportData.stats.absent}`, 120, 34);
+    doc.text(`${t('attendanceReport.csv.rate')}: ${studentReportData.stats.percentage}%`, 120, 40);
 
     doc.line(14, 45, 196, 45);
     
@@ -884,12 +890,12 @@ const StudentAttendanceReport = () => {
       description: { x: 136, w: 60 }
     };
 
-    doc.text('Date', col.date.x, y);
-    doc.text('Class Name', col.className.x, y);
-    doc.text('Session', col.session.x, y);
-    doc.text('Status', col.status.x, y);
-    doc.text('Arrival', col.arrival.x, y);
-    doc.text('Description', col.description.x, y);
+    doc.text(t('common.date'), col.date.x, y);
+    doc.text(t('academic.classes.colName'), col.className.x, y);
+    doc.text(t('academic.exit.session'), col.session.x, y);
+    doc.text(t('common.status'), col.status.x, y);
+    doc.text(t('academic.exit.arrival'), col.arrival.x, y);
+    doc.text(t('common.description'), col.description.x, y);
 
     doc.line(14, y + 3, 196, y + 3);
     doc.setFont('helvetica', 'normal');
@@ -903,17 +909,17 @@ const StudentAttendanceReport = () => {
       const descriptionLines = pdfDescriptionLines(doc, rec.description, col.description.w);
       doc.text(fitPdfText(doc, rec.date, col.date.w), col.date.x, y);
       doc.text(fitPdfText(doc, classLabel(rec.classId, ''), col.className.w), col.className.x, y);
-      doc.text(fitPdfText(doc, rec.session || 'Morning', col.session.w), col.session.x, y);
-      doc.text(fitPdfText(doc, rec.status, col.status.w), col.status.x, y);
+      doc.text(fitPdfText(doc, statusLabel(rec.session || 'Morning'), col.session.w), col.session.x, y);
+      doc.text(fitPdfText(doc, statusLabel(rec.status), col.status.w), col.status.x, y);
       doc.text(fitPdfText(doc, rec.arrivalTime, col.arrival.w), col.arrival.x, y);
       doc.text(descriptionLines, col.description.x, y);
       y += Math.max(8, descriptionLines.length * 5);
     });
 
-    doc.save(`Student_Attendance_${selectedStudent.fullName.replace(/\s+/g, '_')}.pdf`);
+    doc.save(`${t('attendanceReport.file.studentAttendance')}_${selectedStudent.fullName.replace(/\s+/g, '_')}.pdf`);
   };
 
-  if (loading) return <div className="p-10 text-center text-slate-500">Loading Attendance System Datasets...</div>;
+  if (loading) return <div className="p-10 text-center text-slate-500">{t('attendanceReport.loading')}</div>;
 
   return (
     <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24">
@@ -924,18 +930,18 @@ const StudentAttendanceReport = () => {
             <History size={32} strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Attendance Ledger</h1>
-            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">Reports & Diagnostics Hub</p>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">{t('nav.attendanceLedger')}</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">{t('attendanceReport.subtitle')}</p>
           </div>
         </div>
 
         {/* Tab Selector */}
         <div className="flex flex-wrap bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-[20px] border border-slate-200/40 dark:border-slate-700/60 gap-1">
           {[
-            { id: 'class', label: 'Attendance Ledger' },
-            { id: 'daily', label: 'Daily View' },
-            { id: 'student', label: 'Student View' },
-            { id: 'dashboard', label: 'Dashboard' },
+            { id: 'class', label: t('nav.attendanceLedger') },
+            { id: 'daily', label: t('attendanceReport.tabs.daily') },
+            { id: 'student', label: t('attendanceReport.tabs.student') },
+            { id: 'dashboard', label: t('nav.dashboard') },
           ].map(tab => (
             <button
               key={tab.id}
@@ -967,14 +973,14 @@ const StudentAttendanceReport = () => {
               {/* Filter Branch */}
               <div className="flex items-center gap-3">
                 <label className="text-xs font-black uppercase text-slate-500 flex items-center gap-1.5 whitespace-nowrap">
-                  <Building2 size={14} className="text-indigo-500" /> Filter Branch
+                  <Building2 size={14} className="text-indigo-500" /> {t('attendanceReport.filterBranch')}
                 </label>
                 <select
                   value={dashBranchId}
                   onChange={(e) => setDashBranchId(e.target.value)}
                   className="min-w-[180px] px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white font-bold text-xs"
                 >
-                  <option value="">All Branches</option>
+                  <option value="">{t('common.allBranches')}</option>
                   {branches.map(b => (
                     <option key={b._id} value={b._id}>{b.name}</option>
                   ))}
@@ -983,7 +989,7 @@ const StudentAttendanceReport = () => {
 
               {/* Reporting Cycle Range */}
               <div className="flex items-center gap-2 text-xs font-black uppercase text-slate-500 border-l border-slate-200 dark:border-slate-700 pl-6">
-                <Filter size={14} className="text-brand-500" /> Reporting Cycle Range
+                <Filter size={14} className="text-brand-500" /> {t('attendanceReport.cycleRange')}
               </div>
             </div>
             
@@ -1000,7 +1006,7 @@ const StudentAttendanceReport = () => {
                         : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                     }`}
                   >
-                    {f}
+                    {t(`attendanceReport.range.${f}`)}
                   </button>
                 ))}
               </div>
@@ -1014,7 +1020,7 @@ const StudentAttendanceReport = () => {
                     onChange={(e) => setDashStartDate(e.target.value)}
                     className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-white"
                   />
-                  <span className="text-slate-400 font-bold text-xs">to</span>
+                  <span className="text-slate-400 font-bold text-xs">{t('common.to')}</span>
                   <input
                     type="date"
                     value={dashEndDate}
@@ -1028,17 +1034,17 @@ const StudentAttendanceReport = () => {
 
           {/* KPICards Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
-            <KPICard label="Total Students" value={dashboardStats.stats.totalStudents} icon={<Users size={20} />} color="bg-brand-600" trend={0} description="Active enrollment roster" />
-            <KPICard label="Present Today" value={dashboardStats.stats.present} icon={<CheckCircle size={20} />} color="bg-emerald-500" trend={2} description="Explicitly present logs" />
-            <KPICard label="Late Today" value={dashboardStats.stats.late} icon={<Clock size={20} />} color="bg-amber-500" trend={-5} description="Tardiness records" />
-            <KPICard label="Absent Today" value={dashboardStats.stats.absent} icon={<AlertTriangle size={20} />} color="bg-rose-500" trend={1} description="Explicit absence logs" />
-            <KPICard label="Partial Today" value={dashboardStats.stats.partial} icon={<AlertCircle size={20} />} color="bg-indigo-600" trend={0} description="Partial session logs" />
-            <KPICard label="Attendance Rate" value={`${dashboardStats.stats.percentage}%`} icon={<TrendingUp size={20} />} color="bg-teal-500" trend={0} description="Present/Late vs Absent" />
+            <KPICard label={t('attendanceReport.kpi.totalStudents')} value={dashboardStats.stats.totalStudents} icon={<Users size={20} />} color="bg-brand-600" trend={0} description={t('attendanceReport.kpi.totalStudentsDesc')} />
+            <KPICard label={t('attendanceReport.kpi.present')} value={dashboardStats.stats.present} icon={<CheckCircle size={20} />} color="bg-emerald-500" trend={2} description={t('attendanceReport.kpi.presentDesc')} />
+            <KPICard label={t('attendanceReport.kpi.late')} value={dashboardStats.stats.late} icon={<Clock size={20} />} color="bg-amber-500" trend={-5} description={t('attendanceReport.kpi.lateDesc')} />
+            <KPICard label={t('attendanceReport.kpi.absent')} value={dashboardStats.stats.absent} icon={<AlertTriangle size={20} />} color="bg-rose-500" trend={1} description={t('attendanceReport.kpi.absentDesc')} />
+            <KPICard label={t('attendanceReport.kpi.partial')} value={dashboardStats.stats.partial} icon={<AlertCircle size={20} />} color="bg-indigo-600" trend={0} description={t('attendanceReport.kpi.partialDesc')} />
+            <KPICard label={t('attendanceReport.csv.rate')} value={`${dashboardStats.stats.percentage}%`} icon={<TrendingUp size={20} />} color="bg-teal-500" trend={0} description={t('attendanceReport.kpi.rateDesc')} />
           </div>
 
           {/* Trend Chart */}
           <div className="bg-white dark:bg-slate-900 rounded-[48px] border border-slate-100 dark:border-slate-800 shadow-sm p-10">
-            <h3 className="text-lg font-black dark:text-white uppercase tracking-tight mb-8">Daily Attendance Status Trend</h3>
+            <h3 className="text-lg font-black dark:text-white uppercase tracking-tight mb-8">{t('attendanceReport.trendTitle')}</h3>
             <div className="h-[400px] w-full">
               {dashboardChartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
@@ -1048,15 +1054,15 @@ const StudentAttendanceReport = () => {
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b', fontWeight: 'bold' }} />
                     <Tooltip cursor={{ fill: 'rgba(99, 102, 241, 0.03)' }} contentStyle={{ backgroundColor: '#0f172a', borderRadius: '24px', border: 'none', color: '#fff' }} />
                     <Legend iconType="circle" />
-                    <Bar dataKey="Present" fill="#10b981" radius={[8, 8, 0, 0]} />
-                    <Bar dataKey="Late" fill="#f59e0b" radius={[8, 8, 0, 0]} />
-                    <Bar dataKey="Absent" fill="#f43f5e" radius={[8, 8, 0, 0]} />
-                    <Bar dataKey="Partial" fill="#6366f1" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="Present" name={tv('Present')} fill="#10b981" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="Late" name={tv('Late')} fill="#f59e0b" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="Absent" name={tv('Absent')} fill="#f43f5e" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="Partial" name={tv('Partial')} fill="#6366f1" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="flex h-full items-center justify-center text-slate-400 font-semibold">
-                  No attendance logged in this range. Change the reporting cycle range above.
+                  {t('attendanceReport.noTrend')}
                 </div>
               )}
             </div>
@@ -1077,12 +1083,12 @@ const StudentAttendanceReport = () => {
 
               {/* Student ID / Code */}
               <div className="min-w-[220px]">
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Student ID / Code</label>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">{t('attendanceReport.studentIdCode')}</label>
                 <div className="relative">
                   <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="e.g. 1001"
+                    placeholder={t('attendanceReport.codePlaceholder')}
                     value={dailyStudentCode}
                     onChange={(e) => setDailyStudentCode(e.target.value)}
                     className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white outline-none"
@@ -1092,7 +1098,7 @@ const StudentAttendanceReport = () => {
 
               {/* Month selection */}
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Month</label>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">{t('common.month')}</label>
                 <input
                   type="month"
                   value={dailyMonth}
@@ -1103,16 +1109,16 @@ const StudentAttendanceReport = () => {
 
               {/* Optional status filter (defaults to All) */}
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">Status</label>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1.5">{t('common.status')}</label>
                 <select
                   value={dailyStatusFilter}
                   onChange={(e) => setDailyStatusFilter(e.target.value)}
                   className="px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white"
                 >
-                  <option value="All">All Statuses</option>
-                  <option value="Present">Present Only</option>
-                  <option value="Late">Late Only</option>
-                  <option value="Absent">Absent Only</option>
+                  <option value="All">{t('common.allStatuses')}</option>
+                  <option value="Present">{t('attendanceReport.only.Present')}</option>
+                  <option value="Late">{t('attendanceReport.only.Late')}</option>
+                  <option value="Absent">{t('attendanceReport.only.Absent')}</option>
                 </select>
               </div>
 
@@ -1124,13 +1130,13 @@ const StudentAttendanceReport = () => {
                 onClick={exportDailyCSV}
                 className="flex items-center gap-2 px-5 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-sm transition-all"
               >
-                <FileSpreadsheet size={16} /> Export Excel
+                <FileSpreadsheet size={16} /> {t('students.exportExcel')}
               </button>
               <button
                 onClick={exportDailyPDF}
                 className="flex items-center gap-2 px-5 py-3.5 bg-slate-900 hover:bg-slate-850 dark:bg-brand-600 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-sm transition-all"
               >
-                <FileText size={16} /> Export PDF
+                <FileText size={16} /> {t('exams.results.exportPdf')}
               </button>
             </div>
 
@@ -1140,19 +1146,19 @@ const StudentAttendanceReport = () => {
           {dailyMatchedStudent && (
             <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm px-8 py-5 flex flex-wrap items-center gap-x-10 gap-y-2">
               <div>
-                <span className="text-[10px] font-black uppercase text-slate-400">Student</span>
+                <span className="text-[10px] font-black uppercase text-slate-400">{t('common.student')}</span>
                 <p className="text-base font-bold text-slate-900 dark:text-white">{dailyMatchedStudent.fullName}</p>
               </div>
               <div>
-                <span className="text-[10px] font-black uppercase text-slate-400">Code</span>
+                <span className="text-[10px] font-black uppercase text-slate-400">{t('common.code')}</span>
                 <p className="text-sm font-bold text-slate-600 dark:text-slate-300 font-mono">{dailyMatchedStudent.studentCode || dailyMatchedStudent.rollNumber || '-'}</p>
               </div>
               <div>
-                <span className="text-[10px] font-black uppercase text-slate-400">Month</span>
+                <span className="text-[10px] font-black uppercase text-slate-400">{t('common.month')}</span>
                 <p className="text-sm font-bold text-slate-600 dark:text-slate-300">{monthLabel(dailyMonth)}</p>
               </div>
               <div>
-                <span className="text-[10px] font-black uppercase text-slate-400">Records</span>
+                <span className="text-[10px] font-black uppercase text-slate-400">{t('attendanceReport.records')}</span>
                 <p className="text-sm font-bold text-slate-600 dark:text-slate-300">{dailyReportData.length}</p>
               </div>
             </div>
@@ -1164,13 +1170,13 @@ const StudentAttendanceReport = () => {
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                    <th className="px-8 py-5">Date</th>
-                    <th className="px-8 py-5">Student Name</th>
-                    <th className="px-8 py-5">Code</th>
-                    <th className="px-8 py-5">Session</th>
-                    <th className="px-8 py-5">Status</th>
-                    <th className="px-8 py-5">Arrival</th>
-                    <th className="px-8 py-5">Description</th>
+                    <th className="px-8 py-5">{t('common.date')}</th>
+                    <th className="px-8 py-5">{t('students.studentName')}</th>
+                    <th className="px-8 py-5">{t('common.code')}</th>
+                    <th className="px-8 py-5">{t('academic.exit.session')}</th>
+                    <th className="px-8 py-5">{t('common.status')}</th>
+                    <th className="px-8 py-5">{t('academic.exit.arrival')}</th>
+                    <th className="px-8 py-5">{t('common.description')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1186,7 +1192,7 @@ const StudentAttendanceReport = () => {
                         {item.code}
                       </td>
                       <td className="px-8 py-6 text-xs font-bold text-slate-500">
-                        {item.session}
+                        {statusLabel(item.session)}
                       </td>
                       <td className="px-8 py-6">
                         <span className={`px-3 py-1.5 rounded-xl font-bold text-[11px] uppercase border ${
@@ -1198,7 +1204,7 @@ const StudentAttendanceReport = () => {
                             ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-400 dark:border-rose-800'
                             : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
                         }`}>
-                          {item.status}
+                          {statusLabel(item.status)}
                         </span>
                       </td>
                       <td className="px-8 py-6 text-xs font-bold text-slate-750 dark:text-slate-300 font-mono">
@@ -1215,10 +1221,10 @@ const StudentAttendanceReport = () => {
                     <tr>
                       <td colSpan="7" className="px-8 py-12 text-center text-slate-400 text-sm font-semibold">
                         {!dailyStudentCode.trim()
-                          ? 'Enter a Student ID / Code and choose a month to view attendance.'
+                          ? t('attendanceReport.dailyHint')
                           : !dailyMatchedStudent
-                          ? `No student found with code "${dailyStudentCode.trim()}".`
-                          : `No attendance records for ${dailyMatchedStudent.fullName} in ${monthLabel(dailyMonth)}.`}
+                          ? t('attendanceReport.noStudentCode', { code: dailyStudentCode.trim() })
+                          : t('attendanceReport.noRecordsMonth', { name: dailyMatchedStudent.fullName, month: monthLabel(dailyMonth) })}
                       </td>
                     </tr>
                   )}
@@ -1240,14 +1246,14 @@ const StudentAttendanceReport = () => {
             <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-5">
               <div>
                 <label className="block text-xs font-black uppercase text-slate-500 mb-2 flex items-center gap-2">
-                  <Building2 size={14} className="text-indigo-500" /> Filter Branch
+                  <Building2 size={14} className="text-indigo-500" /> {t('attendanceReport.filterBranch')}
                 </label>
                 <select
                   value={selectedBranchId}
                   onChange={(e) => handleBranchChange(e.target.value)}
                   className="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white font-bold text-sm"
                 >
-                  <option value="">All Branches</option>
+                  <option value="">{t('common.allBranches')}</option>
                   {branches.map(b => (
                     <option key={b._id} value={b._id}>{b.name}</option>
                   ))}
@@ -1256,7 +1262,7 @@ const StudentAttendanceReport = () => {
 
               <div>
                 <label className="block text-xs font-black uppercase text-slate-500 mb-2 flex items-center gap-2">
-                  <BookOpen size={14} className="text-brand-500" /> Filter Class
+                  <BookOpen size={14} className="text-brand-500" /> {t('attendanceReport.filterClass')}
                 </label>
                 <select
                   value={selectedClassId}
@@ -1266,7 +1272,7 @@ const StudentAttendanceReport = () => {
                   }}
                   className="w-full px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white font-bold text-sm"
                 >
-                  <option value="">{selectedBranchId ? 'All Classes' : 'Select class to audit...'}</option>
+                  <option value="">{selectedBranchId ? t('common.allClasses') : t('attendanceReport.selectClassAudit')}</option>
                   {visibleClasses.map(c => (
                     <option key={c._id} value={c._id}>{classLabel(c)}</option>
                   ))}
@@ -1275,7 +1281,7 @@ const StudentAttendanceReport = () => {
 
               <div>
                 <label className="block text-xs font-black uppercase text-slate-500 mb-2 flex items-center gap-2">
-                  <Calendar size={14} className="text-emerald-500" /> Date
+                  <Calendar size={14} className="text-emerald-500" /> {t('common.date')}
                 </label>
                 <input
                   type="date"
@@ -1296,14 +1302,14 @@ const StudentAttendanceReport = () => {
                 disabled={!selectedClassId && !selectedBranchId}
                 className="flex items-center gap-2 px-5 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-sm transition-all disabled:opacity-50"
               >
-                <FileSpreadsheet size={16} /> Export Excel
+                <FileSpreadsheet size={16} /> {t('students.exportExcel')}
               </button>
               <button
                 onClick={exportClassPDF}
                 disabled={!selectedClassId && !selectedBranchId}
                 className="flex items-center gap-2 px-5 py-3.5 bg-slate-900 hover:bg-slate-850 dark:bg-brand-600 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-sm transition-all disabled:opacity-50"
               >
-                <FileText size={16} /> Export PDF
+                <FileText size={16} /> {t('exams.results.exportPdf')}
               </button>
             </div>
           </div>
@@ -1314,7 +1320,7 @@ const StudentAttendanceReport = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
                 <div 
                   onClick={() => setSelectedKpiFilter(prev => prev === 'present' ? null : 'present')}
-                  title="Click to view students with Present attendance"
+                  title={t('attendanceReport.kpiClick', { status: tv('Present') })}
                   className={`bg-white dark:bg-slate-900 p-6 rounded-[32px] border transition-all cursor-pointer select-none ${
                     selectedKpiFilter === 'present'
                       ? 'border-emerald-500 ring-2 ring-emerald-500/30 shadow-md bg-emerald-50/20 dark:bg-emerald-950/20'
@@ -1323,9 +1329,9 @@ const StudentAttendanceReport = () => {
                 >
                   <div>
                     <p className="text-xs font-black uppercase text-slate-400 tracking-wider">
-                      {selectedClassId ? 'Class Present Days' : 'Branch Present Days'}
+                      {selectedClassId ? t('attendanceReport.scope.classPresent') : t('attendanceReport.scope.branchPresent')}
                     </p>
-                    <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{classReportData.stats.present} Days</h3>
+                    <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{t('attendanceReport.days', { count: classReportData.stats.present })}</h3>
                   </div>
                   <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 rounded-xl flex items-center justify-center">
                     <CheckCircle size={18} />
@@ -1334,7 +1340,7 @@ const StudentAttendanceReport = () => {
 
                 <div 
                   onClick={() => setSelectedKpiFilter(prev => prev === 'late' ? null : 'late')}
-                  title="Click to view students with Late attendance"
+                  title={t('attendanceReport.kpiClick', { status: tv('Late') })}
                   className={`bg-white dark:bg-slate-900 p-6 rounded-[32px] border transition-all cursor-pointer select-none ${
                     selectedKpiFilter === 'late'
                       ? 'border-amber-500 ring-2 ring-amber-500/30 shadow-md bg-amber-50/20 dark:bg-amber-950/20'
@@ -1343,9 +1349,9 @@ const StudentAttendanceReport = () => {
                 >
                   <div>
                     <p className="text-xs font-black uppercase text-slate-400 tracking-wider">
-                      {selectedClassId ? 'Class Late Days' : 'Branch Late Days'}
+                      {selectedClassId ? t('attendanceReport.scope.classLate') : t('attendanceReport.scope.branchLate')}
                     </p>
-                    <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{classReportData.stats.late} Days</h3>
+                    <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{t('attendanceReport.days', { count: classReportData.stats.late })}</h3>
                   </div>
                   <div className="w-10 h-10 bg-amber-50 dark:bg-amber-950/40 text-amber-600 rounded-xl flex items-center justify-center">
                     <Clock size={18} />
@@ -1354,7 +1360,7 @@ const StudentAttendanceReport = () => {
 
                 <div 
                   onClick={() => setSelectedKpiFilter(prev => prev === 'absent' ? null : 'absent')}
-                  title="Click to view students with Absent attendance"
+                  title={t('attendanceReport.kpiClick', { status: tv('Absent') })}
                   className={`bg-white dark:bg-slate-900 p-6 rounded-[32px] border transition-all cursor-pointer select-none ${
                     selectedKpiFilter === 'absent'
                       ? 'border-rose-500 ring-2 ring-rose-500/30 shadow-md bg-rose-50/20 dark:bg-rose-950/20'
@@ -1363,9 +1369,9 @@ const StudentAttendanceReport = () => {
                 >
                   <div>
                     <p className="text-xs font-black uppercase text-slate-400 tracking-wider">
-                      {selectedClassId ? 'Class Absent Days' : 'Branch Absent Days'}
+                      {selectedClassId ? t('attendanceReport.scope.classAbsent') : t('attendanceReport.scope.branchAbsent')}
                     </p>
-                    <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{classReportData.stats.absent} Days</h3>
+                    <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{t('attendanceReport.days', { count: classReportData.stats.absent })}</h3>
                   </div>
                   <div className="w-10 h-10 bg-rose-50 dark:bg-rose-950/40 text-rose-600 rounded-xl flex items-center justify-center">
                     <AlertTriangle size={18} />
@@ -1374,7 +1380,7 @@ const StudentAttendanceReport = () => {
 
                 <div 
                   onClick={() => setSelectedKpiFilter(prev => prev === 'partial' ? null : 'partial')}
-                  title="Click to view students with Partial attendance"
+                  title={t('attendanceReport.kpiClick', { status: tv('Partial') })}
                   className={`bg-white dark:bg-slate-900 p-6 rounded-[32px] border transition-all cursor-pointer select-none ${
                     selectedKpiFilter === 'partial'
                       ? 'border-indigo-500 ring-2 ring-indigo-500/30 shadow-md bg-indigo-50/20 dark:bg-indigo-950/20'
@@ -1383,9 +1389,9 @@ const StudentAttendanceReport = () => {
                 >
                   <div>
                     <p className="text-xs font-black uppercase text-slate-400 tracking-wider">
-                      {selectedClassId ? 'Class Partial Days' : 'Branch Partial Days'}
+                      {selectedClassId ? t('attendanceReport.scope.classPartial') : t('attendanceReport.scope.branchPartial')}
                     </p>
-                    <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{classReportData.stats.partial || 0} Days</h3>
+                    <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{t('attendanceReport.days', { count: classReportData.stats.partial || 0 })}</h3>
                   </div>
                   <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 rounded-xl flex items-center justify-center">
                     <AlertCircle size={18} />
@@ -1395,7 +1401,7 @@ const StudentAttendanceReport = () => {
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between">
                   <div>
                     <p className="text-xs font-black uppercase text-slate-400 tracking-wider">
-                      {selectedClassId ? 'Class Attendance Rate' : 'Branch Attendance Rate'}
+                      {selectedClassId ? t('attendanceReport.scope.classRate') : t('attendanceReport.scope.branchRate')}
                     </p>
                     <h3 className="text-2xl font-black text-slate-950 dark:text-white mt-2">{classReportData.stats.percentage}%</h3>
                   </div>
@@ -1411,7 +1417,7 @@ const StudentAttendanceReport = () => {
                   <div className="px-8 py-4 border-b border-slate-100 dark:border-slate-800 text-xs font-semibold text-slate-500 dark:text-slate-400 flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                        {selectedClassId ? 'Class' : 'Branch'} <span className="font-extrabold capitalize">{selectedKpiFilter}</span> Students ({displayedClassStudents.length})
+                        {t('attendanceReport.kpiListTitle', { scope: selectedClassId ? t('common.class') : t('common.branch'), status: tv(selectedKpiFilter.charAt(0).toUpperCase() + selectedKpiFilter.slice(1)), count: displayedClassStudents.length })}
                       </span>
                     </div>
                     <button
@@ -1419,18 +1425,18 @@ const StudentAttendanceReport = () => {
                       onClick={() => setSelectedKpiFilter(null)}
                       className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                     >
-                      Hide List ✕
+                      {t('attendanceReport.hideList')} ✕
                     </button>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left">
                       <thead>
                         <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                          <th className="px-8 py-5">Student Name</th>
-                          <th className="px-8 py-5">Class Name</th>
-                          <th className="px-8 py-5">Status</th>
-                          <th className="px-8 py-5">Session</th>
-                          <th className="px-8 py-5">Description</th>
+                          <th className="px-8 py-5">{t('students.studentName')}</th>
+                          <th className="px-8 py-5">{t('academic.classes.colName')}</th>
+                          <th className="px-8 py-5">{t('common.status')}</th>
+                          <th className="px-8 py-5">{t('academic.exit.session')}</th>
+                          <th className="px-8 py-5">{t('common.description')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1439,8 +1445,8 @@ const StudentAttendanceReport = () => {
                           const statusVal = matchingRecs[0]?.status || (selectedKpiFilter ? selectedKpiFilter.charAt(0).toUpperCase() + selectedKpiFilter.slice(1) : '-');
                           const sessions = Array.from(new Set(matchingRecs.map(r => r.session).filter(Boolean)));
                           const sessionText = sessions.length > 0 
-                            ? sessions.join(', ') 
-                            : (matchingRecs.some(r => r.attendanceType === 'Daily') ? 'Daily' : '-');
+                            ? sessions.map(statusLabel).join(', ') 
+                            : (matchingRecs.some(r => r.attendanceType === 'Daily') ? tv('Daily') : '-');
                           
                           const descArr = (item.descriptions?.[selectedKpiFilter] || []).concat(matchingRecs.map(r => r.description).filter(Boolean));
                           const descText = Array.from(new Set(descArr)).filter(Boolean).join(', ');
@@ -1468,7 +1474,7 @@ const StudentAttendanceReport = () => {
                                     ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60'
                                     : 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800/60'
                                 }`}>
-                                  {statusVal}
+                                  {statusLabel(statusVal)}
                                 </span>
                               </td>
                               <td className="px-8 py-6 text-sm text-slate-700 dark:text-slate-300 font-medium">
@@ -1495,7 +1501,7 @@ const StudentAttendanceReport = () => {
                         {displayedClassStudents.length === 0 && (
                           <tr>
                             <td colSpan="5" className="px-8 py-12 text-center text-slate-400 text-sm font-semibold">
-                              No students found with {selectedKpiFilter} attendance for this date.
+                              {t('attendanceReport.noStudentsStatus', { status: tv(selectedKpiFilter.charAt(0).toUpperCase() + selectedKpiFilter.slice(1)) })}
                             </td>
                           </tr>
                         )}
@@ -1508,7 +1514,7 @@ const StudentAttendanceReport = () => {
           )}
           {!selectedClassId && !selectedBranchId && (
             <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 text-slate-400 font-semibold">
-              Please select a Branch or Class to view attendance ledger records.
+              {t('attendanceReport.selectBranchClass')}
             </div>
           )}        </div>
       )}
@@ -1522,14 +1528,14 @@ const StudentAttendanceReport = () => {
           {/* Autocomplete Search input */}
           <div className="bg-white dark:bg-slate-900 rounded-[32px] p-6 border border-slate-100 dark:border-slate-800 shadow-sm relative">
             <label className="block text-xs font-black uppercase text-slate-500 mb-2 flex items-center gap-2">
-              <User size={14} className="text-brand-500" /> Lookup Student by Name, Code or Phone
+              <User size={14} className="text-brand-500" /> {t('attendanceReport.lookupLabel')}
             </label>
             <div className="relative">
               <div className="flex items-center bg-slate-50 dark:bg-slate-800 rounded-2xl px-4 py-3 border border-slate-200/60 dark:border-slate-700">
                 <Search size={18} className="text-slate-400 mr-3" />
                 <input
                   type="text"
-                  placeholder="Type student name, student code or guardian phone number..."
+                  placeholder={t('attendanceReport.lookupPlaceholder')}
                   value={studentSearchQuery}
                   onChange={(e) => {
                     setStudentSearchQuery(e.target.value);
@@ -1554,7 +1560,7 @@ const StudentAttendanceReport = () => {
                     >
                       <div>
                         <div>{student.fullName}</div>
-                        <div className="text-xs text-slate-400 font-mono">Code: {student.studentCode || student.rollNumber || '-'} | Guardian Phone: {student.guardianId?.phone || student.fatherPhone || '-'}</div>
+                        <div className="text-xs text-slate-400 font-mono">{t('common.code')}: {student.studentCode || student.rollNumber || '-'} | {t('attendanceReport.guardianPhone')}: {student.guardianId?.phone || student.fatherPhone || '-'}</div>
                       </div>
                       <ArrowRight size={16} className="text-slate-400" />
                     </button>
@@ -1574,9 +1580,9 @@ const StudentAttendanceReport = () => {
                       <ShieldAlert size={24} />
                     </div>
                     <div>
-                      <h3 className="text-base font-black text-amber-800 dark:text-amber-400 uppercase tracking-tight">System Attendance Warning Triggered</h3>
+                      <h3 className="text-base font-black text-amber-800 dark:text-amber-400 uppercase tracking-tight">{t('attendanceReport.warningTitle')}</h3>
                       <p className="text-sm font-bold text-amber-700/85 dark:text-amber-500/80 mt-1 max-w-2xl">
-                        Student has reached {studentReportData.stats.absent} Absences or {studentReportData.stats.late} Late records. Click the WhatsApp button to alert the parent/guardian phone number.
+                        {t('attendanceReport.warningText', { absent: studentReportData.stats.absent, late: studentReportData.stats.late })}
                       </p>
                     </div>
                   </div>
@@ -1587,7 +1593,7 @@ const StudentAttendanceReport = () => {
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-3 px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg transition-all active:scale-95 text-center shrink-0"
                     >
-                      <MessageSquare size={16} /> WhatsApp Guardian
+                      <MessageSquare size={16} /> {t('attendanceReport.whatsappGuardian')}
                     </a>
                   )}
                 </div>
@@ -1599,30 +1605,30 @@ const StudentAttendanceReport = () => {
                 {/* 1. Basic Information Card */}
                 <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm p-8 space-y-6">
                   <h3 className="text-base font-black dark:text-white uppercase tracking-tight pb-3 border-b border-slate-100 dark:border-slate-800">
-                    Basic Profile Info
+                    {t('attendanceReport.basicProfile')}
                   </h3>
                   
                   <div className="space-y-4">
                     <div>
-                      <span className="text-[10px] font-black uppercase text-slate-400">Student Name</span>
+                      <span className="text-[10px] font-black uppercase text-slate-400">{t('students.studentName')}</span>
                       <p className="text-base font-bold text-slate-900 dark:text-white">{selectedStudent.fullName}</p>
                     </div>
                     <div>
-                      <span className="text-[10px] font-black uppercase text-slate-400">Student Code / ID</span>
+                      <span className="text-[10px] font-black uppercase text-slate-400">{t('attendanceReport.studentCodeId')}</span>
                       <p className="text-sm font-semibold text-slate-650 dark:text-slate-400 font-mono">{selectedStudent.studentCode || selectedStudent.rollNumber || '-'}</p>
                     </div>
                     <div>
-                      <span className="text-[10px] font-black uppercase text-slate-400">Current Academic Class</span>
+                      <span className="text-[10px] font-black uppercase text-slate-400">{t('attendanceReport.currentClass')}</span>
                       <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                         {classes.find(c => String(c._id) === String(selectedStudent.classId?._id || selectedStudent.classId))?.name || '-'}
                       </p>
                     </div>
                     <div>
-                      <span className="text-[10px] font-black uppercase text-slate-400">Guardian/Responsible Name</span>
+                      <span className="text-[10px] font-black uppercase text-slate-400">{t('attendanceReport.guardianName')}</span>
                       <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{studentReportData.warnings.parentName}</p>
                     </div>
                     <div>
-                      <span className="text-[10px] font-black uppercase text-slate-400">Guardian Phone Number</span>
+                      <span className="text-[10px] font-black uppercase text-slate-400">{t('attendanceReport.guardianPhoneNumber')}</span>
                       <p className="text-sm font-semibold text-slate-600 dark:text-slate-400 font-mono">{studentReportData.warnings.parentPhone || '-'}</p>
                     </div>
                   </div>
@@ -1632,7 +1638,7 @@ const StudentAttendanceReport = () => {
                 <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm p-8 space-y-6 flex flex-col justify-between">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                     <h3 className="text-base font-black dark:text-white uppercase tracking-tight">
-                      Attendance Performance Summary
+                      {t('attendanceReport.performanceSummary')}
                     </h3>
                     
                     {/* Export */}
@@ -1640,14 +1646,14 @@ const StudentAttendanceReport = () => {
                       <button
                         onClick={exportStudentCSV}
                         className="p-2 bg-slate-50 dark:bg-slate-800 hover:bg-brand-50 hover:text-brand-600 rounded-xl transition-all"
-                        title="Export CSV"
+                        title={t('attendanceReport.exportCsv')}
                       >
                         <FileSpreadsheet size={16} />
                       </button>
                       <button
                         onClick={exportStudentPDF}
                         className="p-2 bg-slate-50 dark:bg-slate-800 hover:bg-brand-50 hover:text-brand-600 rounded-xl transition-all"
-                        title="Export PDF"
+                        title={t('exams.results.exportPdf')}
                       >
                         <FileText size={16} />
                       </button>
@@ -1656,26 +1662,26 @@ const StudentAttendanceReport = () => {
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 my-auto py-6">
                     <div>
-                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Total Audited</span>
-                      <h4 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{studentReportData.stats.total} Days</h4>
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">{t('attendanceReport.totalAudited')}</span>
+                      <h4 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{t('attendanceReport.days', { count: studentReportData.stats.total })}</h4>
                     </div>
                     <div>
-                      <span className="text-[10px] font-black uppercase text-emerald-500 tracking-wider">Present</span>
-                      <h4 className="text-2xl font-black text-emerald-600 dark:text-emerald-450 mt-1">{studentReportData.stats.present} Days</h4>
+                      <span className="text-[10px] font-black uppercase text-emerald-500 tracking-wider">{tv('Present')}</span>
+                      <h4 className="text-2xl font-black text-emerald-600 dark:text-emerald-450 mt-1">{t('attendanceReport.days', { count: studentReportData.stats.present })}</h4>
                     </div>
                     <div>
-                      <span className="text-[10px] font-black uppercase text-amber-500 tracking-wider">Late</span>
-                      <h4 className="text-2xl font-black text-amber-600 dark:text-amber-450 mt-1">{studentReportData.stats.late} Days</h4>
+                      <span className="text-[10px] font-black uppercase text-amber-500 tracking-wider">{tv('Late')}</span>
+                      <h4 className="text-2xl font-black text-amber-600 dark:text-amber-450 mt-1">{t('attendanceReport.days', { count: studentReportData.stats.late })}</h4>
                     </div>
                     <div>
-                      <span className="text-[10px] font-black uppercase text-rose-500 tracking-wider">Absent</span>
-                      <h4 className="text-2xl font-black text-rose-600 dark:text-rose-450 mt-1">{studentReportData.stats.absent} Days</h4>
+                      <span className="text-[10px] font-black uppercase text-rose-500 tracking-wider">{tv('Absent')}</span>
+                      <h4 className="text-2xl font-black text-rose-600 dark:text-rose-450 mt-1">{t('attendanceReport.days', { count: studentReportData.stats.absent })}</h4>
                     </div>
                   </div>
 
                   <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] font-black uppercase text-slate-400">Total Rate Percentage</span>
+                      <span className="text-[10px] font-black uppercase text-slate-400">{t('attendanceReport.totalRate')}</span>
                       <p className="text-2xl font-black text-brand-600 dark:text-brand-400 mt-0.5">{studentReportData.stats.percentage}%</p>
                     </div>
                     
@@ -1694,13 +1700,13 @@ const StudentAttendanceReport = () => {
                   <table className="w-full text-left">
                     <thead>
                       <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                        <th className="px-8 py-5">Date</th>
-                        <th className="px-8 py-5">Class</th>
-                        <th className="px-8 py-5">Session</th>
-                        <th className="px-8 py-5">Status</th>
-                        <th className="px-8 py-5">Arrival Time</th>
-                        <th className="px-8 py-5">Description</th>
-                        <th className="px-8 py-5">Recorded By</th>
+                        <th className="px-8 py-5">{t('common.date')}</th>
+                        <th className="px-8 py-5">{t('common.class')}</th>
+                        <th className="px-8 py-5">{t('academic.exit.session')}</th>
+                        <th className="px-8 py-5">{t('common.status')}</th>
+                        <th className="px-8 py-5">{t('attendanceReport.arrivalTime')}</th>
+                        <th className="px-8 py-5">{t('common.description')}</th>
+                        <th className="px-8 py-5">{t('attendanceReport.recordedBy')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1710,10 +1716,10 @@ const StudentAttendanceReport = () => {
                             {rec.date}
                           </td>
                           <td className="px-8 py-6 text-sm font-semibold text-slate-705 dark:text-slate-300">
-                            {classLabel(rec.classId, 'Deleted Class')}
+                            {classLabel(rec.classId, t('academic.promotion.deletedClass'))}
                           </td>
                           <td className="px-8 py-6 text-xs font-bold text-slate-500">
-                            {rec.session || 'Morning'}
+                            {statusLabel(rec.session || 'Morning')}
                           </td>
                           <td className="px-8 py-6">
                             <select
@@ -1727,9 +1733,9 @@ const StudentAttendanceReport = () => {
                                   : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-400 dark:border-rose-800'
                               }`}
                             >
-                              <option value="Present">✓ Present</option>
-                              <option value="Late">⏰ Late</option>
-                              <option value="Absent">✖ Absent</option>
+                              <option value="Present">✓ {tv('Present')}</option>
+                              <option value="Late">⏰ {tv('Late')}</option>
+                              <option value="Absent">✖ {tv('Absent')}</option>
                             </select>
                           </td>
                           <td className="px-8 py-6 text-xs font-bold text-slate-800 dark:text-slate-200 font-mono">
@@ -1751,14 +1757,14 @@ const StudentAttendanceReport = () => {
                               : <span className="text-slate-400">—</span>}
                           </td>
                           <td className="px-8 py-6 text-xs font-semibold text-slate-600 dark:text-slate-400">
-                            {rec.markedBy?.fullName || 'System Admin'}
+                            {rec.markedBy?.fullName || t('academic.promotion.systemAdmin')}
                           </td>
                         </tr>
                       ))}
                       {studentReportData.history.length === 0 && (
                         <tr>
                           <td colSpan="7" className="px-8 py-12 text-center text-slate-400 text-sm font-semibold">
-                            No attendance history found.
+                            {t('attendanceReport.noHistory')}
                           </td>
                         </tr>
                       )}
@@ -1772,9 +1778,9 @@ const StudentAttendanceReport = () => {
               <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-slate-400 mx-auto mb-4 border border-slate-100 dark:border-slate-700">
                 <Search size={24} />
               </div>
-              <h3 className="text-lg font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">No Student Selected</h3>
+              <h3 className="text-lg font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">{t('attendanceReport.noStudentSelected')}</h3>
               <p className="text-slate-400 text-sm font-semibold mt-2 max-w-sm mx-auto">
-                Please search for a student to view their detailed attendance report profile and trigger warning notifications.
+                {t('attendanceReport.noStudentSelectedHint')}
               </p>
             </div>
           )}

@@ -1,11 +1,14 @@
 import axios from 'axios';
+import { translateApiMessage } from '../i18n/core.js';
 
 // VITE_API_URL is the backend API host (no trailing slash, no /api path),
 // e.g. https://your-backend.onrender.com. Set it in your Vercel project's
 // Environment Variables for production. In local dev it falls back to localhost.
 // No production backend URL is hard-coded here on purpose — the deployment
 // controls it via env, so a backend URL change never requires a code change.
-const host = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5005' : '');
+const rawHost = import.meta.env.VITE_API_URL;
+const isPlaceholderHost = !rawHost || rawHost.includes('YOUR-BACKEND') || rawHost.includes('your-backend');
+const host = (!isPlaceholderHost ? rawHost : '') || (import.meta.env.DEV ? 'http://localhost:5005' : '');
 
 if (!host) {
     console.error('[config] VITE_API_URL is not set. The app cannot reach the backend. Set VITE_API_URL in your production (Vercel) environment.');
@@ -81,6 +84,10 @@ api.interceptors.response.use(
         if (method !== 'get') {
             // Any mutation (add student, pay fees, update class) clears cache so views are always fresh
             getCache.clear();
+            // Display-only: localize the server's message for the selected language.
+            if (response.data && typeof response.data.message === 'string') {
+                response.data.message = translateApiMessage(response.data.message);
+            }
         }
         return response;
     },
@@ -101,6 +108,12 @@ api.interceptors.response.use(
                 window.dispatchEvent(new Event('auth:unauthorized'));
             }
         }
+        // Display-only localization, applied after the checks above (which rely on
+        // the original English text).
+        if (error.response?.data && typeof error.response.data.message === 'string') {
+            error.response.data.message = translateApiMessage(error.response.data.message);
+        }
+        if (typeof error.message === 'string') error.message = translateApiMessage(error.message);
         return Promise.reject(error);
     }
 );

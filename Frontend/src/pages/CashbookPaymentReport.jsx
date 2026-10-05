@@ -16,12 +16,13 @@ import api from '../services/api';
 import { walletNameOf, walletIdOf } from '../utils/wallet';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { currentCycle, cycleRangeISO } from '../utils/billingCycle';
+import { useLanguage, translate } from '../i18n/LanguageContext.jsx';
 
 const fmtMoney = (n) =>
   Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Credit = Income (money in), Debit = Expense (money out).
-const typeToLabel = (type) => (type === 'Income' ? 'Credit' : 'Debit');
+const typeToLabel = (type) => (type === 'Income' ? translate('reports.payment.credit') : translate('reports.payment.debit'));
 
 // Current billing period (25th → 24th) from the shared single-source util.
 const currentPeriod = () => cycleRangeISO(currentCycle());
@@ -74,6 +75,7 @@ const entryParties = (entry) => {
 
 const CashbookPaymentReport = () => {
   const { showAlert } = useAlert();
+  const { t, locale } = useLanguage();
 
   const [entries, setEntries] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -103,7 +105,7 @@ const CashbookPaymentReport = () => {
         setWallets(walletRes.data || []);
       } catch (error) {
         console.error('Failed to load payment report data', error);
-        showAlert({ type: 'danger', title: 'Error', message: 'Failed to load payment report data.' });
+        showAlert({ type: 'danger', title: t('common.error'), message: t('reports.fee.loadFailed') });
       } finally {
         setLoading(false);
       }
@@ -173,7 +175,7 @@ const CashbookPaymentReport = () => {
     return categories.filter((c) => c.type === wanted);
   }, [categories, typeFilter]);
 
-  const rangeLabel = dateFrom || dateTo ? `${dateFrom || '…'}  →  ${dateTo || '…'}` : 'All Time';
+  const rangeLabel = dateFrom || dateTo ? `${dateFrom || '…'}  →  ${dateTo || '…'}` : t('reports.common.allTime');
 
   const resetFilters = () => {
     setSearchQuery('');
@@ -196,12 +198,12 @@ const CashbookPaymentReport = () => {
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
-    doc.text('MACHAD INSTITUTE - PAYMENT REPORT', 14, 11);
+    doc.text(t('reports.payment.pdf.title'), 14, 11);
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    const searchPart = searchQuery.trim() ? `   |   Search: "${searchQuery.trim()}"` : '';
+    const searchPart = searchQuery.trim() ? `   |   ${t('common.search')}: "${searchQuery.trim()}"` : '';
     doc.text(
-      `Generated: ${new Date().toLocaleString()}   |   Type: ${typeFilter}   |   Period: ${rangeLabel}${searchPart}   |   Entries: ${filtered.length}`,
+      `${t('payers.pdf.generated')}: ${new Date().toLocaleString(locale)}   |   ${t('common.type')}: ${t(`reports.payment.typeFilter.${typeFilter}`)}   |   ${t('reports.common.period')}: ${rangeLabel}${searchPart}   |   ${t('reports.category.entries')}: ${filtered.length}`,
       14,
       18
     );
@@ -229,13 +231,13 @@ const CashbookPaymentReport = () => {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7);
       doc.text('#', cols.no.x, y);
-      doc.text('CATEGORY', cols.cat.x, y);
-      doc.text('SENDER', cols.sender.x, y);
-      doc.text('RECEIVER', cols.receiver.x, y);
-      doc.text('WALLET', cols.wallet.x, y);
-      doc.text('TYPE', cols.type.x, y);
-      doc.text('AMOUNT ($)', cols.amount.x, y);
-      doc.text('DATE', cols.date.x, y);
+      doc.text(t('reports.payment.pdf.category'), cols.cat.x, y);
+      doc.text(t('reports.payment.pdf.sender'), cols.sender.x, y);
+      doc.text(t('reports.payment.pdf.receiver'), cols.receiver.x, y);
+      doc.text(t('reports.fee.pdf.wallet'), cols.wallet.x, y);
+      doc.text(t('reports.category.pdf.type'), cols.type.x, y);
+      doc.text(t('reports.payment.pdf.amount'), cols.amount.x, y);
+      doc.text(t('reports.payment.pdf.date'), cols.date.x, y);
       y += 8;
     };
 
@@ -291,20 +293,20 @@ const CashbookPaymentReport = () => {
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
-    doc.text('FINANCIAL SUMMARY', 14, y + 9);
+    doc.text(t('reports.payment.pdf.summary'), 14, y + 9);
     doc.setFontSize(9);
     doc.setTextColor(74, 222, 128);
-    doc.text(`Total Income: $${fmtMoney(totalIncome)}`, 14, y + 20);
+    doc.text(`${t('reports.payment.totalIncome')}: $${fmtMoney(totalIncome)}`, 14, y + 20);
     doc.setTextColor(248, 113, 113);
-    doc.text(`Total Expense: $${fmtMoney(totalExpense)}`, 90, y + 20);
+    doc.text(`${t('reports.payment.totalExpense')}: $${fmtMoney(totalExpense)}`, 90, y + 20);
     doc.setTextColor(147, 197, 253);
-    doc.text(`Net Income: $${fmtMoney(netIncome)}`, 170, y + 20);
+    doc.text(`${t('reports.category.netIncome')}: $${fmtMoney(netIncome)}`, 170, y + 20);
 
-    doc.save(`Machad_Payment_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+    doc.save(`${t('reports.payment.pdf.file')}_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   if (loading) {
-    return <div className="p-10 text-center text-slate-500 font-bold">Loading Payment Report...</div>;
+    return <div className="p-10 text-center text-slate-500 font-bold">{t('reports.payment.loading')}</div>;
   }
 
   return (
@@ -317,10 +319,10 @@ const CashbookPaymentReport = () => {
           </div>
           <div>
             <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">
-              Payment Report
+              {t('nav.paymentReport')}
             </h1>
             <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-1.5 uppercase tracking-[0.2em]">
-              All money movements — credit &amp; debit ledger
+              {t('reports.payment.subtitle')}
             </p>
           </div>
         </div>
@@ -330,13 +332,13 @@ const CashbookPaymentReport = () => {
             onClick={handleExportPDF}
             className="flex items-center gap-2 px-5 py-3.5 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
           >
-            <FileDown size={16} /> Export PDF
+            <FileDown size={16} /> {t('exams.results.exportPdf')}
           </button>
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 px-6 py-3.5 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-brand-600/30 active:scale-95"
           >
-            <Printer size={16} /> Print Report
+            <Printer size={16} /> {t('reports.common.printReport')}
           </button>
         </div>
       </div>
@@ -348,12 +350,12 @@ const CashbookPaymentReport = () => {
         <div className="flex flex-wrap items-end gap-x-2.5 gap-y-2">
           <div className="flex items-center gap-1.5 shrink-0 pb-2">
             <Filter size={14} className="text-slate-400" />
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filter payments</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('reports.payment.filterPayments')}</p>
           </div>
 
           <div className="flex-1 min-w-[190px]">
             <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">
-              Search by Name or Phone Number
+              {t('reports.payment.searchLabel')}
             </label>
             <div className="relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -361,14 +363,14 @@ const CashbookPaymentReport = () => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search by Name or Phone Number..."
+                placeholder={t('reports.payment.searchPlaceholder')}
                 className="w-full pl-8 pr-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-[13px] outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-slate-400"
               />
             </div>
           </div>
 
           <div className="flex-1 min-w-[92px]">
-            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">Type</label>
+            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">{t('common.type')}</label>
             <select
               value={typeFilter}
               onChange={(e) => {
@@ -377,19 +379,19 @@ const CashbookPaymentReport = () => {
               }}
               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-[13px]"
             >
-              <option value="All">All</option>
-              <option value="Credit">Credit (Income)</option>
-              <option value="Debit">Debit (Expense)</option>
+              <option value="All">{t('reports.payment.typeFilter.All')}</option>
+              <option value="Credit">{t('reports.payment.typeFilter.Credit')}</option>
+              <option value="Debit">{t('reports.payment.typeFilter.Debit')}</option>
             </select>
           </div>
           <div className="flex-1 min-w-[112px]">
-            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">Category</label>
+            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">{t('common.category')}</label>
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-[13px]"
             >
-              <option value="All">All categories</option>
+              <option value="All">{t('cashbook.allCategories')}</option>
               {categoryOptions.map((c) => (
                 <option key={c._id} value={c._id}>
                   {c.title} · {typeToLabel(c.type)}
@@ -400,20 +402,20 @@ const CashbookPaymentReport = () => {
           {/* Wallet filter — options come from the wallets already stored in the
               database, so no wallet record is created or duplicated here. */}
           <div className="flex-1 min-w-[104px]">
-            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">Wallet</label>
+            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">{t('common.wallet')}</label>
             <select
               value={walletFilter}
               onChange={(e) => setWalletFilter(e.target.value)}
               className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-[13px]"
             >
-              <option value="All">All Wallets</option>
+              <option value="All">{t('reports.common.allWallets')}</option>
               {wallets.map((w) => (
                 <option key={w._id} value={w._id}>{w.name}</option>
               ))}
             </select>
           </div>
           <div className="flex-1 min-w-[112px]">
-            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">From date</label>
+            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">{t('cashbook.fromDate')}</label>
             <input
               type="date"
               value={dateFrom}
@@ -422,7 +424,7 @@ const CashbookPaymentReport = () => {
             />
           </div>
           <div className="flex-1 min-w-[112px]">
-            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">To date</label>
+            <label className="block text-[10px] font-black uppercase text-slate-500 mb-0.5">{t('cashbook.toDate')}</label>
             <input
               type="date"
               value={dateTo}
@@ -441,7 +443,7 @@ const CashbookPaymentReport = () => {
               }}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-black uppercase tracking-wider whitespace-nowrap"
             >
-              <CalendarRange size={13} /> Current Period (25 → 24)
+              <CalendarRange size={13} /> {t('reports.common.currentPeriod')}
             </button>
             <button
               type="button"
@@ -451,17 +453,17 @@ const CashbookPaymentReport = () => {
               }}
               className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800 whitespace-nowrap"
             >
-              All Time
+              {t('reports.common.allTime')}
             </button>
             <button
               type="button"
               onClick={resetFilters}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800"
             >
-              <RotateCcw size={12} /> Reset
+              <RotateCcw size={12} /> {t('common.reset')}
             </button>
             <span className="text-[11px] font-bold text-slate-400 whitespace-nowrap pl-0.5">
-              {filtered.length} result{filtered.length === 1 ? '' : 's'}
+              {t('cashbook.results', { count: filtered.length })}
             </span>
           </div>
         </div>
@@ -475,13 +477,13 @@ const CashbookPaymentReport = () => {
             <thead>
               <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest">
                 <th className="px-4 py-4">#</th>
-                <th className="px-4 py-4">Category</th>
-                <th className="px-4 py-4">Sender</th>
-                <th className="px-4 py-4">Receiver</th>
-                <th className="px-4 py-4">Wallet</th>
-                <th className="px-4 py-4">Type</th>
-                <th className="px-4 py-4 text-right">Amount ($)</th>
-                <th className="px-4 py-4">Date</th>
+                <th className="px-4 py-4">{t('common.category')}</th>
+                <th className="px-4 py-4">{t('cashbook.sender')}</th>
+                <th className="px-4 py-4">{t('cashbook.receiver')}</th>
+                <th className="px-4 py-4">{t('common.wallet')}</th>
+                <th className="px-4 py-4">{t('common.type')}</th>
+                <th className="px-4 py-4 text-right">{t('reports.payment.amountCol')}</th>
+                <th className="px-4 py-4">{t('common.date')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -540,7 +542,7 @@ const CashbookPaymentReport = () => {
               {filtered.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-8 py-12 text-center text-slate-400 text-sm font-medium">
-                    No payment records found for the selected filters.
+                    {t('reports.payment.empty')}
                   </td>
                 </tr>
               )}
@@ -551,27 +553,27 @@ const CashbookPaymentReport = () => {
         {/* Financial summary — small page */}
         <div className="mt-10 border-t-2 border-slate-900 dark:border-slate-700 pt-8">
           <h3 className="text-lg font-black uppercase tracking-wide text-slate-900 dark:text-white mb-5">
-            Financial Summary
+            {t('reports.payment.summary')}
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div className="rounded-2xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-6">
               <div className="flex items-center gap-2 mb-2 text-emerald-600 dark:text-emerald-400">
                 <TrendingUp size={18} />
-                <span className="text-[10px] font-black uppercase tracking-widest">Total Income ($)</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">{t('reports.payment.totalIncomeCol')}</span>
               </div>
               <p className="text-3xl font-black text-emerald-700 dark:text-emerald-300">${fmtMoney(totalIncome)}</p>
             </div>
             <div className="rounded-2xl border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/30 p-6">
               <div className="flex items-center gap-2 mb-2 text-rose-600 dark:text-rose-400">
                 <TrendingDown size={18} />
-                <span className="text-[10px] font-black uppercase tracking-widest">Total Expense ($)</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">{t('reports.payment.totalExpenseCol')}</span>
               </div>
               <p className="text-3xl font-black text-rose-700 dark:text-rose-300">${fmtMoney(totalExpense)}</p>
             </div>
             <div className="rounded-2xl border border-brand-200 dark:border-brand-900 bg-brand-50 dark:bg-brand-950/30 p-6">
               <div className="flex items-center gap-2 mb-2 text-brand-600 dark:text-brand-400">
                 <Scale size={18} />
-                <span className="text-[10px] font-black uppercase tracking-widest">Net Income ($)</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">{t('reports.payment.netIncomeCol')}</span>
               </div>
               <p
                 className={`text-3xl font-black ${

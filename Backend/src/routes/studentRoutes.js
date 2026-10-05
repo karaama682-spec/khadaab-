@@ -7,6 +7,7 @@ const {
     updateStudent,
     deleteStudent,
     exitStudent,
+    restoreStudent,
     getStudentArchive
 } = require('../controllers/studentController');
 const { protect } = require('../middleware/authMiddleware');
@@ -27,6 +28,7 @@ router.route('/')
 // so it uses the Students Edit grant. Reading the archive uses the read grant.
 router.get('/:id/archive', protect, canReadStudents, getStudentArchive);
 router.post('/:id/exit', protect, checkPermission('Academic Management', 'Edit', 'Students'), exitStudent);
+router.post('/:id/restore', protect, checkPermission('Academic Management', 'Edit', 'Students'), restoreStudent);
 
 router.route('/:id')
     .get(protect, canReadStudents, getStudentById)

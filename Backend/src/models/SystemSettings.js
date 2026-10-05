@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const systemSettingsSchema = new mongoose.Schema({
     // Business Information
     businessInfo: {
-        name: { type: String, default: 'Cumar Binu Khadhaab' },
+        name: { type: String, default: 'salaax aldaareyn' },
         systemSubtitle: { type: String, default: 'Institute Management' },
         legalName: { type: String, default: '' },
         industry: { type: String, default: 'Waxbarasho & Tababar (Education & Training)' },

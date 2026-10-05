@@ -8,7 +8,7 @@ import { userHasPermission } from '../../utils/permissionUtils';
 import { useLanguage } from '../../i18n/LanguageContext.jsx';
 
 const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, onLogout }) => {
-  const { t } = useLanguage();
+  const { t, tv, language } = useLanguage();
   const [expandedItems, setExpandedItems] = useState([]);
   const [lastExpandedItem, setLastExpandedItem] = useState(null);
   const [tenantInfo, setTenantInfo] = useState(() => {
@@ -53,6 +53,9 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
       roleNormalized.includes('system') ||
       roleNormalized.includes('owner') ||
       roleNormalized === (UserRole.SUPER_ADMIN || '').toLowerCase()) return true;
+
+    const navItem = NAV_CONFIG.find(item => item.label === label);
+    if (navItem && navItem.roles?.includes(userRole)) return true;
 
     if (!user?.roles || user.roles.length === 0) {
       return false;
@@ -115,7 +118,7 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
   };
 
   const filteredNav = getFilteredNav();
-  const roleLabel = user?.roles?.[0]?.name || userRole || 'Super Admin';
+  const roleLabel = tv(user?.roles?.[0]?.name) || (userRole ? (language === 'en' ? userRole : t(`nav.roles.${userRole}`, { defaultValue: tv(userRole) })) : tv('Super Admin'));
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full bg-[#080E1A] text-slate-300 relative overflow-hidden">
@@ -127,14 +130,14 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
       <div className="p-5 flex items-center gap-3.5 border-b border-white/10 relative z-10 backdrop-blur-md">
         <div className="w-11 h-11 bg-gradient-to-tr from-brand-700 via-brand-600 to-emerald-500 rounded-2xl flex items-center justify-center font-black text-white shadow-xl shadow-brand-950/50 overflow-hidden shrink-0 ring-1 ring-white/25">
           {tenantInfo.logo ? (
-            <img src={tenantInfo.logo} alt="Logo" className="w-full h-full object-cover" />
+            <img src={tenantInfo.logo} alt={t('settings.profile.logoAlt')} className="w-full h-full object-cover" />
           ) : (
             <span className="text-lg tracking-tight">{(tenantInfo.name || 'I').charAt(0).toUpperCase()}</span>
           )}
         </div>
         <div className="overflow-hidden min-w-0">
-          <span className="text-sm font-black text-white tracking-tight block truncate" title={tenantInfo.name || 'Cumar Binu Khadhaab'}>{tenantInfo.name || 'Cumar Binu Khadhaab'}</span>
-          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-400 block truncate">{tenantInfo.systemSubtitle || t('instituteManagement')}</span>
+          <span className="text-sm font-black text-white tracking-tight block truncate capitalize" title={tenantInfo.name || 'salaax aldaareyn'}>{tenantInfo.name || 'salaax aldaareyn'}</span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-400 block truncate">{tenantInfo.systemSubtitle && tenantInfo.systemSubtitle !== 'Institute Management' ? tenantInfo.systemSubtitle : t('nav.instituteManagement')}</span>
         </div>
       </div>
 
@@ -166,7 +169,7 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
                     {React.createElement(item.icon, { size: 19 })}
                   </div>
                   <span className="text-sm tracking-tight truncate">
-                    {t(item.translationKey) || item.label}
+                    {t(`nav.${item.translationKey}`)}
                   </span>
                 </div>
                 {item.subItems && item.subItems.length > 0 && (
@@ -195,7 +198,7 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
                         <div className={`transition-colors ${subActive ? 'text-emerald-300' : 'text-slate-500 group-hover:text-emerald-300'}`}>
                           {React.createElement(sub.icon, { size: 15 })}
                         </div>
-                        <span className="truncate">{t(sub.translationKey) || sub.label}</span>
+                        <span className="truncate">{t(`nav.${sub.translationKey}`)}</span>
                       </button>
                     );
                   })}
@@ -214,7 +217,7 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
             <span className="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#080E1A] bg-emerald-400" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-black text-white">{user?.username || user?.fullName || 'Admin'}</p>
+            <p className="truncate text-xs font-black text-white">{user?.username || user?.fullName || t('nav.admin')}</p>
             <p className="truncate text-[10px] font-bold uppercase tracking-wider text-slate-400">{roleLabel}</p>
           </div>
         </div>
@@ -224,7 +227,7 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
           <div className="p-1 rounded-lg bg-white/6 group-hover:bg-rose-500/20 transition-colors">
             <LogOut size={15} />
           </div>
-          <span>{t('logout')}</span>
+          <span>{t('nav.logout')}</span>
         </button>
       </div>
     </div>

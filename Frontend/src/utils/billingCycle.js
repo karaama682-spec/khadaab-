@@ -8,11 +8,9 @@
 // util (same test vector) so frontend labels/pickers match backend queries.
 // ============================================================================
 
+import { monthNames, monthShortNames } from '../i18n/core.js';
+
 const pad = (n) => String(n).padStart(2, '0');
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
-];
 
 export const cycleKeyForDate = (date) => {
   const d = date ? new Date(date) : new Date();
@@ -42,8 +40,9 @@ export const currentCycle = () => cycleKeyForDate(new Date());
 export const previousCycle = (key) => addCycles(key, -1);
 export const nextCycle = (key) => addCycles(key, 1);
 
-// "25 Sep – 24 Oct 2026"
+// "25 September – 24 October 2026" — month names follow the selected language.
 export const cycleLabel = (key) => {
+  const MONTHS = monthNames();
   const { start, end } = cycleRange(key);
   const s = `${start.getUTCDate()} ${MONTHS[start.getUTCMonth()]}`;
   const e = `${end.getUTCDate()} ${MONTHS[end.getUTCMonth()]} ${end.getUTCFullYear()}`;
@@ -53,7 +52,7 @@ export const cycleLabel = (key) => {
 // Short label for pickers, e.g. "Sep 25 → Oct 24, 2026"
 export const cycleShortLabel = (key) => {
   const { start, end } = cycleRange(key);
-  const mon = (d) => MONTHS[d.getUTCMonth()].slice(0, 3);
+  const mon = (d) => monthShortNames()[d.getUTCMonth()];
   return `${mon(start)} 25 → ${mon(end)} 24, ${end.getUTCFullYear()}`;
 };
 

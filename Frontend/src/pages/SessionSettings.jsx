@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Clock, Building2, Save, Sun, Coffee, Sunset } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 // The three sessions are the same for every branch; only their times differ per
 // branch. Names are fixed here to match the backend enum.
@@ -10,6 +11,7 @@ const SESSION_ICON = { Morning: Sun, Breakfast: Coffee, Evening: Sunset };
 
 const SessionSettings = () => {
   const { showAlert } = useAlert();
+  const { t, tv } = useLanguage();
   const [branches, setBranches] = useState([]);
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [times, setTimes] = useState({ Morning: '', Breakfast: '', Evening: '' });
@@ -35,7 +37,7 @@ const SessionSettings = () => {
         if (list.length) setSelectedBranchId(String(list[0]._id));
       } catch (error) {
         console.error('Failed to load branches', error);
-        showAlert({ type: 'danger', title: 'Unable to load branches', message: 'Please refresh and try again.' });
+        showAlert({ type: 'danger', title: t('attendance.sessions.loadBranchesFailed'), message: t('attendance.sessions.refreshRetry') });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -55,7 +57,7 @@ const SessionSettings = () => {
       setTimes(next);
     } catch (error) {
       console.error('Failed to load session times', error);
-      showAlert({ type: 'danger', title: 'Unable to load session times', message: 'Please try selecting the branch again.' });
+      showAlert({ type: 'danger', title: t('attendance.sessions.loadTimesFailed'), message: t('attendance.sessions.reselectBranch') });
     } finally {
       setLoadingSessions(false);
     }
@@ -65,7 +67,7 @@ const SessionSettings = () => {
 
   const handleSave = async () => {
     if (!selectedBranchId) {
-      showAlert({ type: 'warning', title: 'Select a branch', message: 'Choose a branch before saving.' });
+      showAlert({ type: 'warning', title: t('attendance.sessions.selectBranchTitle'), message: t('attendance.sessions.selectBranchMsg') });
       return;
     }
     // These times belong ONLY to the selected branch.
@@ -78,42 +80,42 @@ const SessionSettings = () => {
       });
       showAlert({
         type: 'success',
-        title: 'Session times saved',
-        message: `Updated for ${selectedBranchName || 'this branch'}. Other branches are unchanged.`
+        title: t('attendance.sessions.savedTitle'),
+        message: t('attendance.sessions.savedMsg', { branch: selectedBranchName || t('attendance.sessions.thisBranch') })
       });
     } catch (error) {
       console.error('Failed to save session times', error);
       showAlert({
         type: 'danger',
-        title: 'Could not save session times',
-        message: error.response?.data?.message || 'Please try again.'
+        title: t('attendance.sessions.saveFailed'),
+        message: error.response?.data?.message || t('attendance.student.tryAgain')
       });
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <div className="p-10 text-center text-slate-500">Loading Session Settings...</div>;
+  if (loading) return <div className="p-10 text-center text-slate-500">{t('attendance.sessions.loading')}</div>;
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 p-6 pb-24 animate-in fade-in duration-700">
       <div className="flex items-center gap-5 px-2">
         <div className="flex h-16 w-16 items-center justify-center rounded-[24px] border border-slate-700 bg-slate-900 text-brand-400 shadow-2xl ring-4 ring-brand-400/10 dark:bg-slate-800"><Clock size={32} strokeWidth={2.5} /></div>
         <div>
-          <h1 className="text-4xl font-black uppercase leading-none tracking-tight text-slate-900 dark:text-white">Session Settings</h1>
-          <p className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Set attendance session times per branch — names are shared, times are branch-specific</p>
+          <h1 className="text-4xl font-black uppercase leading-none tracking-tight text-slate-900 dark:text-white">{t('attendance.sessions.title')}</h1>
+          <p className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">{t('attendance.sessions.subtitle')}</p>
         </div>
       </div>
 
       {!branches.length ? (
         <div className="rounded-[32px] border border-dashed border-slate-200 bg-white p-12 text-center dark:border-slate-700 dark:bg-slate-900">
           <Building2 className="mx-auto mb-3 text-slate-300" size={40} />
-          <p className="text-sm font-bold text-slate-500">No branches yet. Create a branch first, then set its session times here.</p>
+          <p className="text-sm font-bold text-slate-500">{t('attendance.sessions.noBranches')}</p>
         </div>
       ) : (
         <section className="space-y-6 rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div>
-            <label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500"><Building2 size={14} className="text-brand-500" /> Branch</label>
+            <label className="mb-2 flex items-center gap-2 text-xs font-black uppercase text-slate-500"><Building2 size={14} className="text-brand-500" /> {t('common.branch')}</label>
             <select
               value={selectedBranchId}
               onChange={e => setSelectedBranchId(e.target.value)}
@@ -125,16 +127,16 @@ const SessionSettings = () => {
 
           <div className="overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800">
             <div className="grid grid-cols-[1fr_auto] items-center gap-4 border-b border-slate-100 bg-slate-50 px-5 py-3 text-[10px] font-black uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-800/50">
-              <span>Session</span><span>Time</span>
+              <span>{t('attendance.sessions.session')}</span><span>{t('attendance.sessions.time')}</span>
             </div>
             {loadingSessions ? (
-              <div className="p-8 text-center text-sm font-semibold text-slate-400">Loading session times...</div>
+              <div className="p-8 text-center text-sm font-semibold text-slate-400">{t('attendance.sessions.loadingTimes')}</div>
             ) : (
               SESSION_ORDER.map(name => {
                 const Icon = SESSION_ICON[name];
                 return (
                   <div key={name} className="grid grid-cols-[1fr_auto] items-center gap-4 border-b border-slate-100 px-5 py-4 last:border-b-0 dark:border-slate-800">
-                    <span className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white"><Icon size={16} className="text-amber-500" /> {name}</span>
+                    <span className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white"><Icon size={16} className="text-amber-500" /> {tv(name)}</span>
                     <input
                       type="time"
                       value={times[name] || ''}
@@ -152,7 +154,7 @@ const SessionSettings = () => {
             disabled={saving || loadingSessions}
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-600 px-6 py-3.5 text-sm font-black uppercase tracking-wide text-white shadow-md transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <Save size={16} /> {saving ? 'Saving...' : 'Save Changes'}
+            <Save size={16} /> {saving ? t('common.saving') : t('common.saveChanges')}
           </button>
         </section>
       )}

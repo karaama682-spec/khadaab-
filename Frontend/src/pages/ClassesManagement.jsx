@@ -3,9 +3,11 @@ import { Plus, X, Edit2, Trash2, BookOpen, Search } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { classLabel, classSearchText } from '../utils/classLabel';
+import { useLanguage } from '../i18n/LanguageContext.jsx';
 
 const ClassesManagement = () => {
   const { showAlert, showConfirm } = useAlert();
+  const { t } = useLanguage();
   const [data, setData] = useState(() => {
     try {
       const cached = sessionStorage.getItem('cachedClassesData');
@@ -71,11 +73,11 @@ const ClassesManagement = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name) {
-      showAlert({ type: 'warning', title: 'Validation Error', message: 'Class name is required.' });
+      showAlert({ type: 'warning', title: t('common.validationError'), message: t('academic.classes.nameRequired') });
       return;
     }
     if (!formData.branchId) {
-      showAlert({ type: 'warning', title: 'Validation Error', message: 'Please select a branch for this class.' });
+      showAlert({ type: 'warning', title: t('common.validationError'), message: t('academic.classes.branchRequired') });
       return;
     }
 
@@ -83,27 +85,27 @@ const ClassesManagement = () => {
       if (editingItem) {
         const res = await api.put(`/classes/${editingItem._id}`, formData);
         setData(prev => prev.map(i => i._id === editingItem._id ? (res.data || { ...i, ...formData }) : i));
-        showAlert({ type: 'success', title: 'Success', message: 'Class updated successfully.' });
+        showAlert({ type: 'success', title: t('common.success'), message: t('academic.classes.updated') });
       } else {
         const res = await api.post('/classes', formData);
         setData(prev => [res.data, ...prev]);
-        showAlert({ type: 'success', title: 'Success', message: 'New class created successfully.' });
+        showAlert({ type: 'success', title: t('common.success'), message: t('academic.classes.created') });
       }
       setIsModalOpen(false);
       fetchData();
     } catch (error) {
       console.error("Failed to save class", error);
-      showAlert({ type: 'danger', title: 'Error', message: error.response?.data?.message || 'Failed to save class.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: error.response?.data?.message || t('academic.classes.saveFailed') });
     }
   };
 
   const handleDelete = async (item) => {
     const ok = await showConfirm({
       type: 'warning',
-      title: 'Delete Class?',
-      message: `Are you sure you want to delete "${item.name}"? This cannot be undone.`,
-      confirmText: 'Yes, delete',
-      cancelText: 'Cancel',
+      title: t('academic.classes.deleteTitle'),
+      message: t('academic.classes.deleteConfirm', { name: item.name }),
+      confirmText: t('common.yesDelete'),
+      cancelText: t('common.cancel'),
       danger: true
     });
     if (!ok) return;
@@ -111,10 +113,10 @@ const ClassesManagement = () => {
     try {
       await api.delete(`/classes/${item._id}`);
       setData(prev => prev.filter(i => i._id !== item._id));
-      showAlert({ type: 'success', title: 'Deleted', message: 'Class deleted successfully.' });
+      showAlert({ type: 'success', title: t('common.deleted'), message: t('academic.classes.deletedMsg') });
     } catch (error) {
       console.error("Failed to delete class", error);
-      showAlert({ type: 'danger', title: 'Error', message: 'Failed to delete class.' });
+      showAlert({ type: 'danger', title: t('common.error'), message: t('academic.classes.deleteFailed') });
     }
   };
 
@@ -124,7 +126,7 @@ const ClassesManagement = () => {
     classSearchText(item).toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (loading) return <div className="p-10 text-center text-slate-500">Loading Classes...</div>;
+  if (loading) return <div className="p-10 text-center text-slate-500">{t('academic.classes.loading')}</div>;
 
   return (
     <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24">
@@ -135,15 +137,15 @@ const ClassesManagement = () => {
             <BookOpen size={32} strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">Classes</h1>
-            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">Academic Hub</p>
+            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase leading-none">{t('academic.classes.title')}</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-[10px] font-black mt-2 uppercase tracking-[0.2em] opacity-80">{t('academic.classes.subtitle')}</p>
           </div>
         </div>
         <button
           onClick={openAddModal}
           className="flex items-center gap-3 px-8 py-4 bg-brand-600 hover:bg-brand-700 text-white rounded-[20px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl transition-all active:scale-95"
         >
-          <Plus size={18} strokeWidth={3} /> Add New Class
+          <Plus size={18} strokeWidth={3} /> {t('academic.classes.addNew')}
         </button>
       </div>
 
@@ -152,7 +154,7 @@ const ClassesManagement = () => {
         <Search size={18} className="text-slate-400 mr-3" />
         <input
           type="text"
-          placeholder="Search by class name or branch..."
+          placeholder={t('academic.classes.searchPlaceholder')}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400"
@@ -165,12 +167,12 @@ const ClassesManagement = () => {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100 dark:border-slate-800">
-                <th className="px-8 py-5">Class Name</th>
-                <th className="px-8 py-5">Branch</th>
-                <th className="px-8 py-5">Full Class Name</th>
-                <th className="px-8 py-5">Grade Level</th>
-                <th className="px-8 py-5">Room</th>
-                <th className="px-8 py-5 text-right">Actions</th>
+                <th className="px-8 py-5">{t('academic.classes.colName')}</th>
+                <th className="px-8 py-5">{t('common.branch')}</th>
+                <th className="px-8 py-5">{t('academic.classes.colFullName')}</th>
+                <th className="px-8 py-5">{t('academic.classes.colGrade')}</th>
+                <th className="px-8 py-5">{t('academic.classes.colRoom')}</th>
+                <th className="px-8 py-5 text-right">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -209,7 +211,7 @@ const ClassesManagement = () => {
               ))}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="px-8 py-10 text-center text-slate-400 text-sm font-medium">No classes found. Click "Add New Class" to create one.</td>
+                  <td colSpan="6" className="px-8 py-10 text-center text-slate-400 text-sm font-medium">{t('academic.classes.empty')}</td>
                 </tr>
               )}
             </tbody>
@@ -223,7 +225,7 @@ const ClassesManagement = () => {
           <div className="bg-white dark:bg-slate-900 rounded-[32px] p-8 max-w-lg w-full shadow-2xl border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
-                {editingItem ? 'Edit Class' : 'Add New Class'}
+                {editingItem ? t('academic.classes.editTitle') : t('academic.classes.addNew')}
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-full">
                 <X size={20} />
@@ -232,31 +234,31 @@ const ClassesManagement = () => {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Branch *</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('academic.classes.branchLabel')}</label>
                 <select
                   required
                   value={formData.branchId}
                   onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
                 >
-                  <option value="">-- Select Branch --</option>
+                  <option value="">{t('common.selectBranch')}</option>
                   {branches.map((b) => (
                     <option key={b._id} value={b._id}>{b.name}</option>
                   ))}
                 </select>
                 {branches.length === 0 && (
                   <p className="mt-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                    No active branches yet. Add one under Institute Structure &rarr; Branches first.
+                    {t('academic.classes.noBranches')}
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Class Name *</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('academic.classes.nameLabel')}</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Tamhiid 3"
+                  placeholder={t('academic.classes.namePlaceholder')}
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
@@ -264,10 +266,10 @@ const ClassesManagement = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Grade Level</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('academic.classes.colGrade')}</label>
                 <input
                   type="text"
-                  placeholder="Grade 10"
+                  placeholder={t('academic.classes.gradePlaceholder')}
                   value={formData.gradeLevel}
                   onChange={(e) => setFormData({ ...formData, gradeLevel: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
@@ -275,10 +277,10 @@ const ClassesManagement = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1">Room</label>
+                <label className="block text-xs font-black uppercase text-slate-500 mb-1">{t('academic.classes.colRoom')}</label>
                 <input
                   type="text"
-                  placeholder="Room A-102"
+                  placeholder={t('academic.classes.roomPlaceholder')}
                   value={formData.room}
                   onChange={(e) => setFormData({ ...formData, room: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
@@ -291,13 +293,13 @@ const ClassesManagement = () => {
                   onClick={() => setIsModalOpen(false)}
                   className="px-6 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs uppercase"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="px-6 py-3 rounded-xl bg-brand-600 text-white font-bold text-xs uppercase shadow-lg hover:bg-brand-700"
                 >
-                  {editingItem ? 'Save Changes' : 'Create Class'}
+                  {editingItem ? t('common.saveChanges') : t('academic.classes.create')}
                 </button>
               </div>
             </form>
