@@ -19,7 +19,8 @@ import {
   Settings,
   ClipboardList,
   PenSquare,
-  Award
+  Award,
+  BookmarkCheck
 } from 'lucide-react';
 import { UserRole } from './types.js';
 
@@ -44,6 +45,12 @@ export const NAV_CONFIG = [
         translationKey: 'quranSurahs',
         path: '/quran/surahs',
         icon: BookOpen
+      },
+      {
+        label: 'Jadwalka Cashirada',
+        translationKey: 'quranLessons',
+        path: '/quran/lessons',
+        icon: BookmarkCheck
       }
     ]
   },
