@@ -112,6 +112,7 @@ app.use('/api/salaries', require('./routes/salaryRoutes'));
 app.use('/api/wallets', require('./routes/walletRoutes'));
 app.use('/api/transactions', require('./routes/transactionRoutes'));
 app.use('/api/cashbook', require('./routes/cashbookRoutes'));
+app.use('/api/cycle-locks', require('./routes/cycleLockRoutes'));
 app.use('/api/expenses', require('./routes/expenseRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/quran/surahs', require('./routes/quranSurahRoutes'));
@@ -126,6 +127,7 @@ app.use('/api/analytics', require('./routes/aiAnalyticsRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/tenants', require('./routes/tenantRoutes'));
+app.use('/api/audit-logs', require('./routes/auditLogRoutes'));
 app.use('/api/exams', require('./routes/examRoutes'));
 
 // Health check. Deliberately minimal: reports liveness and DB connection state
