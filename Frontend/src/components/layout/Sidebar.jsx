@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { NAV_CONFIG } from '../../constants.jsx';
 import { UserRole } from '../../types.js';
 import api from '../../services/api';
-import { userHasPermission } from '../../utils/permissionUtils';
+import { userHasPermission, hasNavPermission } from '../../utils/permissionUtils';
 import { useLanguage } from '../../i18n/LanguageContext.jsx';
 
 const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, onLogout }) => {
@@ -46,22 +46,7 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
   }, []);
 
   const hasPermission = (label, subLabel = null) => {
-    const roleNormalized = typeof userRole === 'string' ? userRole.toLowerCase() : '';
-
-    if (roleNormalized.includes('admin') ||
-      roleNormalized.includes('super') ||
-      roleNormalized.includes('system') ||
-      roleNormalized.includes('owner') ||
-      roleNormalized === (UserRole.SUPER_ADMIN || '').toLowerCase()) return true;
-
-    const navItem = NAV_CONFIG.find(item => item.label === label);
-    if (navItem && navItem.roles?.includes(userRole)) return true;
-
-    if (!user?.roles || user.roles.length === 0) {
-      return false;
-    }
-
-    return userHasPermission(user, label, 'Read', subLabel);
+    return hasNavPermission(user, userRole, label, subLabel, NAV_CONFIG);
   };
 
   const toggleExpand = (label) => {
@@ -120,6 +105,16 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
   const filteredNav = getFilteredNav();
   const roleLabel = tv(user?.roles?.[0]?.name) || (userRole ? (language === 'en' ? userRole : t(`nav.roles.${userRole}`, { defaultValue: tv(userRole) })) : tv('Super Admin'));
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isMobileOpen) {
+        setIsMobileOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileOpen, setIsMobileOpen]);
+
   const SidebarContent = () => (
     <div className="flex flex-col h-full bg-[#080E1A] text-slate-300 relative overflow-hidden">
       {/* Ambient background glow */}
@@ -127,7 +122,7 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
       <div className="pointer-events-none absolute top-1/2 -right-24 h-48 w-48 rounded-full bg-emerald-500/5 blur-3xl" />
 
       {/* Brand Header */}
-      <div className="p-5 flex items-center gap-3.5 border-b border-white/10 relative z-10 backdrop-blur-md">
+      <div className="p-5 pr-14 lg:pr-5 flex items-center gap-3.5 border-b border-white/10 relative z-10 backdrop-blur-md">
         <div className="w-11 h-11 bg-gradient-to-tr from-brand-700 via-brand-600 to-emerald-500 rounded-2xl flex items-center justify-center font-black text-white shadow-xl shadow-brand-950/50 overflow-hidden shrink-0 ring-1 ring-white/25">
           {tenantInfo.logo ? (
             <img src={tenantInfo.logo} alt={t('settings.profile.logoAlt')} className="w-full h-full object-cover" />
@@ -240,15 +235,19 @@ const Sidebar = ({ user, userRole, isMobileOpen, setIsMobileOpen, onNavigate, on
       </aside>
 
       {isMobileOpen && (
-        <div className="fixed inset-0 z-50">
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsMobileOpen(false)} />
-          <div className="fixed inset-y-0 left-0 w-72 bg-[#071124] shadow-2xl transition-transform duration-300 transform">
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div
+            className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity duration-300"
+            onClick={() => setIsMobileOpen(false)}
+          />
+          <div className="fixed inset-y-0 left-0 w-[84vw] max-w-xs bg-[#080E1A] shadow-2xl z-50 flex flex-col transform transition-transform duration-300 ease-out animate-in slide-in-from-left">
             <SidebarContent />
             <button
               onClick={() => setIsMobileOpen(false)}
-              className="absolute top-6 right-6 p-2 rounded-full bg-slate-800 text-slate-400 hover:text-white transition-colors"
+              className="absolute top-5 right-4 p-2 rounded-xl bg-white/10 text-slate-400 hover:text-white hover:bg-white/20 transition-colors z-20"
+              aria-label="Xir liiska"
             >
-              <X size={20} />
+              <X size={18} />
             </button>
           </div>
         </div>

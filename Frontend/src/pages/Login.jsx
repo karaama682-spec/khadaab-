@@ -151,7 +151,7 @@ const Login = ({ onLogin }) => {
       <div className="pointer-events-none absolute -bottom-40 -right-40 h-[28rem] w-[28rem] rounded-full bg-emerald-500/15 blur-[130px]" />
       <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-64 w-64 rounded-full bg-blue-600/10 blur-[100px]" />
 
-      <section className="relative z-10 w-full max-w-md rounded-[36px] border border-white/20 bg-white/95 p-8 shadow-[0_30px_90px_rgba(0,0,0,0.45)] backdrop-blur-2xl dark:border-white/10 dark:bg-slate-900/90 md:p-10 transition-all duration-300">
+      <section className="relative z-10 w-full max-w-md rounded-[28px] sm:rounded-[36px] border border-white/20 bg-white/95 p-5 sm:p-8 md:p-10 shadow-[0_30px_90px_rgba(0,0,0,0.45)] backdrop-blur-2xl dark:border-white/10 dark:bg-slate-900/90 transition-all duration-300">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-3xl bg-gradient-to-tr from-brand-600 to-emerald-500 text-white shadow-xl shadow-brand-500/30 ring-4 ring-brand-500/20">
             {tenantBranding?.logo ? (

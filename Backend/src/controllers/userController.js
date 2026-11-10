@@ -1,8 +1,8 @@
 const asyncHandler = require('../middleware/asyncHandler');
 const User = require('../models/User');
-const Role = require('../models/Role');
 const { generateTeacherCode, withRetry } = require('../utils/generateCode');
 const { normalizePermissions } = require('../utils/permissionUtils');
+const { logAudit } = require('../utils/auditLogger');
 const jwt = require('jsonwebtoken');
 const { getJwtSecret } = require('../config/jwt');
 
@@ -15,6 +15,10 @@ const generateToken = (id) => {
 
 // Helper: Format user response object
 const formatUserResponse = (user, token = null) => {
+    const rawBranchIds = (Array.isArray(user.branchIds) && user.branchIds.length > 0)
+        ? user.branchIds
+        : (user.branchId ? [user.branchId] : []);
+
     const obj = {
         _id: user._id,
         fullName: user.fullName,
@@ -30,7 +34,8 @@ const formatUserResponse = (user, token = null) => {
         roles: user.roles || [],
         salary: user.salary || 0,
         status: user.status || 'active',
-        branchId: user.branchId || null,
+        branchId: user.branchId || rawBranchIds[0] || null,
+        branchIds: rawBranchIds,
         createdAt: user.createdAt
     };
     if (token) obj.token = token;
@@ -41,7 +46,7 @@ const formatUserResponse = (user, token = null) => {
 // @route   POST /api/users
 // @access  Private
 const registerUser = asyncHandler(async (req, res) => {
-    const { fullName, username, phone, email, password, role, roles, salary, status, branchId, gender, masuulName, masuulNumber, customPermissions } = req.body;
+    const { fullName, username, phone, email, password, role, roles, salary, status, branchId, branchIds, gender, masuulName, masuulNumber, customPermissions } = req.body;
     let cleanEmail = email ? String(email).trim().toLowerCase() : '';
 
     if (!cleanEmail) {
@@ -68,6 +73,9 @@ const registerUser = asyncHandler(async (req, res) => {
         )
         : undefined;
 
+    const resolvedBranchIds = Array.isArray(branchIds) ? branchIds.filter(Boolean) : (branchId ? [branchId] : []);
+    const primaryBranch = resolvedBranchIds[0] || branchId || null;
+
     const user = await User.create({
         fullName: nameToUse,
         phone: phone || '',
@@ -81,14 +89,19 @@ const registerUser = asyncHandler(async (req, res) => {
         roles: Array.isArray(roles) ? roles : [],
         salary: salary || 0,
         status: status || 'active',
-        branchId,
+        branchId: primaryBranch,
+        branchIds: resolvedBranchIds,
         masuulName: masuulName || '',
         masuulNumber: masuulNumber || '',
         customPermissions: normalizePermissions(customPermissions),
         ...(teacherCode ? { teacherCode } : {})
     });
 
-    const populatedUser = await User.findById(user._id).select('-passwordHash').populate('roles');
+    const populatedUser = await User.findById(user._id)
+        .select('-passwordHash')
+        .populate('roles')
+        .populate('branchId', 'name address phone')
+        .populate('branchIds', 'name address phone');
 
     if (user) {
         res.status(201).json(formatUserResponse(populatedUser, generateToken(user._id)));
@@ -192,7 +205,11 @@ const getUsers = asyncHandler(async (req, res) => {
     if (role) {
         query.role = role;
     }
-    const users = await User.find(query).select('-passwordHash').populate('roles');
+    const users = await User.find(query)
+        .select('-passwordHash')
+        .populate('roles')
+        .populate('branchId', 'name address phone')
+        .populate('branchIds', 'name address phone');
     const formatted = users.map(u => formatUserResponse(u));
     res.json(formatted);
 });
@@ -223,7 +240,11 @@ const authUser = asyncHandler(async (req, res) => {
 // @route   GET /api/users/profile
 // @access  Private
 const getUserProfile = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.user._id).select('-passwordHash').populate('roles');
+    const user = await User.findById(req.user._id)
+        .select('-passwordHash')
+        .populate('roles')
+        .populate('branchId', 'name address phone')
+        .populate('branchIds', 'name address phone');
     if (user) {
         res.json(formatUserResponse(user));
     } else {
@@ -249,7 +270,15 @@ const updateUser = asyncHandler(async (req, res) => {
         }
         user.salary = req.body.salary !== undefined ? req.body.salary : user.salary;
         user.status = req.body.status || user.status;
-        user.branchId = req.body.branchId || user.branchId;
+
+        if (req.body.branchIds !== undefined) {
+            user.branchIds = Array.isArray(req.body.branchIds) ? req.body.branchIds.filter(Boolean) : [];
+            user.branchId = user.branchIds[0] || null;
+        } else if (req.body.branchId !== undefined) {
+            user.branchId = req.body.branchId || null;
+            user.branchIds = user.branchId ? [user.branchId] : [];
+        }
+
         user.masuulName = req.body.masuulName !== undefined ? req.body.masuulName : user.masuulName;
         user.masuulNumber = req.body.masuulNumber !== undefined ? req.body.masuulNumber : user.masuulNumber;
 
@@ -274,7 +303,11 @@ const updateUser = asyncHandler(async (req, res) => {
         }
 
         await user.save();
-        const updatedUser = await User.findById(user._id).select('-passwordHash').populate('roles');
+        const updatedUser = await User.findById(user._id)
+            .select('-passwordHash')
+            .populate('roles')
+            .populate('branchId', 'name address phone')
+            .populate('branchIds', 'name address phone');
 
         res.json(formatUserResponse(updatedUser));
     } else {
@@ -295,8 +328,22 @@ const deleteUser = asyncHandler(async (req, res) => {
             throw new Error('You cannot delete your own account');
         }
 
+        const isTeacher = user.role === 'Teacher';
+        const entityType = isTeacher ? 'Teacher' : 'User';
+
+        // Capture full snapshot and record in central audit trail before deleting
+        await logAudit({
+            req,
+            action: 'DELETE',
+            entityType,
+            entityId: user._id,
+            entityName: user.fullName || user.username || 'User',
+            entityCode: user.teacherCode || '',
+            snapshot: user.toObject ? user.toObject() : user
+        });
+
         await user.deleteOne();
-        res.json({ message: 'User removed' });
+        res.json({ message: `${entityType} removed and recorded in audit log` });
     } else {
         res.status(404);
         throw new Error('User not found');

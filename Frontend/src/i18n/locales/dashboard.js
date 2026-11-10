@@ -52,14 +52,24 @@ export default {
         statLabel: 'Collected / Pending', actionText: 'Open Monthly Payments'
       },
       feesCollected: {
-        label: 'Student Fees Collected', subtitle: 'Fees collected from students', badge: 'Billing Cycle', description: '',
-        explanation: 'The total tuition fees collected from students this month ({cycle}). This page shows ONLY the people who paid this month and leaves out those who have not paid yet.',
+        label: 'Student Fees Collected', subtitle: 'Current month tuition collected', badge: 'Billing Cycle', description: '',
+        explanation: 'The tuition fees collected specifically for this month ({cycle}), excluding past debts or advance payments. This page shows ONLY the people who paid this month and leaves out those who have not paid yet.',
         statLabel: 'Total Expected', actionText: 'View Payers (Only Paid)'
       },
       pendingFees: {
         label: 'Pending Student Fees', subtitle: 'Unpaid student fees', badge: 'Uncollected', description: '',
         explanation: 'Tuition fees owed by students for the current cycle that have not been paid yet. This page shows ONLY the people who still owe and leaves out those who have paid in full.',
         statLabel: 'Total Expected', actionText: 'View Non-Payers (Only Pending)'
+      },
+      debtFeesCollected: {
+        label: 'Debt Fees Collected', subtitle: 'Arrears collected this cycle', badge: 'Arrears Paid', description: '',
+        explanation: 'Previous cycle debt payments collected from students during this cycle ({cycle}). This money reduces the remaining Previous Debt.',
+        statLabel: 'Remaining Debt', actionText: 'View Debt Arrears'
+      },
+      advanceFeesCollected: {
+        label: 'Advance Fees Collected', subtitle: 'Advance tuition collected', badge: 'Advance Paid', description: '',
+        explanation: 'Tuition fees collected during this cycle ({cycle}) that cover upcoming cycles (advance payments).',
+        statLabel: 'Advance Payments', actionText: 'Open Cashbook'
       },
       totalIncome: {
         label: 'Total Income', subtitle: 'All income received', badge: 'Finance Truth', description: '',
@@ -150,14 +160,24 @@ export default {
         statLabel: 'La Qaaday / Ku Dhiman', actionText: 'Fur Lacag-bixinta Bishii'
       },
       feesCollected: {
-        label: 'Khidmadda Ardayda La Qaaday', subtitle: 'Lacagaha Ardayda laga Qaaday', badge: 'Wareegga Lacag-bixinta', description: '',
-        explanation: 'Wadarta lacagaha waxbarashada ee ardayda laga soo ururiyey bishan ({cycle}). Boggan wuxuu kuu soo saarayaa KELIYA dadka bishan lacagta bixiyey, wuxuuna ka reebayaa dadka aan weli bixin.',
+        label: 'Khidmadda Bisha ee La Qaaday', subtitle: 'Kaliya khidmadda bishan la qabtay', badge: 'Wareegga Hadda', description: '',
+        explanation: 'Wadarta khidmadda rasmiga ah ee ardayda laga soo ururiyey bishan ({cycle}) oo kaliya (kuma jiraan deyn hore ama hormaris). Boggan wuxuu kuu soo saarayaa KELIYA dadka bishan lacagta bixiyey, wuxuuna ka reebayaa dadka aan weli bixin.',
         statLabel: 'Wadarta La Filayo', actionText: 'Eeg Dadka Bixiyey (Kaliya kuwa Bixiyey)'
       },
       pendingFees: {
         label: 'Khidmadda Ardayda Ku Dhiman', subtitle: 'Lacagaha Ardayda Ku Dhiman', badge: 'Aan la Qaadin', description: '',
         explanation: 'Lacagaha waxbarashada ee ardayda lagu leeyahay wareeggan socda ee aan weli la bixin. Boggan wuxuu ku tusayaa KELIYA dadka weli deyntu ku dhiman tahay, wuxuuna ka reebayaa kuwa lacagta wada bixiyey.',
         statLabel: 'Isku-darka La Filayo', actionText: 'Eeg Dadka aan Bixin (Kaliya kuwa Ku Dhiman)'
+      },
+      debtFeesCollected: {
+        label: 'Deymihii Hore ee la Qabtay', subtitle: 'Lacagaha deynta hore ee bishan la helay', badge: 'Deyn la Bixiyey', description: '',
+        explanation: 'Lacagihii deynta hore ahaa ee ardayda lagula lahaa ee la soo qabtay inta uu wareeggani ({cycle}) socday. Lacagtani waxay si toos ah u dhimaysaa Deynta Wareegyadii Hore.',
+        statLabel: 'Deynta Harsan', actionText: 'Eeg Deymaha Wareegyadii Hore'
+      },
+      advanceFeesCollected: {
+        label: 'Lacagaha Hormariska ah', subtitle: 'Khidmadda hormariska bilaha dambe', badge: 'Hormaris', description: '',
+        explanation: 'Lacagaha khidmadda waxbarashada ee la qabtay wareeggan ({cycle}) balse khuseeya wareegyada soo socda (hormaris ahaan loo bixiyey).',
+        statLabel: 'Lacago Hormaris ah', actionText: 'Fur Buugga Lacagta'
       },
       totalIncome: {
         label: 'Dakhliga Guud', subtitle: 'Dakhliga Guud ee Soo Galay', badge: 'Xogta Dhabta ah', description: '',

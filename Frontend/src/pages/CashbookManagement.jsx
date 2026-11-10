@@ -129,7 +129,16 @@ const emptyTransactionForm = () => ({
 const CashbookManagement = () => {
   const { showAlert, showConfirm } = useAlert();
   const { t, tv, language, locale } = useLanguage();
-  const [activePanel, setActivePanel] = useState('category');
+  const getInitialPanel = () => {
+    try {
+      const search = new URLSearchParams(window.location.search);
+      const p = search.get('panel') || search.get('tab');
+      if (p && ['category', 'transaction', 'cycleLocks', 'trash'].includes(p)) return p;
+    } catch (_) {}
+    return 'transaction';
+  };
+
+  const [activePanel, setActivePanel] = useState(getInitialPanel);
 
   const [categories, setCategories] = useState([]);
   const [entries, setEntries] = useState([]);
@@ -898,6 +907,65 @@ const CashbookManagement = () => {
         type: 'danger',
         title: t('common.error'),
         message: error.response?.data?.message || t('cashbook.restoreFailed')
+      });
+    }
+  };
+
+  const handleTransactionPermanentDelete = async (item) => {
+    const ok = await showConfirm({
+      type: 'danger',
+      title: t('cashbook.permanentDeleteConfirmTitle'),
+      message: t('cashbook.permanentDeleteConfirmMsg'),
+      confirmText: t('cashbook.permanentDelete'),
+      cancelText: t('common.cancel'),
+      danger: true
+    });
+    if (!ok) return;
+
+    try {
+      await api.delete(`/cashbook/entries/${item._id}/permanent`);
+      setDeletedEntries((prev) => prev.filter((x) => x._id !== item._id));
+      showAlert({ type: 'success', title: t('common.deleted'), message: t('cashbook.permanentDeletedSuccess') });
+      fetchAll();
+    } catch (error) {
+      showAlert({
+        type: 'danger',
+        title: t('common.error'),
+        message: error.response?.data?.message || t('cashbook.permanentDeleteFailed')
+      });
+    }
+  };
+
+  const handleEmptyTrash = async () => {
+    if (filteredDeletedEntries.length === 0) return;
+    const ok = await showConfirm({
+      type: 'danger',
+      title: t('cashbook.emptyTrashConfirmTitle'),
+      message: t('cashbook.emptyTrashConfirmMsg'),
+      confirmText: t('cashbook.emptyTrash'),
+      cancelText: t('common.cancel'),
+      danger: true
+    });
+    if (!ok) return;
+
+    try {
+      const cycleParam = trashCycle !== 'All' ? `?cycle=${trashCycle}` : '';
+      await api.delete(`/cashbook/entries/trash/empty${cycleParam}`);
+      if (trashCycle === 'All') {
+        setDeletedEntries([]);
+      } else {
+        setDeletedEntries((prev) => prev.filter((item) => {
+          const cycle = item.targetMonth || (item.date ? cycleKeyForDate(item.date) : null) || (item.deletedAt ? cycleKeyForDate(item.deletedAt) : null);
+          return cycle !== trashCycle;
+        }));
+      }
+      showAlert({ type: 'success', title: t('common.deleted'), message: t('cashbook.trashEmptiedSuccess') });
+      fetchAll();
+    } catch (error) {
+      showAlert({
+        type: 'danger',
+        title: t('common.error'),
+        message: error.response?.data?.message || t('cashbook.trashEmptyFailed')
       });
     }
   };
@@ -2507,7 +2575,7 @@ const CashbookManagement = () => {
               <div className="flex items-center gap-4">
                 <button
                   type="button"
-                  onClick={() => setActivePanel('all')}
+                  onClick={() => setActivePanel('transaction')}
                   className="p-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-black text-xs uppercase tracking-wider backdrop-blur-md transition-all active:scale-95 flex items-center gap-2 border border-white/10"
                   title={language === 'so' ? 'Dib ugu laabo Diiwaanka' : 'Back to Transactions'}
                 >
@@ -2527,9 +2595,21 @@ const CashbookManagement = () => {
               </div>
 
               <div className="flex items-center gap-3">
+                {filteredDeletedEntries.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleEmptyTrash}
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98] border border-rose-500/50"
+                    title={t('cashbook.emptyTrash')}
+                  >
+                    <Trash2 size={14} />
+                    <span>{t('cashbook.emptyTrash')}</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => setActivePanel('all')}
+                  onClick={() => setActivePanel('transaction')}
                   className="hidden sm:flex items-center gap-2 px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-black text-xs uppercase tracking-wider backdrop-blur-md transition-all active:scale-95 border border-white/10"
                 >
                   <ArrowLeft size={16} strokeWidth={2.5} />
@@ -2687,16 +2767,26 @@ const CashbookManagement = () => {
                           </div>
                         </td>
                         <td className="px-6 py-5 text-right whitespace-nowrap">
-                          {/* BADHANKA SOO CELI (RESTORE) HORTIISA KU YAAL */}
-                          <button
-                            type="button"
-                            onClick={() => handleTransactionRestore(item)}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
-                            title={t('cashbook.restore')}
-                          >
-                            <RotateCcw size={14} />
-                            <span>{t('cashbook.restore')}</span>
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleTransactionRestore(item)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+                              title={t('cashbook.restore')}
+                            >
+                              <RotateCcw size={14} />
+                              <span>{t('cashbook.restore')}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleTransactionPermanentDelete(item)}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98]"
+                              title={t('cashbook.permanentDelete')}
+                            >
+                              <Trash2 size={14} />
+                              <span>{t('cashbook.permanentDelete')}</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

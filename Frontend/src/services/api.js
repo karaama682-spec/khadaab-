@@ -6,15 +6,30 @@ import { translateApiMessage } from '../i18n/core.js';
 // Environment Variables for production. In local dev it falls back to localhost.
 // No production backend URL is hard-coded here on purpose — the deployment
 // controls it via env, so a backend URL change never requires a code change.
-const rawHost = import.meta.env.VITE_API_URL;
-const isPlaceholderHost = !rawHost || rawHost.includes('YOUR-BACKEND') || rawHost.includes('your-backend');
-const host = (!isPlaceholderHost ? rawHost : '') || (import.meta.env.DEV ? 'http://localhost:5005' : '');
+const resolveBaseUrl = () => {
+    const rawHost = import.meta.env.VITE_API_URL;
+    const isPlaceholderHost = !rawHost || rawHost.includes('YOUR-BACKEND') || rawHost.includes('your-backend');
 
-if (!host) {
-    console.error('[config] VITE_API_URL is not set. The app cannot reach the backend. Set VITE_API_URL in your production (Vercel) environment.');
-}
+    if (typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
 
-const apiBaseUrl = String(host).replace(/\/$/, '') + '/api';
+        // When accessing from a mobile phone / local network IP (e.g. 192.168.x.x, 10.x.x.x):
+        if (!isLocalHost) {
+            // If rawHost was explicitly set to a remote production backend (e.g. onrender.com):
+            if (rawHost && !isPlaceholderHost && !rawHost.includes('localhost') && !rawHost.includes('127.0.0.1')) {
+                return String(rawHost).replace(/\/$/, '') + '/api';
+            }
+            // For LAN / mobile access to local dev: relative '/api' is proxied by Vite seamlessly
+            return '/api';
+        }
+    }
+
+    const host = (!isPlaceholderHost ? rawHost : '') || (import.meta.env.DEV ? 'http://localhost:5005' : '');
+    return String(host).replace(/\/$/, '') + '/api';
+};
+
+const apiBaseUrl = resolveBaseUrl();
 
 const api = axios.create({
     baseURL: apiBaseUrl,

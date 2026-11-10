@@ -1,6 +1,7 @@
 const asyncHandler = require('../middleware/asyncHandler');
 const Payment = require('../models/Payment');
 const { cycleKeyForDate, isValidCycleKey } = require('../utils/billingCycle');
+const { logAudit } = require('../utils/auditLogger');
 
 const getPayments = asyncHandler(async (req, res) => {
     const data = await Payment.find()
@@ -151,8 +152,16 @@ const deletePayment = asyncHandler(async (req, res) => {
             }
             await Transaction.deleteMany({ referenceId: payment._id });
         }
+        await logAudit({
+            req,
+            action: 'DELETE',
+            entityType: 'Payment',
+            entityId: payment._id,
+            entityName: `Payment: $${payment.amount} (${payment.paymentMethod || 'Cash'})`,
+            snapshot: payment.toObject ? payment.toObject() : payment
+        });
         await payment.deleteOne();
-        res.json({ message: 'Payment removed' });
+        res.json({ message: 'Payment removed and logged to audit trail' });
     } else {
         res.status(404);
         throw new Error('Payment not found');

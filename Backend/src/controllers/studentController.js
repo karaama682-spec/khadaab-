@@ -2,6 +2,7 @@ const asyncHandler = require('../middleware/asyncHandler');
 const Student = require('../models/Student');
 const { generateStudentCode, withRetry } = require('../utils/generateCode');
 const { currentCycle, addCycles, cycleKeyForDate } = require('../utils/billingCycle');
+const { logAudit } = require('../utils/auditLogger');
 
 const getStudents = asyncHandler(async (req, res) => {
     // Status handling for the Exit/Archive feature:
@@ -191,6 +192,11 @@ const updateStudent = asyncHandler(async (req, res) => {
         }
     }
 
+    if (payload.monthlyFee !== undefined && payload.feeScope === 'all') {
+        const CycleDebtSnapshot = require('../models/CycleDebtSnapshot');
+        await CycleDebtSnapshot.deleteMany({ cycle: { $gte: '2026-09' } }).catch(() => {});
+    }
+
     const data = await Student.findByIdAndUpdate(req.params.id, payload, { new: true }).populate('guardianId').populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } });
     if (data) {
         res.json(data);
@@ -201,13 +207,22 @@ const updateStudent = asyncHandler(async (req, res) => {
 });
 
 const deleteStudent = asyncHandler(async (req, res) => {
-    const data = await Student.findByIdAndDelete(req.params.id);
-    if (data) {
-        res.json({ message: 'Student removed' });
-    } else {
+    const student = await Student.findById(req.params.id);
+    if (!student) {
         res.status(404);
         throw new Error('Student not found');
     }
+    await logAudit({
+        req,
+        action: 'DELETE',
+        entityType: 'Student',
+        entityId: student._id,
+        entityName: student.fullName,
+        entityCode: student.studentCode || student.rollNumber || '',
+        snapshot: student.toObject ? student.toObject() : student
+    });
+    await student.deleteOne();
+    res.json({ message: 'Student removed and logged to audit trail' });
 });
 
 // @desc    Exit / archive a student (Active → Exited). NO data is deleted; the
@@ -232,6 +247,10 @@ const exitStudent = asyncHandler(async (req, res) => {
     student.exitedBy = req.user?._id || null;
     student.exitedAt = new Date();
     await student.save();
+
+    // Invalidate cached snapshots for upcoming/current cycles so exit is reflected
+    const CycleDebtSnapshot = require('../models/CycleDebtSnapshot');
+    await CycleDebtSnapshot.deleteMany({ cycle: { $gte: '2026-09' } }).catch(() => {});
 
     const populated = await Student.findById(student._id)
         .populate('guardianId')
@@ -318,10 +337,50 @@ const restoreStudent = asyncHandler(async (req, res) => {
     student.exitedAt = null;
     await student.save();
 
+    // Invalidate cached snapshots for upcoming/current cycles so restored student is reflected
+    const CycleDebtSnapshot = require('../models/CycleDebtSnapshot');
+    await CycleDebtSnapshot.deleteMany({ cycle: { $gte: '2026-09' } }).catch(() => {});
+
     const populated = await Student.findById(student._id)
         .populate('guardianId')
         .populate({ path: 'classId', populate: { path: 'branchId', select: 'name' } });
     res.json(populated);
+});
+
+// @desc    Fix / reconcile exit dates for exited students to cycle 2026-08 closure (2026-09-24)
+//          so that cycle 2026-09 is not contaminated with phantom fees/debts after restore testing.
+// @route   POST /api/students/fix-exit-dates
+const fixExitDates = asyncHandler(async (req, res) => {
+    const cutoff = new Date('2026-09-24T23:59:59.999Z');
+    const filter = req.body?.forceAll
+        ? { status: 'Exited' }
+        : {
+            status: 'Exited',
+            $or: [
+                { exitDate: { $gt: cutoff } },
+                { exitDate: null },
+                { exitDate: { $exists: false } }
+            ]
+        };
+
+    const result = await Student.updateMany(
+        filter,
+        {
+            $set: {
+                exitDate: cutoff,
+                exitReason: 'Exited at cycle 2026-08 closure'
+            }
+        }
+    );
+
+    const CycleDebtSnapshot = require('../models/CycleDebtSnapshot');
+    await CycleDebtSnapshot.deleteMany({ cycle: { $gte: '2026-09' } }).catch(() => {});
+
+    res.json({
+        success: true,
+        message: `Successfully updated exit dates for ${result.modifiedCount} student(s) to 2026-09-24 and cleared cycle 2026-09 snapshot.`,
+        modifiedCount: result.modifiedCount
+    });
 });
 
 module.exports = {
@@ -332,5 +391,6 @@ module.exports = {
     deleteStudent,
     exitStudent,
     restoreStudent,
-    getStudentArchive
+    getStudentArchive,
+    fixExitDates
 };

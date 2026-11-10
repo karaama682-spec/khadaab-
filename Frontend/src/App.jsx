@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Sidebar from './components/layout/Sidebar.jsx';
 import Navbar from './components/layout/Navbar.jsx';
+import BottomNav from './components/layout/BottomNav.jsx';
 import Login from './pages/Login.jsx';
 import api from './services/api';
 import { applyBrandColors, getDefaultColors } from './utils/colorUtils';
 import DashboardOverview from './pages/DashboardOverview.jsx';
 
 import ClassesManagement from './pages/ClassesManagement.jsx';
+import SubjectsManagement from './pages/SubjectsManagement.jsx';
 import TeachersManagement from './pages/TeachersManagement.jsx';
 import StudentsManagement from './pages/StudentsManagement.jsx';
 import GuardiansManagement from './pages/GuardiansManagement.jsx';
@@ -15,7 +17,9 @@ import ExitStudents from './pages/ExitStudents.jsx';
 import StudentAttendanceManagement from './pages/StudentAttendanceManagement.jsx';
 import TeacherAttendanceManagement from './pages/TeacherAttendanceManagement.jsx';
 import SessionSettings from './pages/SessionSettings.jsx';
+import ExamDashboard from './pages/ExamDashboard.jsx';
 import ExamsManagement from './pages/ExamsManagement.jsx';
+import ExamSchedule from './pages/ExamSchedule.jsx';
 import ExamMarks from './pages/ExamMarks.jsx';
 import ExamResults from './pages/ExamResults.jsx';
 import ClassPromotion from './pages/ClassPromotion.jsx';
@@ -42,7 +46,7 @@ import QuranLessonManagement from './pages/QuranLessonManagement.jsx';
 
 import { UserRole } from './types.js';
 import { NAV_CONFIG } from './constants.jsx';
-import { userHasPermission } from './utils/permissionUtils';
+import { userHasPermission, hasNavPermission, getDefaultLandingPath } from './utils/permissionUtils';
 import { useLanguage } from './i18n/LanguageContext.jsx';
 import ErrorBoundary from './components/common/ErrorBoundary.jsx';
 
@@ -51,8 +55,6 @@ const RoleGuard = ({ children, currentRole, user }) => {
   const path = location.pathname;
 
   const isAllowed = () => {
-    if (path === '/') return true;
-
     const roleNormalized = typeof currentRole === 'string' ? currentRole.toLowerCase() : '';
     const isSpecialRole = roleNormalized.includes('admin') || 
                          roleNormalized.includes('super') || 
@@ -60,6 +62,11 @@ const RoleGuard = ({ children, currentRole, user }) => {
                          roleNormalized.includes('system');
 
     if (isSpecialRole) return true;
+
+    // For root path '/', strictly verify if user is authorized for Dashboard!
+    if (path === '/') {
+      return hasNavPermission(user, currentRole, 'Dashboard', null, NAV_CONFIG);
+    }
 
     const matchingNavItem = NAV_CONFIG.find(item => {
       if (item.path === path) return true;
@@ -69,17 +76,12 @@ const RoleGuard = ({ children, currentRole, user }) => {
     });
 
     if (matchingNavItem) {
-      if (matchingNavItem.roles?.includes(currentRole)) return true;
-      if (user?.roles && user.roles.length > 0) {
-        const moduleKey = matchingNavItem.label;
-        let subLabel = null;
-        if (matchingNavItem.subItems) {
-           const subItem = matchingNavItem.subItems.find(sub => path.startsWith(sub.path));
-           if (subItem) subLabel = subItem.label;
-        }
-        return userHasPermission(user, moduleKey, 'Read', subLabel);
+      let subLabel = null;
+      if (matchingNavItem.subItems) {
+        const subItem = matchingNavItem.subItems.find(sub => path.startsWith(sub.path));
+        if (subItem) subLabel = subItem.label;
       }
-      return false;
+      return hasNavPermission(user, currentRole, matchingNavItem.label, subLabel, NAV_CONFIG);
     }
 
     return true;
@@ -87,7 +89,11 @@ const RoleGuard = ({ children, currentRole, user }) => {
 
   if (!isAllowed()) {
     console.warn('Access Denied:', { path, currentRole });
-    return <Navigate to="/" replace />;
+    const landingPath = getDefaultLandingPath(user, currentRole, NAV_CONFIG);
+    // If already on the landing path or loop avoided, go to landingPath
+    if (landingPath !== path) {
+      return <Navigate to={landingPath} replace />;
+    }
   }
 
   return <>{children}</>;
@@ -134,13 +140,22 @@ const App = () => {
       try {
         const parsedUser = JSON.parse(userInfo);
         setUser(parsedUser);
-        setCurrentRole(parsedUser.role || parsedUser.roles?.[0]?.name?.toUpperCase().replace(/ /g, '_'));
+        const resolvedRole = parsedUser.role || parsedUser.roles?.[0]?.name?.toUpperCase().replace(/ /g, '_');
+        setCurrentRole(resolvedRole);
         setLoading(false);
         fetchBranches();
         fetchTenantSettings();
         api.get('/settings').then(({ data }) => {
           if (data?.localization?.language) setLanguage(data.localization.language);
         }).catch(() => {});
+
+        // If user is at root path but does not have permission for Dashboard, redirect to landing module
+        if (!hasNavPermission(parsedUser, resolvedRole, 'Dashboard', null, NAV_CONFIG)) {
+          const defaultPath = getDefaultLandingPath(parsedUser, resolvedRole, NAV_CONFIG);
+          if (window.location.hash === '#/' || !window.location.hash || window.location.hash === '#') {
+            window.location.hash = defaultPath;
+          }
+        }
       } catch (e) {
         sessionStorage.removeItem('userInfo');
         setUser(null);
@@ -201,10 +216,16 @@ const App = () => {
   const handleLogin = (userData) => {
     sessionStorage.setItem('userInfo', JSON.stringify(userData));
     localStorage.removeItem('userInfo');
+    const resolvedRole = userData.role || userData.roles?.[0]?.name?.toUpperCase().replace(/ /g, '_');
     setUser(userData);
-    setCurrentRole(userData.role || userData.roles?.[0]?.name?.toUpperCase().replace(/ /g, '_'));
+    setCurrentRole(resolvedRole);
     fetchBranches();
     fetchTenantSettings();
+
+    const targetPath = getDefaultLandingPath(userData, resolvedRole, NAV_CONFIG);
+    if (window.location.hash !== `#${targetPath}` && window.location.hash !== targetPath) {
+      window.location.hash = targetPath;
+    }
   };
 
   const handleLogout = () => {
@@ -245,29 +266,33 @@ const App = () => {
         {!user ? (
           <Login onLogin={handleLogin} />
         ) : (
-          <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors">
-            <Sidebar
-              user={user}
-              userRole={currentRole}
-              isMobileOpen={isSidebarOpen}
-              setIsMobileOpen={setIsSidebarOpen}
-              onNavigate={(path) => {
-                window.location.hash = path;
-              }}
-              onLogout={handleLogout}
-            />
-
-            <div className="flex flex-col flex-1 min-w-0">
-              <Navbar
+          <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors print:block print:min-h-0 print:h-auto print:bg-white">
+            <div className="print:hidden">
+              <Sidebar
                 user={user}
-                currentRole={currentRole}
-                onMenuClick={() => setIsSidebarOpen(true)}
-                isDarkMode={isDarkMode}
-                toggleDarkMode={toggleDarkMode}
+                userRole={currentRole}
+                isMobileOpen={isSidebarOpen}
+                setIsMobileOpen={setIsSidebarOpen}
+                onNavigate={(path) => {
+                  window.location.hash = path;
+                }}
                 onLogout={handleLogout}
               />
+            </div>
 
-              <main className="flex-1 bg-slate-50 dark:bg-slate-950 overflow-y-auto overflow-x-hidden">
+            <div className="flex flex-col flex-1 min-w-0 print:block print:w-full print:h-auto">
+              <div className="print:hidden">
+                <Navbar
+                  user={user}
+                  currentRole={currentRole}
+                  onMenuClick={() => setIsSidebarOpen(true)}
+                  isDarkMode={isDarkMode}
+                  toggleDarkMode={toggleDarkMode}
+                  onLogout={handleLogout}
+                />
+              </div>
+
+              <main className="flex-1 bg-slate-50 dark:bg-slate-950 overflow-y-auto overflow-x-hidden print:overflow-visible print:h-auto print:block print:bg-white print:p-0 pb-20 lg:pb-0">
                 <RoleGuard currentRole={currentRole} user={user}>
                   <Routes>
                     <Route path="/" element={<DashboardOverview />} />
@@ -277,6 +302,7 @@ const App = () => {
 
                     {/* Academic Management */}
                     <Route path="/academic/classes" element={<ClassesManagement />} />
+                    <Route path="/academic/subjects" element={<SubjectsManagement />} />
                     <Route path="/academic/teachers" element={<TeachersManagement />} />
                     <Route path="/academic/students" element={<StudentsManagement />} />
                     <Route path="/academic/guardians" element={<GuardiansManagement />} />
@@ -294,7 +320,9 @@ const App = () => {
                     <Route path="/attendance/session-settings" element={<SessionSettings />} />
 
                     {/* Examinations */}
+                    <Route path="/exams/dashboard" element={<ExamDashboard />} />
                     <Route path="/exams" element={<ExamsManagement />} />
+                    <Route path="/exams/schedule" element={<ExamSchedule />} />
                     <Route path="/exams/marks" element={<ExamMarks />} />
                     <Route path="/exams/results" element={<ExamResults />} />
 
@@ -323,9 +351,18 @@ const App = () => {
                 </RoleGuard>
               </main>
 
-              <footer className="py-4 px-8 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 text-xs text-center">
+              <footer className="py-4 px-8 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-400 dark:text-slate-500 text-xs text-center print:hidden hidden lg:block">
                 &copy; {new Date().getFullYear()} {t('nav.instituteManagement')}
               </footer>
+
+              {/* Mobile Bottom Navigation Bar (Phone thumb navigation) */}
+              <div className="print:hidden">
+                <BottomNav
+                  user={user}
+                  currentRole={currentRole}
+                  onOpenSidebar={() => setIsSidebarOpen(true)}
+                />
+              </div>
             </div>
           </div>
         )}

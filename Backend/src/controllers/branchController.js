@@ -15,6 +15,19 @@ const getBranchs = asyncHandler(async (req, res) => {
     // `?status=Active` backs the class form, which must only offer branches that
     // are still open. Without it the behaviour is unchanged: every branch.
     const filter = req.query.status ? { status: req.query.status } : {};
+
+    // Teachers only see the branch(es) they are assigned to
+    if (req.user && req.user.role === 'Teacher') {
+        const teacherBranches = [
+            ...(req.user.branchIds || []),
+            ...(req.user.branchId ? [req.user.branchId] : [])
+        ].map(String).filter(Boolean);
+
+        if (teacherBranches.length > 0) {
+            filter._id = { $in: teacherBranches };
+        }
+    }
+
     const data = await Branch.find(filter).sort({ name: 1 }).lean();
     res.json(data);
 });

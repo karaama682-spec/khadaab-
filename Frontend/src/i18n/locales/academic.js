@@ -5,9 +5,10 @@ export default {
     classes: {
       title: 'Classes', subtitle: 'Academic Hub', addNew: 'Add New Class', editTitle: 'Edit Class', create: 'Create Class',
       loading: 'Loading Classes...', searchPlaceholder: 'Search by class name or branch...',
-      colName: 'Class Name', colFullName: 'Full Class Name', colGrade: 'Grade Level', colRoom: 'Room',
+      colName: 'Class Name', colFullName: 'Full Class Name', colGrade: 'Grade Level', colRoom: 'Room', colTeacher: 'Class Teacher',
       empty: 'No classes found. Click "Add New Class" to create one.',
       branchLabel: 'Branch *', nameLabel: 'Class Name *', namePlaceholder: 'e.g. Tamhiid 3',
+      teacherLabel: 'Class Teacher (Optional)', selectTeacher: '-- Select Class Teacher (Optional) --', noTeacher: 'Not Assigned',
       gradePlaceholder: 'Grade 10', roomPlaceholder: 'Room A-102',
       noBranches: 'No active branches yet. Add one under Institute Structure → Branches first.',
       nameRequired: 'Class name is required.', branchRequired: 'Please select a branch for this class.',
@@ -57,7 +58,9 @@ export default {
       session: 'Session', arrival: 'Arrival', exam: 'Exam', subjects: 'Subjects', totalMarks: 'Total Marks', remarks: 'Remarks',
       noPayments: 'No payments recorded.', noAttendance: 'No attendance records.', noExams: 'No exam records.',
       noTransactions: 'No linked transactions.', searchPlaceholder: 'Search exited students by name or code…',
-      viewHistory: 'View History', noneYet: 'No students have exited yet.', noMatch: 'No exited students match your search.'
+      viewHistory: 'View History', noneYet: 'No students have exited yet.', noMatch: 'No exited students match your search.',
+      colFee: 'Monthly Fee', colCycle: 'Exit Cycle', cycleFilter: 'Billing Cycle', allCycles: 'All Billing Cycles',
+      kpiExitedCount: 'Exited Students', kpiTotalFees: 'Total Monthly Fees', kpiAllTime: 'All-Time Exited', cycleBreakdown: 'Cycle Breakdown'
     },
     branches: {
       title: 'Branches', subtitle: 'Institute Locations', addNew: 'Add New Branch', editTitle: 'Edit Branch', create: 'Create Branch',
@@ -106,9 +109,10 @@ export default {
     classes: {
       title: 'Fasallada', subtitle: 'Xarunta Waxbarashada', addNew: 'Ku dar Fasal Cusub', editTitle: 'Wax ka beddel Fasalka', create: 'Samee Fasal',
       loading: 'Waxaa la soo rarayaa fasallada...', searchPlaceholder: 'Ku raadi magaca fasalka ama laanta...',
-      colName: 'Magaca Fasalka', colFullName: 'Magaca Fasalka oo Buuxa', colGrade: 'Heerka', colRoom: 'Qolka',
+      colName: 'Magaca Fasalka', colFullName: 'Magaca Fasalka oo Buuxa', colGrade: 'Heerka', colRoom: 'Qolka', colTeacher: 'Macallinka Fasalka',
       empty: 'Fasal lama helin. Guji "Ku dar Fasal Cusub" si aad mid u sameyso.',
       branchLabel: 'Laanta *', nameLabel: 'Magaca Fasalka *', namePlaceholder: 'tusaale: Tamhiid 3',
+      teacherLabel: 'Macallinka Fasalka (Ikhtiyaari)', selectTeacher: '-- Dooro Macallinka Fasalka (Ikhtiyaari) --', noTeacher: 'Lama xilsaarin',
       gradePlaceholder: 'Heerka 10', roomPlaceholder: 'Qolka A-102',
       noBranches: 'Weli ma jiraan laamo firfircoon. Marka hore mid ku dar Qaab-dhismeedka Machadka → Laamaha.',
       nameRequired: 'Magaca fasalka waa qasab.', branchRequired: 'Fadlan u dooro laan fasalkan.',
@@ -158,7 +162,9 @@ export default {
       session: 'Fadhiga', arrival: 'Imaanshaha', exam: 'Imtixaanka', subjects: 'Maaddooyinka', totalMarks: 'Wadarta Dhibcaha', remarks: 'Faallooyin',
       noPayments: 'Lacag-bixin lama diiwaangelin.', noAttendance: 'Diiwaan xaadirin ma jiro.', noExams: 'Diiwaan imtixaan ma jiro.',
       noTransactions: 'Macaamil ku xiran ma jiro.', searchPlaceholder: 'Ku raadi ardayda baxay magaca ama koodka…',
-      viewHistory: 'Eeg Taariikhda', noneYet: 'Weli arday ma bixin.', noMatch: 'Arday baxay oo raadintaada u dhigma lama helin.'
+      viewHistory: 'Eeg Taariikhda', noneYet: 'Weli arday ma bixin.', noMatch: 'Arday baxay oo raadintaada u dhigma lama helin.',
+      colFee: 'Khidmadda Bisha', colCycle: 'Wareegga Bixitaanka', cycleFilter: 'Wareegga (Cycle)', allCycles: 'Dhammaan Wareegyada',
+      kpiExitedCount: 'Ardayda Baxday', kpiTotalFees: 'Wadarta Khidmadda', kpiAllTime: 'Wadarta Guud (All-Time)', cycleBreakdown: 'Xogta Wareegyada'
     },
     branches: {
       title: 'Laamaha', subtitle: 'Goobaha Machadka', addNew: 'Ku dar Laan Cusub', editTitle: 'Wax ka beddel Laanta', create: 'Samee Laan',

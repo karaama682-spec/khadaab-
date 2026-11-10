@@ -24,4 +24,3 @@ router.route('/:id')
     .delete(protect, deleteQuranLessonRecord);
 
 module.exports = router;
-

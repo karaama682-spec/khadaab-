@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, X, Edit2, Trash2, BookOpen, Search } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, X, Edit2, Trash2, BookOpen, Search, GraduationCap } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { classLabel, classSearchText } from '../utils/classLabel';
@@ -22,24 +22,34 @@ const ClassesManagement = () => {
   // Only active branches are offered: a class cannot be opened at a campus that
   // has been closed. Existing classes keep whatever branch they already have.
   const [branches, setBranches] = useState([]);
+  const [teachers, setTeachers] = useState([]);
 
   const [formData, setFormData] = useState({
     name: '',
     gradeLevel: '',
     room: '',
-    branchId: ''
+    branchId: '',
+    teacherId: ''
   });
 
   const fetchData = async () => {
     try {
       if (!data.length) setLoading(true);
-      const [{ data: classesData }, { data: branchData }] = await Promise.all([
+      const [{ data: classesData }, { data: branchData }, resUsers] = await Promise.all([
         api.get('/classes'),
-        api.get('/branches', { params: { status: 'Active' } })
+        api.get('/branches', { params: { status: 'Active' } }),
+        api.get('/users', { params: { role: 'Teacher' } }).catch(() => api.get('/users')).catch(() => ({ data: [] }))
       ]);
       const list = classesData || [];
       setData(list);
       setBranches(branchData || []);
+      const usersList = resUsers?.data || [];
+      const teacherUsers = usersList.filter(u => {
+        const r = (u.role || '').toLowerCase();
+        const rs = (u.roles || []).map(x => String(x).toLowerCase());
+        return r.includes('teacher') || rs.some(x => x.includes('teacher'));
+      });
+      setTeachers(teacherUsers.length ? teacherUsers : usersList);
       sessionStorage.setItem('cachedClassesData', JSON.stringify(list));
     } catch (error) {
       console.error("Failed to fetch classes", error);
@@ -54,7 +64,7 @@ const ClassesManagement = () => {
 
   const openAddModal = () => {
     setEditingItem(null);
-    setFormData({ name: '', gradeLevel: '', room: '', branchId: '' });
+    setFormData({ name: '', gradeLevel: '', room: '', branchId: '', teacherId: '' });
     setIsModalOpen(true);
   };
 
@@ -65,10 +75,42 @@ const ClassesManagement = () => {
       gradeLevel: item.gradeLevel || '',
       room: item.room || '',
       // branchId arrives populated from the API; fall back to a bare id.
-      branchId: item.branchId?._id || item.branchId || ''
+      branchId: item.branchId?._id || item.branchId || '',
+      teacherId: item.teacherId?._id || item.teacherId || ''
     });
     setIsModalOpen(true);
   };
+
+  const handleBranchChange = (newBranchId) => {
+    setFormData(prev => {
+      const next = { ...prev, branchId: newBranchId };
+      if (newBranchId && prev.teacherId) {
+        const t = teachers.find(u => String(u._id) === String(prev.teacherId));
+        if (t) {
+          const tBranches = [
+            ...(t.branchIds || []).map(b => String(b?._id || b)),
+            t.branchId ? String(t.branchId?._id || t.branchId) : null
+          ].filter(Boolean);
+          if (tBranches.length > 0 && !tBranches.includes(String(newBranchId))) {
+            next.teacherId = '';
+          }
+        }
+      }
+      return next;
+    });
+  };
+
+  const modalVisibleTeachers = useMemo(() => {
+    if (!formData.branchId) return teachers;
+    const branchSpecific = teachers.filter(t => {
+      const tBranches = [
+        ...(t.branchIds || []).map(b => String(b?._id || b)),
+        t.branchId ? String(t.branchId?._id || t.branchId) : null
+      ].filter(Boolean);
+      return tBranches.includes(String(formData.branchId));
+    });
+    return branchSpecific.length > 0 ? branchSpecific : teachers;
+  }, [teachers, formData.branchId]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -82,12 +124,17 @@ const ClassesManagement = () => {
     }
 
     try {
+      const payload = {
+        ...formData,
+        teacherId: formData.teacherId || null
+      };
+
       if (editingItem) {
-        const res = await api.put(`/classes/${editingItem._id}`, formData);
-        setData(prev => prev.map(i => i._id === editingItem._id ? (res.data || { ...i, ...formData }) : i));
+        const res = await api.put(`/classes/${editingItem._id}`, payload);
+        setData(prev => prev.map(i => i._id === editingItem._id ? (res.data || { ...i, ...payload }) : i));
         showAlert({ type: 'success', title: t('common.success'), message: t('academic.classes.updated') });
       } else {
-        const res = await api.post('/classes', formData);
+        const res = await api.post('/classes', payload);
         setData(prev => [res.data, ...prev]);
         showAlert({ type: 'success', title: t('common.success'), message: t('academic.classes.created') });
       }
@@ -120,16 +167,18 @@ const ClassesManagement = () => {
     }
   };
 
-  // Searching matches the branch as well as the name, so typing "FR2" narrows to
-  // that campus when several branches run a class of the same name.
-  const filteredData = data.filter(item =>
-    classSearchText(item).toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Searching matches the branch as well as the name or teacher
+  const filteredData = data.filter(item => {
+    const textMatch = classSearchText(item).toLowerCase().includes(searchTerm.toLowerCase());
+    const teacherName = (item.teacherId?.fullName || item.teacherId?.name || '').toLowerCase();
+    const teacherMatch = teacherName.includes(searchTerm.toLowerCase());
+    return textMatch || teacherMatch;
+  });
 
   if (loading) return <div className="p-10 text-center text-slate-500">{t('academic.classes.loading')}</div>;
 
   return (
-    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24">
+    <div className="p-3.5 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-28">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2">
         <div className="flex items-center gap-6">
@@ -172,6 +221,7 @@ const ClassesManagement = () => {
                 <th className="px-8 py-5">{t('academic.classes.colFullName')}</th>
                 <th className="px-8 py-5">{t('academic.classes.colGrade')}</th>
                 <th className="px-8 py-5">{t('academic.classes.colRoom')}</th>
+                <th className="px-8 py-5">{t('academic.classes.colTeacher')}</th>
                 <th className="px-8 py-5 text-right">{t('common.actions')}</th>
               </tr>
             </thead>
@@ -197,6 +247,22 @@ const ClassesManagement = () => {
                   <td className="px-8 py-6 text-sm font-semibold text-slate-500 dark:text-slate-400">
                     {item.room || '-'}
                   </td>
+                  <td className="px-8 py-6">
+                    {item.teacherId ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 flex items-center justify-center shrink-0">
+                          <GraduationCap size={14} />
+                        </div>
+                        <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                          {item.teacherId.fullName || item.teacherId.name}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-400 italic text-xs">
+                        {t('academic.classes.noTeacher')}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-8 py-6 text-right">
                     <div className="flex justify-end items-center gap-2">
                       <button onClick={() => openEditModal(item)} className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:text-brand-600 transition-all">
@@ -211,7 +277,7 @@ const ClassesManagement = () => {
               ))}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="px-8 py-10 text-center text-slate-400 text-sm font-medium">{t('academic.classes.empty')}</td>
+                  <td colSpan="7" className="px-8 py-10 text-center text-slate-400 text-sm font-medium">{t('academic.classes.empty')}</td>
                 </tr>
               )}
             </tbody>
@@ -238,7 +304,7 @@ const ClassesManagement = () => {
                 <select
                   required
                   value={formData.branchId}
-                  onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
+                  onChange={(e) => handleBranchChange(e.target.value)}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
                 >
                   <option value="">{t('common.selectBranch')}</option>
@@ -263,6 +329,43 @@ const ClassesManagement = () => {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white"
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-black uppercase text-slate-500 flex items-center gap-1.5">
+                    <GraduationCap size={14} className="text-brand-600" />
+                    {t('academic.classes.teacherLabel')}
+                  </label>
+                  {formData.branchId && (
+                    <span className="text-[10px] text-slate-400 font-bold">
+                      {modalVisibleTeachers.length} macallin
+                    </span>
+                  )}
+                </div>
+                <select
+                  value={formData.teacherId}
+                  onChange={(e) => setFormData({ ...formData, teacherId: e.target.value })}
+                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none text-slate-900 dark:text-white text-sm font-semibold"
+                >
+                  <option value="">{t('academic.classes.selectTeacher')}</option>
+                  {modalVisibleTeachers.map((tch) => {
+                    const tBranchIds = [
+                      ...(tch.branchIds || []).map(b => b?._id || b),
+                      tch.branchId ? (tch.branchId?._id || tch.branchId) : null
+                    ].filter(Boolean).map(String);
+                    const branchNames = Array.from(new Set(tBranchIds)).map(id => {
+                      return branches.find(b => String(b._id) === id)?.name;
+                    }).filter(Boolean);
+                    const branchBadge = branchNames.length ? `(${branchNames.join(', ')})` : '';
+
+                    return (
+                      <option key={tch._id} value={tch._id}>
+                        {tch.fullName || tch.name} {branchBadge}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
 
               <div>

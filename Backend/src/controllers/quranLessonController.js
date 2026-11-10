@@ -221,6 +221,7 @@ const deleteQuranLessonRecord = async (req, res) => {
     }
 };
 
+
 // @desc    Get Quran daily sheet for a class with auto-calculated lessons
 // @route   GET /api/quran/lessons/class-sheet
 // @access  Private

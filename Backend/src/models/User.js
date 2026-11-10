@@ -6,6 +6,10 @@ const userSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Branch'
     },
+    branchIds: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Branch'
+    }],
     fullName: {
         type: String,
         required: true,

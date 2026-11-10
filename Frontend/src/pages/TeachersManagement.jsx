@@ -16,14 +16,27 @@ import {
   AlertCircle,
   Clock,
   Filter,
-  Download
+  Download,
+  Building2,
+  Check,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import IdCard from '../components/IdCard.jsx';
 import { useLanguage } from '../i18n/LanguageContext.jsx';
-import { currentCycle, cycleLabel, cycleKeyForDate } from '../utils/billingCycle';
+import {
+  currentCycle,
+  cycleLabel,
+  cycleKeyForDate,
+  cycleShortLabel,
+  addCycles,
+  cycleRange
+} from '../utils/billingCycle';
 
 
 const TeachersManagement = () => {
@@ -31,6 +44,8 @@ const TeachersManagement = () => {
   const { t: tr, tv, locale } = useLanguage();
   const [teachers, setTeachers] = useState([]);
   const [salaries, setSalaries] = useState([]);
+  const [branches, setBranches] = useState([]);
+  const [branchFilter, setBranchFilter] = useState('All');
   const [loading, setLoading] = useState(true);
   const [cardTeacher, setCardTeacher] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -72,15 +87,17 @@ const TeachersManagement = () => {
     gender: 'Male',
     salary: '',
     masuulName: '',
-    masuulNumber: ''
+    masuulNumber: '',
+    branchIds: []
   });
 
   const fetchTeachers = async () => {
     try {
       setLoading(true);
-      const [teachersRes, salariesRes] = await Promise.allSettled([
+      const [teachersRes, salariesRes, branchesRes] = await Promise.allSettled([
         api.get('/users?role=Teacher'),
-        api.get('/salaries')
+        api.get('/salaries'),
+        api.get('/branches')
       ]);
 
       if (teachersRes.status === 'fulfilled' && Array.isArray(teachersRes.value.data)) {
@@ -93,6 +110,12 @@ const TeachersManagement = () => {
         setSalaries(salariesRes.value.data);
       } else {
         setSalaries([]);
+      }
+
+      if (branchesRes.status === 'fulfilled' && Array.isArray(branchesRes.value.data)) {
+        setBranches(branchesRes.value.data);
+      } else {
+        setBranches([]);
       }
     } catch (error) {
       console.error('Failed to fetch teachers:', error);
@@ -127,14 +150,47 @@ const TeachersManagement = () => {
     return false;
   };
 
-  const activeCycle = currentCycle();
+  const [selectedCycle, setSelectedCycle] = useState(() => {
+    try {
+      const search = new URLSearchParams(window.location.search);
+      const urlCycle = search.get('month') || search.get('cycle');
+      if (urlCycle && /^\d{4}-\d{2}$/.test(urlCycle)) return urlCycle;
+      const saved = sessionStorage.getItem('active_billing_cycle');
+      if (saved && /^\d{4}-\d{2}$/.test(saved)) return saved;
+    } catch (_) {}
+    return currentCycle();
+  });
+
+  useEffect(() => {
+    try {
+      if (selectedCycle && /^\d{4}-\d{2}$/.test(selectedCycle)) {
+        sessionStorage.setItem('active_billing_cycle', selectedCycle);
+      }
+    } catch (_) {}
+  }, [selectedCycle]);
+
+  const cycleOptions = useMemo(() => {
+    const cur = currentCycle();
+    const list = [];
+    // 6 cycles in advance down to 24 past cycles
+    for (let i = 6; i >= -24; i--) {
+      const key = addCycles(cur, i);
+      list.push({
+        key,
+        label: cycleLabel(key),
+        short: cycleShortLabel(key),
+        isCurrent: key === cur
+      });
+    }
+    return list;
+  }, []);
 
   const teachersWithSalary = useMemo(() => {
     return teachers.map((t) => {
       const salary = Number(t.salary) || 0;
       const teacherSalaries = salaries.filter((s) => {
         const matchT = teacherIdOfSalary(s) === String(t._id);
-        const matchC = salaryBelongsToCycle(s, activeCycle);
+        const matchC = salaryBelongsToCycle(s, selectedCycle);
         const isPaid = s.status === 'Paid';
         return matchT && matchC && isPaid;
       });
@@ -155,17 +211,29 @@ const TeachersManagement = () => {
         paymentStatus
       };
     });
-  }, [teachers, salaries, activeCycle]);
+  }, [teachers, salaries, selectedCycle]);
+
+  // Teachers filtered by active branch tab
+  const branchFilteredTeachers = useMemo(() => {
+    if (!branchFilter || branchFilter === 'All') return teachersWithSalary;
+    return teachersWithSalary.filter(t => {
+      const tBranches = [
+        ...(t.branchIds || []).map(b => String(b?._id || b)),
+        t.branchId ? String(t.branchId?._id || t.branchId) : null
+      ].filter(Boolean);
+      return tBranches.includes(String(branchFilter));
+    });
+  }, [teachersWithSalary, branchFilter]);
 
   const stats = useMemo(() => {
-    const total = teachersWithSalary.length;
-    const maleCount = teachersWithSalary.filter(t => t.gender === 'Male').length;
-    const femaleCount = teachersWithSalary.filter(t => t.gender === 'Female').length;
-    const totalSalary = teachersWithSalary.reduce((sum, t) => sum + (Number(t.salary) || 0), 0);
-    const totalPaid = teachersWithSalary.reduce((sum, t) => sum + (Number(t.paid) || 0), 0);
-    const totalRemaining = teachersWithSalary.reduce((sum, t) => sum + (Number(t.remaining) || 0), 0);
-    const paidCount = teachersWithSalary.filter(t => t.paid > 0).length;
-    const pendingCount = teachersWithSalary.filter(t => t.salary > 0 && t.remaining > 0).length;
+    const total = branchFilteredTeachers.length;
+    const maleCount = branchFilteredTeachers.filter(t => t.gender === 'Male').length;
+    const femaleCount = branchFilteredTeachers.filter(t => t.gender === 'Female').length;
+    const totalSalary = branchFilteredTeachers.reduce((sum, t) => sum + (Number(t.salary) || 0), 0);
+    const totalPaid = branchFilteredTeachers.reduce((sum, t) => sum + (Number(t.paid) || 0), 0);
+    const totalRemaining = branchFilteredTeachers.reduce((sum, t) => sum + (Number(t.remaining) || 0), 0);
+    const paidCount = branchFilteredTeachers.filter(t => t.paid > 0).length;
+    const pendingCount = branchFilteredTeachers.filter(t => t.salary > 0 && t.remaining > 0).length;
 
     return {
       total,
@@ -177,10 +245,10 @@ const TeachersManagement = () => {
       paidCount,
       pendingCount
     };
-  }, [teachersWithSalary]);
+  }, [branchFilteredTeachers]);
 
   const filteredTeachers = useMemo(() => {
-    return teachersWithSalary.filter(t => {
+    return branchFilteredTeachers.filter(t => {
       const matchesSearch =
         t.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         t.phone?.includes(searchTerm);
@@ -196,7 +264,7 @@ const TeachersManagement = () => {
 
       return matchesSearch && matchesGender && matchesSalary;
     });
-  }, [teachersWithSalary, searchTerm, genderFilter, salaryFilter]);
+  }, [branchFilteredTeachers, searchTerm, genderFilter, salaryFilter]);
 
   const filteredTotals = useMemo(() => {
     return filteredTeachers.reduce(
@@ -248,6 +316,13 @@ const TeachersManagement = () => {
         reportTitle = locale === 'so' ? 'LIISKA MUSHAARKA DHIMAN' : 'PENDING TEACHERS SALARY LIST';
       }
 
+      if (branchFilter && branchFilter !== 'All') {
+        const activeBranch = branches.find(b => String(b._id) === String(branchFilter));
+        if (activeBranch) {
+          reportTitle += ` - ${activeBranch.name.toUpperCase()}`;
+        }
+      }
+
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(245, 158, 11); // Amber accent
@@ -257,7 +332,7 @@ const TeachersManagement = () => {
       doc.setFontSize(7.5);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(203, 213, 225);
-      const cycleStr = `${locale === 'so' ? 'Wareegga' : 'Cycle'}: ${cycleLabel(currentCycle())}   |   ${locale === 'so' ? 'Waqtiga la daabacay' : 'Printed'}: ${new Date().toLocaleDateString(locale)} ${new Date().toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`;
+      const cycleStr = `${locale === 'so' ? 'Wareegga' : 'Cycle'}: ${cycleLabel(selectedCycle)}   |   ${locale === 'so' ? 'Waqtiga la daabacay' : 'Printed'}: ${new Date().toLocaleDateString(locale)} ${new Date().toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`;
       doc.text(cycleStr, 14, 23);
 
       // Right-aligned stats in header
@@ -382,7 +457,7 @@ const TeachersManagement = () => {
         : salaryFilter === 'pending'
         ? 'Macallimiinta_Mushaarku_Dhiman'
         : 'Liiska_Macallimiinta_Guud';
-      doc.save(`${fileSlug}_${new Date().toISOString().slice(0, 10)}.pdf`);
+      doc.save(`${fileSlug}_${selectedCycle}_${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (err) {
       console.error('Failed to export PDF:', err);
       showAlert({
@@ -401,20 +476,26 @@ const TeachersManagement = () => {
       gender: 'Male',
       salary: '',
       masuulName: '',
-      masuulNumber: ''
+      masuulNumber: '',
+      branchIds: branchFilter !== 'All' ? [branchFilter] : []
     });
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (teacher) => {
     setEditingTeacher(teacher);
+    const rawIds = (teacher.branchIds && teacher.branchIds.length > 0)
+      ? teacher.branchIds.map(b => b?._id || b)
+      : (teacher.branchId ? [teacher.branchId?._id || teacher.branchId] : []);
+
     setFormData({
       fullName: teacher.fullName || teacher.username || '',
       phone: teacher.phone || '',
       gender: teacher.gender || 'Male',
       salary: teacher.salary ? String(teacher.salary) : '',
       masuulName: teacher.masuulName || '',
-      masuulNumber: teacher.masuulNumber || ''
+      masuulNumber: teacher.masuulNumber || '',
+      branchIds: Array.from(new Set(rawIds.map(String).filter(Boolean)))
     });
     setIsModalOpen(true);
   };
@@ -440,7 +521,9 @@ const TeachersManagement = () => {
         role: 'Teacher',
         salary: Number(formData.salary) || 0,
         masuulName: formData.masuulName.trim(),
-        masuulNumber: formData.masuulNumber.trim()
+        masuulNumber: formData.masuulNumber.trim(),
+        branchIds: formData.branchIds,
+        branchId: formData.branchIds[0] || null
       };
 
       if (editingTeacher) {
@@ -512,7 +595,7 @@ const TeachersManagement = () => {
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24 print:p-0 print:m-0 print:space-y-0 print:max-w-none print:pb-0">
+    <div className="p-3.5 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-700 pb-24 print:p-0 print:m-0 print:space-y-0 print:max-w-none print:pb-0">
       {/* Print CSS Styles - Pure White A4 Paper, Sharp Contrast */}
       <style>{`
         @media print {
@@ -630,7 +713,7 @@ const TeachersManagement = () => {
                 : (locale === 'so' ? 'LIISKA MACALLIMIINTA IYO MUSHAARAADKA' : 'TEACHERS DIRECTORY & SALARY LIST')}
             </h2>
             <p className="text-[7.5pt] text-black mt-0.5">
-              {tr('monthlyPayments.print.cycle') || (locale === 'so' ? 'Wareegga' : 'Cycle')}: <span className="font-bold text-black">{cycleLabel(currentCycle())}</span> · {locale === 'so' ? 'Waqtiga la daabacay' : 'Printed'}: <span className="text-black">{new Date().toLocaleDateString(locale)} {new Date().toLocaleTimeString(locale || [], { hour: '2-digit', minute: '2-digit' })}</span>
+              {tr('monthlyPayments.print.cycle') || (locale === 'so' ? 'Wareegga' : 'Cycle')}: <span className="font-bold text-black">{cycleLabel(selectedCycle)}</span> · {locale === 'so' ? 'Waqtiga la daabacay' : 'Printed'}: <span className="text-black">{new Date().toLocaleDateString(locale)} {new Date().toLocaleTimeString(locale || [], { hour: '2-digit', minute: '2-digit' })}</span>
             </p>
           </div>
           <div className="text-right text-[8pt] leading-tight text-black">
@@ -690,6 +773,84 @@ const TeachersManagement = () => {
         </div>
       </div>
 
+      {/* Interactive Billing Cycle Navigation Bar */}
+      <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-brand-50 dark:bg-brand-950/60 text-brand-600 dark:text-brand-400 flex items-center justify-center shrink-0 border border-brand-100 dark:border-brand-900/50 shadow-sm">
+            <Calendar size={22} strokeWidth={2.5} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+                {locale === 'so' ? 'Wareegga Mushaarka' : 'Payroll Billing Cycle'}
+              </span>
+              {selectedCycle === currentCycle() ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  {locale === 'so' ? 'Bishan Hadda' : 'Current'}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60">
+                  <Clock size={10} strokeWidth={3} />
+                  {locale === 'so' ? 'Wareeg Kale' : 'Selected Cycle'}
+                </span>
+              )}
+            </div>
+            <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white capitalize tracking-tight mt-0.5">
+              {cycleLabel(selectedCycle)}
+            </h2>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/* Stepper buttons & Select Dropdown */}
+          <div className="inline-flex items-center bg-slate-50 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-inner">
+            <button
+              type="button"
+              onClick={() => setSelectedCycle(prev => addCycles(prev, -1))}
+              className="p-2 rounded-xl text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 transition-all active:scale-95 shadow-none hover:shadow-sm"
+              title={locale === 'so' ? 'Wareeggii hore' : 'Previous Cycle'}
+            >
+              <ChevronLeft size={18} strokeWidth={2.5} />
+            </button>
+
+            <select
+              value={selectedCycle}
+              onChange={(e) => setSelectedCycle(e.target.value)}
+              className="bg-transparent px-3 py-1.5 font-black text-xs text-slate-800 dark:text-slate-100 cursor-pointer focus:outline-none"
+            >
+              {cycleOptions.map((c) => (
+                <option key={c.key} value={c.key} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100">
+                  {c.label} {c.isCurrent ? `★ (${locale === 'so' ? 'Bishan' : 'Current'})` : ''}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={() => setSelectedCycle(prev => addCycles(prev, 1))}
+              className="p-2 rounded-xl text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 transition-all active:scale-95 shadow-none hover:shadow-sm"
+              title={locale === 'so' ? 'Wareegga xiga' : 'Next Cycle'}
+            >
+              <ChevronRight size={18} strokeWidth={2.5} />
+            </button>
+          </div>
+
+          {/* Reset to Current Cycle Quick Button */}
+          {selectedCycle !== currentCycle() && (
+            <button
+              type="button"
+              onClick={() => setSelectedCycle(currentCycle())}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/50 dark:hover:bg-brand-900/60 text-brand-600 dark:text-brand-300 border border-brand-200/80 dark:border-brand-800 font-black text-xs transition-all active:scale-95 shadow-sm"
+              title={locale === 'so' ? 'Kusoo noqo wareegga bishan hadda jirta' : 'Back to current cycle'}
+            >
+              <RotateCcw size={13} strokeWidth={2.5} />
+              <span>{locale === 'so' ? 'Bishan Hadda' : 'Current Cycle'}</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* KPI Stats Grid - 4 Clickable Interactive Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 print:hidden">
         {/* Card 1: Total Teachers */}
@@ -726,7 +887,7 @@ const TeachersManagement = () => {
               ? 'bg-white dark:bg-slate-900 border-amber-500/60 ring-2 ring-amber-500/20'
               : 'bg-white/80 dark:bg-slate-900/80 border-slate-100 dark:border-slate-800 opacity-90 hover:opacity-100'
           }`}
-          title={locale === 'so' ? 'Wadarta guud ee mushaarka bisha' : 'Total monthly payroll'}
+          title={locale === 'so' ? 'Wadarta guud ee mushaarka wareeggan' : 'Total payroll for selected cycle'}
         >
           <div className="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
             <DollarSign size={28} />
@@ -739,7 +900,9 @@ const TeachersManagement = () => {
               ${stats.totalSalary.toLocaleString()}
             </h3>
             <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-              {locale === 'so' ? 'Miisaaniyadda Bisha' : 'Monthly Obligation'}
+              {selectedCycle === currentCycle()
+                ? (locale === 'so' ? 'Miisaaniyadda Bishan' : 'Current Cycle Obligation')
+                : cycleShortLabel(selectedCycle)}
             </p>
           </div>
         </div>
@@ -805,6 +968,63 @@ const TeachersManagement = () => {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Branch Filter Tabs (All, fr1, fr2, dudsi 1...) */}
+      <div className="flex items-center gap-2 overflow-x-auto p-1.5 bg-slate-100/80 dark:bg-slate-800/60 rounded-[24px] border border-slate-200/60 dark:border-slate-700/60 print:hidden scrollbar-none">
+        <button
+          type="button"
+          onClick={() => setBranchFilter('All')}
+          className={`px-4 py-2 rounded-2xl font-black text-xs transition-all whitespace-nowrap flex items-center gap-2 shrink-0 ${
+            branchFilter === 'All'
+              ? 'bg-slate-900 text-white dark:bg-brand-500 dark:text-white shadow-md'
+              : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-700/50'
+          }`}
+        >
+          <Building2 size={14} />
+          <span>{locale === 'so' ? 'Dhammaan (All)' : 'All Branches'}</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+            branchFilter === 'All'
+              ? 'bg-white/20 text-white'
+              : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+          }`}>
+            {teachers.length}
+          </span>
+        </button>
+
+        {branches.map(b => {
+          const isSelected = branchFilter === String(b._id);
+          const branchCount = teachers.filter(t => {
+            const tBranches = [
+              ...(t.branchIds || []).map(x => String(x?._id || x)),
+              t.branchId ? String(t.branchId?._id || t.branchId) : null
+            ].filter(Boolean);
+            return tBranches.includes(String(b._id));
+          }).length;
+
+          return (
+            <button
+              key={b._id}
+              type="button"
+              onClick={() => setBranchFilter(String(b._id))}
+              className={`px-4 py-2 rounded-2xl font-black text-xs transition-all whitespace-nowrap flex items-center gap-2 shrink-0 ${
+                isSelected
+                  ? 'bg-slate-900 text-white dark:bg-brand-500 dark:text-white shadow-md'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-700/50'
+              }`}
+            >
+              <Building2 size={14} />
+              <span>{b.name}</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                isSelected
+                  ? 'bg-white/20 text-white'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+              }`}>
+                {branchCount}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Filter & Search Bar */}
@@ -928,9 +1148,37 @@ const TeachersManagement = () => {
                           <p className="font-bold text-slate-900 dark:text-white text-sm print:text-black print:text-[8.5pt]">
                             {t.fullName || t.username}
                           </p>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-400 print:hidden">
-                            {tr('academic.teachers.facultyBadge')}
-                          </span>
+                          <div className="flex items-center flex-wrap gap-1 mt-0.5">
+                            {(() => {
+                              const tBranches = [
+                                ...(t.branchIds || []).map(b => b?._id || b),
+                                t.branchId ? (t.branchId?._id || t.branchId) : null
+                              ].filter(Boolean).map(String);
+                              const uniqueBranchIds = Array.from(new Set(tBranches));
+
+                              if (uniqueBranchIds.length === 0) {
+                                return (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-400 print:hidden">
+                                    {tr('academic.teachers.facultyBadge')}
+                                  </span>
+                                );
+                              }
+
+                              return uniqueBranchIds.map(bId => {
+                                const branchObj = branches.find(b => String(b._id) === bId);
+                                const bName = branchObj?.name || 'Laan';
+                                return (
+                                  <span
+                                    key={bId}
+                                    className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-[10px] font-black border border-indigo-200/80 dark:border-indigo-800/80 inline-flex items-center gap-1"
+                                  >
+                                    <Building2 size={10} />
+                                    {bName}
+                                  </span>
+                                );
+                              });
+                            })()}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -1121,6 +1369,57 @@ const TeachersManagement = () => {
                   onChange={e => setFormData({ ...formData, phone: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border-none text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500"
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-black uppercase text-slate-500 flex items-center gap-1.5">
+                    <Building2 size={13} className="text-brand-600" />
+                    Laamaha Macallinka (Dooro 1 ama ka badan)
+                  </label>
+                  <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400">
+                    {formData.branchIds.length > 0 ? `${formData.branchIds.length} laan la doortay` : 'Ikhtiyaari'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 max-h-36 overflow-y-auto">
+                  {branches.map(b => {
+                    const isChecked = formData.branchIds.includes(String(b._id));
+                    return (
+                      <button
+                        key={b._id}
+                        type="button"
+                        onClick={() => {
+                          const id = String(b._id);
+                          setFormData(prev => ({
+                            ...prev,
+                            branchIds: isChecked
+                              ? prev.branchIds.filter(x => x !== id)
+                              : [...prev.branchIds, id]
+                          }));
+                        }}
+                        className={`flex items-center gap-2 p-2 rounded-xl text-xs font-bold text-left transition border ${
+                          isChecked
+                            ? 'bg-brand-50 border-brand-500 text-brand-900 dark:bg-brand-950/50 dark:text-brand-300'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
+                          isChecked
+                            ? 'bg-brand-600 border-brand-600 text-white'
+                            : 'border-slate-300 dark:border-slate-600'
+                        }`}>
+                          {isChecked && <Check size={11} strokeWidth={3} />}
+                        </div>
+                        <span className="truncate">{b.name}</span>
+                      </button>
+                    );
+                  })}
+                  {branches.length === 0 && (
+                    <div className="col-span-full py-2 text-center text-xs text-slate-400">
+                      Wax laan ah lama helin
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>

@@ -310,7 +310,7 @@ const PayersManagement = () => {
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24 print:p-0 print:m-0 print:space-y-0 print:max-w-none print:pb-0">
+    <div className="p-3.5 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24 print:p-0 print:m-0 print:space-y-0 print:max-w-none print:pb-0">
       {/* Ultra-compact print style - 100% Pure White Paper, No Dark Fills */}
       <style>{`
         @media print {

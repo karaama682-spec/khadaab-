@@ -7,6 +7,13 @@ export default defineConfig(() => {
     server: {
       port: 3005,
       host: '0.0.0.0',
+      proxy: {
+        '/api': {
+          target: 'http://localhost:5005',
+          changeOrigin: true,
+          secure: false
+        }
+      }
     },
     plugins: [react()],
     // NOTE: Never inject secrets (API keys) into the client bundle via `define`.

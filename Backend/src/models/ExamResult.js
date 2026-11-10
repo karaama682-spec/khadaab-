@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 // Marks a student scored in one subject of an exam.
 const subjectMarkSchema = new mongoose.Schema({
     subject: { type: String, required: true, trim: true },
+    nisfi: { type: Number, default: 0, min: 0 },
+    nihaayi: { type: Number, default: 0, min: 0 },
     marksObtained: { type: Number, default: 0, min: 0 },
     isAbsent: { type: Boolean, default: false }
 }, { _id: false });

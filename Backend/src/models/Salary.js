@@ -42,6 +42,11 @@ const salarySchema = new mongoose.Schema({
         enum: ['Paid', 'Pending'],
         default: 'Paid'
     },
+    sourceEntryId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'CashbookEntry',
+        default: null
+    },
     paidBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'

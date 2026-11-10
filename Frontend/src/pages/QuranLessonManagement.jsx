@@ -703,12 +703,12 @@ const QuranLessonManagement = () => {
   }, [sheetStudents]);
 
   return (
-    <div className="space-y-6 pb-20 max-w-[1600px] mx-auto animate-in fade-in duration-500">
+    <div className="p-3 sm:p-5 lg:p-8 space-y-6 pb-28 max-w-[1600px] mx-auto animate-in fade-in duration-500">
 
       {/* ========================================================================= */}
       {/* 1. TOP HEADER BANNER (SCREEN ONLY) */}
       {/* ========================================================================= */}
-      <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 border border-teal-500/20 shadow-2xl p-6 sm:p-8 print:hidden">
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-[32px] bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 border border-teal-500/20 shadow-2xl p-4 sm:p-6 lg:p-8 print:hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-10 -left-10 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 

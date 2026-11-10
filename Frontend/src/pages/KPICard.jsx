@@ -100,7 +100,7 @@ const KPICard = ({
         <h3 className="text-2xl font-extrabold tracking-tight text-slate-900 tabular-nums dark:text-white md:text-3xl">
           {value}
         </h3>
-        <p className="mt-1 text-xs font-medium text-slate-400 dark:text-slate-500 line-clamp-1">
+        <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
           {desc}
         </p>
       </div>

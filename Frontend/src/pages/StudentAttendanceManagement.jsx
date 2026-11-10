@@ -609,17 +609,18 @@ const StudentAttendanceManagement = () => {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-6 pb-24 animate-in fade-in duration-700">
+    <div className="mx-auto max-w-6xl space-y-5 sm:space-y-8 p-3 sm:p-6 pb-28 sm:pb-24 animate-in fade-in duration-700">
       {/* Page Header */}
-      <div className="flex items-center gap-5 px-2">
-        <div className="flex h-16 w-16 items-center justify-center rounded-[24px] border border-slate-700 bg-slate-900 text-brand-400 shadow-2xl ring-4 ring-brand-400/10 dark:bg-slate-800">
-          <CalendarCheck size={32} strokeWidth={2.5} />
+      <div className="flex items-center gap-3 sm:gap-5 px-1 sm:px-2">
+        <div className="flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-2xl sm:rounded-[24px] border border-slate-700 bg-slate-900 text-brand-400 shadow-2xl ring-4 ring-brand-400/10 dark:bg-slate-800 shrink-0">
+          <CalendarCheck size={24} className="sm:hidden" strokeWidth={2.5} />
+          <CalendarCheck size={32} className="hidden sm:block" strokeWidth={2.5} />
         </div>
         <div>
-          <h1 className="text-4xl font-black uppercase leading-none tracking-tight text-slate-900 dark:text-white">
+          <h1 className="text-2xl sm:text-4xl font-black uppercase leading-none tracking-tight text-slate-900 dark:text-white">
             {t('attendance.student.title')}
           </h1>
-          <p className="mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+          <p className="mt-1 sm:mt-2 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
             {t('attendance.student.subtitle')}
           </p>
         </div>

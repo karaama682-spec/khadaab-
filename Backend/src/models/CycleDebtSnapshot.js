@@ -10,8 +10,11 @@ const studentSnapshotSchema = new mongoose.Schema({
     className: { type: String, default: '' },
     monthlyFee: { type: Number, default: 0 },
     paid: { type: Number, default: 0 },
+    directPaid: { type: Number, default: 0 },
+    advancePaid: { type: Number, default: 0 },
     remaining: { type: Number, default: 0 },
-    isPaid: { type: Boolean, default: false }
+    isPaid: { type: Boolean, default: false },
+    isAdvancePaid: { type: Boolean, default: false }
 }, { _id: false });
 
 const payerSnapshotSchema = new mongoose.Schema({
@@ -31,8 +34,11 @@ const payerSnapshotSchema = new mongoose.Schema({
     studentCount: { type: Number, default: 0 },
     totalFee: { type: Number, default: 0 },
     paidAmount: { type: Number, default: 0 },
+    directPaid: { type: Number, default: 0 },
+    advancePaid: { type: Number, default: 0 },
     remaining: { type: Number, default: 0 },
     paid: { type: Boolean, default: false },
+    isAdvance: { type: Boolean, default: false },
     month: { type: String },
     cycle: { type: String },
     students: [studentSnapshotSchema]
@@ -62,6 +68,10 @@ const cycleDebtSnapshotSchema = new mongoose.Schema({
         default: 0
     },
     totalCollected: {
+        type: Number,
+        default: 0
+    },
+    advanceCarriedIn: {
         type: Number,
         default: 0
     },

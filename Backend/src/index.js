@@ -12,6 +12,13 @@ const { assertJwtSecret } = require('./config/jwt');
 // with insecure defaults.
 assertJwtSecret();
 
+process.on('uncaughtException', (err) => {
+    console.error('[UNCAUGHT EXCEPTION]:', err);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('[UNHANDLED REJECTION]:', reason);
+});
+
 // Connect to Database and auto-seed admin
 const seedAdminUser = async () => {
     try {
@@ -66,9 +73,41 @@ connectDB().then(async () => {
     await seedAdminUser();
     const healFeeHistory = require('./utils/healFeeHistory');
     await healFeeHistory();
+    try {
+        const Student = require('./models/Student');
+        const cutoff = new Date('2026-09-24T23:59:59.999Z');
+        const healed = await Student.updateMany(
+            {
+                status: 'Exited',
+                $or: [
+                    { exitDate: { $gt: cutoff } },
+                    { exitDate: null },
+                    { exitDate: { $exists: false } }
+                ]
+            },
+            {
+                $set: {
+                    exitDate: cutoff,
+                    exitReason: 'Exited at cycle 2026-08 closure'
+                }
+            }
+        );
+        // Always clear stale snapshot for 2026-09 on boot so it recalculates with correct exit dates
+        const CycleDebtSnapshot = require('./models/CycleDebtSnapshot');
+        await CycleDebtSnapshot.deleteOne({ cycle: '2026-09' }).catch(() => {});
+        if (healed.modifiedCount > 0) {
+            console.log(`[Auto-Heal] Repaired exitDate for ${healed.modifiedCount} exited student(s) to 2026-09-24T23:59:59.999Z.`);
+        }
+    } catch (err) {
+        console.error('[Auto-Heal] Failed to heal exited students:', err.message);
+    }
     const { ensureCycleSnapshot } = require('./services/cycleSnapshotService');
     const { previousCycle, currentCycle } = require('./utils/billingCycle');
-    await ensureCycleSnapshot(previousCycle(currentCycle())).catch((e) => {
+    await Promise.all([
+        ensureCycleSnapshot('2026-08'),
+        ensureCycleSnapshot('2026-09'),
+        ensureCycleSnapshot(previousCycle(currentCycle()))
+    ]).catch((e) => {
         console.error('Initial cycle snapshot check:', e.message);
     });
 }).catch(err => {
@@ -94,13 +133,15 @@ app.use(cors({
     origin: allowedOrigins.length ? allowedOrigins : true,
     credentials: true
 }));
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ limit: '25mb', extended: true }));
 
 // Routes
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/roles', require('./routes/roleRoutes'));
 app.use('/api/branches', require('./routes/branchRoutes'));
 app.use('/api/classes', require('./routes/clsRoutes'));
+app.use('/api/subjects', require('./routes/subjectRoutes'));
 app.use('/api/guardians', require('./routes/guardianRoutes'));
 app.use('/api/students', require('./routes/studentRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
@@ -112,11 +153,12 @@ app.use('/api/salaries', require('./routes/salaryRoutes'));
 app.use('/api/wallets', require('./routes/walletRoutes'));
 app.use('/api/transactions', require('./routes/transactionRoutes'));
 app.use('/api/cashbook', require('./routes/cashbookRoutes'));
-app.use('/api/cycle-locks', require('./routes/cycleLockRoutes'));
 app.use('/api/expenses', require('./routes/expenseRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/quran/surahs', require('./routes/quranSurahRoutes'));
 app.use('/api/quran/lessons', require('./routes/quranLessonRoutes'));
+app.use('/api/cycle-locks', require('./routes/cycleLockRoutes'));
+app.use('/api/audit-logs', require('./routes/auditLogRoutes'));
 
 // Unchanged AI/Analytics/Dashboard/Settings routes if they are generic, 
 // but we deleted their routes. We can re-add them if needed, but since we deleted them let's remove.
@@ -127,7 +169,6 @@ app.use('/api/analytics', require('./routes/aiAnalyticsRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/tenants', require('./routes/tenantRoutes'));
-app.use('/api/audit-logs', require('./routes/auditLogRoutes'));
 app.use('/api/exams', require('./routes/examRoutes'));
 
 // Health check. Deliberately minimal: reports liveness and DB connection state

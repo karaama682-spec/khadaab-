@@ -18,6 +18,15 @@ const Navbar = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [activeModal, setActiveModal] = useState(null);
+  const [tenantName] = useState(() => {
+    try {
+      const b = localStorage.getItem('tenantBranding');
+      return b ? (JSON.parse(b)?.name || 'salaax aldaareyn') : 'salaax aldaareyn';
+    } catch {
+      return 'salaax aldaareyn';
+    }
+  });
+
   const dropdownRef = useRef(null);
   const notificationsRef = useRef(null);
 
@@ -53,16 +62,24 @@ const Navbar = ({
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 flex h-20 w-full items-center justify-between border-b border-white/70 dark:border-slate-800/80 bg-white/85 dark:bg-slate-950/80 px-4 md:px-8 shadow-sm shadow-slate-900/5 backdrop-blur-2xl transition-colors">
-      <div className="flex items-center gap-4 min-w-0 flex-1">
+    <header className="sticky top-0 z-30 flex h-16 md:h-20 w-full items-center justify-between border-b border-white/70 dark:border-slate-800/80 bg-white/85 dark:bg-slate-950/80 px-3 md:px-8 shadow-sm shadow-slate-900/5 backdrop-blur-2xl transition-colors">
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
         <button
           onClick={onMenuClick}
-          className="lg:hidden p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-600 dark:text-slate-400"
+          className="lg:hidden p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl text-slate-600 dark:text-slate-400 shrink-0"
           aria-label={t('nav.openMenu')}
         >
-          <Menu size={24} />
+          <Menu size={22} />
         </button>
 
+        {/* Mobile brand display */}
+        <div className="lg:hidden flex items-center gap-2 min-w-0">
+          <span className="font-extrabold text-sm text-slate-900 dark:text-white truncate max-w-[130px] sm:max-w-xs capitalize">
+            {tenantName}
+          </span>
+        </div>
+
+        {/* Desktop / Tablet Search Bar */}
         <div className="hidden sm:flex items-center bg-slate-50/90 dark:bg-slate-900 rounded-2xl px-4 py-2.5 gap-3 border border-slate-200/80 dark:border-slate-800 w-full min-w-0 max-w-[14rem] md:max-w-[24rem] focus-within:ring-4 focus-within:ring-brand-500/10 focus-within:border-brand-400 transition-all shadow-sm">
           <Search size={18} className="text-slate-400" />
           <input
@@ -74,7 +91,7 @@ const Navbar = ({
         </div>
       </div>
 
-      <div className="flex items-center gap-3 md:gap-4 shrink-0 min-w-0">
+      <div className="flex items-center gap-1.5 sm:gap-3 md:gap-4 shrink-0 min-w-0">
         <button
           onClick={() => goTo('/settings/preferences')}
           className="hidden sm:flex p-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-colors border border-slate-200/70 dark:border-slate-800"
@@ -86,24 +103,24 @@ const Navbar = ({
         {/* Theme Toggle Button */}
         <button
           onClick={toggleDarkMode}
-          className="p-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-colors border border-slate-200/70 dark:border-slate-800"
+          className="p-2 sm:p-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-colors border border-slate-200/70 dark:border-slate-800"
           aria-label={t('nav.toggleDarkMode')}
         >
-          {isDarkMode ? <Sun size={20} className="text-amber-400" /> : <Moon size={20} />}
+          {isDarkMode ? <Sun size={18} className="text-amber-400" /> : <Moon size={18} />}
         </button>
 
         <div className="relative" ref={notificationsRef}>
           <button
             onClick={() => setIsNotificationsOpen(prev => !prev)}
-            className="relative p-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-colors border border-slate-200/70 dark:border-slate-800"
+            className="relative p-2 sm:p-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-colors border border-slate-200/70 dark:border-slate-800"
             aria-label={t('nav.notifications')}
           >
-            <Bell size={20} />
-            <span className="absolute top-1.5 right-1.5 h-3 w-3 rounded-full bg-rose-500 text-[8px] ring-2 ring-white dark:ring-slate-950"></span>
+            <Bell size={18} />
+            <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full bg-rose-500 text-[8px] ring-2 ring-white dark:ring-slate-950"></span>
           </button>
 
           {isNotificationsOpen && (
-            <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-900">
+            <div className="absolute right-0 top-full z-50 mt-2 w-[calc(100vw-1.5rem)] sm:w-80 max-w-sm overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-xl shadow-slate-900/10 dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
                 <div>
                   <p className="text-sm font-black text-slate-900 dark:text-white">{t('nav.notifications')}</p>
@@ -138,24 +155,24 @@ const Navbar = ({
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 p-2 rounded-2xl transition-all border border-slate-200/70 dark:border-slate-800"
+            className="flex items-center gap-2 sm:gap-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 p-1.5 sm:p-2 rounded-2xl transition-all border border-slate-200/70 dark:border-slate-800"
           >
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate max-w-[120px]">
                 {user.username || user.name || t('nav.user')}
               </p>
               <p className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-tight">
                 {getRoleLabel(currentRole)}
               </p>
             </div>
-            <div className="relative w-10 h-10 bg-gradient-to-br from-emerald-400 via-blue-500 to-violet-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-blue-500/20 ring-2 ring-white dark:ring-slate-800">
+            <div className="relative w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-emerald-400 via-blue-500 to-violet-600 text-white rounded-xl sm:rounded-2xl flex items-center justify-center font-black shadow-lg shadow-blue-500/20 ring-2 ring-white dark:ring-slate-800 text-xs sm:text-sm">
               {(user.username || user.name || 'U').charAt(0).toUpperCase()}
-              <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-400 dark:border-slate-950" />
+              <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full border-2 border-white bg-emerald-400 dark:border-slate-950" />
             </div>
           </button>
 
           {isDropdownOpen && (
-            <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 py-2 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="absolute right-0 top-full mt-2 w-56 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 py-2 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
               <div className="px-4 py-3 border-b border-slate-50 dark:border-slate-800">
                 <p className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-tight mb-1">{t('nav.signedInAs')}</p>
                 <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{user.username || user.name || t('nav.user')}</p>

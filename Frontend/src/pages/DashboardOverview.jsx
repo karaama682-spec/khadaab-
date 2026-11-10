@@ -24,7 +24,7 @@ import { hasNavPermission } from '../utils/permissionUtils';
 
 const DashboardOverview = () => {
     const navigate = useNavigate();
-    const { t, tv, locale, months } = useLanguage();
+    const { t, tv, locale, months, language } = useLanguage();
     const [currentUser] = useState(() => {
         try {
             const u = sessionStorage.getItem('userInfo');
@@ -245,12 +245,17 @@ const DashboardOverview = () => {
             rawValue: kpis.studentFeesCollected || 0,
             icon: <Receipt size={20} />,
             color: 'bg-teal-500',
-            badgeColor: 'bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300',
+            badge: (kpis.advanceCarriedIn > 0)
+                ? `+${money(kpis.advanceCarriedIn)} Horumaris`
+                : undefined,
+            badgeColor: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-extrabold',
             path: `/finance/monthly-payments?month=${cycle}&status=paid`,
-            description: `${cycle} · ${billingCycleName}`,
+            description: (kpis.advanceCarriedIn > 0)
+                ? `${cycle} · Wadarta: ${money((kpis.studentFeesCollected || 0) + (kpis.advanceCarriedIn || 0))}`
+                : `${cycle} · ${billingCycleName}`,
             explanationVars: { cycle: `${cycle} (${billingCycleName})` },
             statValue: money(kpis.expectedStudentFees),
-            progress: kpis.expectedStudentFees ? ((kpis.studentFeesCollected || 0) / kpis.expectedStudentFees) * 100 : undefined
+            progress: kpis.expectedStudentFees ? (((kpis.studentFeesCollected || 0) + (kpis.advanceCarriedIn || 0)) / kpis.expectedStudentFees) * 100 : undefined
         },
         {
             id: 'pending-fees',
@@ -274,7 +279,7 @@ const DashboardOverview = () => {
             icon: <RotateCcw size={20} />,
             color: 'bg-amber-600',
             badgeColor: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
-            path: `/finance/cashbook?month=${cycle}&category=fee`,
+            path: `/finance/cashbook?month=${cycle}&category=fee&panel=transaction`,
             description: `${cycle} · ${billingCycleName}`,
             explanationVars: { cycle: `${cycle} (${billingCycleName})` },
             statValue: money(kpis.previousDebt)
@@ -283,15 +288,20 @@ const DashboardOverview = () => {
             id: 'advance-fees-collected',
             textKey: 'advanceFeesCollected',
             category: 'finance',
-            value: money(kpis.advanceFeesCollected),
-            rawValue: kpis.advanceFeesCollected || 0,
+            value: money(kpis.advanceCarriedIn > 0 ? kpis.advanceCarriedIn : kpis.advanceFeesCollected),
+            rawValue: (kpis.advanceCarriedIn > 0 ? kpis.advanceCarriedIn : kpis.advanceFeesCollected) || 0,
             icon: <CalendarClock size={20} />,
             color: 'bg-indigo-600',
-            badgeColor: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300',
-            path: `/finance/cashbook?month=${cycle}`,
-            description: `${cycle} · ${billingCycleName}`,
+            badge: (kpis.advanceCarriedIn > 0)
+                ? (locale === 'so' ? 'Horumaris Hore' : 'Advance Inflow')
+                : (kpis.advanceFeesCollected > 0 ? (locale === 'so' ? 'Horumaris Cusub' : 'Advance Outflow') : undefined),
+            badgeColor: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300 font-extrabold',
+            path: `/finance/monthly-payments?month=${cycle}&status=paid`,
+            description: (kpis.advanceCarriedIn > 0)
+                ? (locale === 'so' ? `Horumaris bishii hore laga qabtay oo bishaan u go'ay` : `Advance from prior cycle applied to this cycle`)
+                : `${cycle} · ${billingCycleName}`,
             explanationVars: { cycle: `${cycle} (${billingCycleName})` },
-            statValue: money(kpis.advanceFeesCollected)
+            statValue: money(kpis.advanceCarriedIn > 0 ? kpis.advanceCarriedIn : kpis.advanceFeesCollected)
         },
         {
             id: 'total-income',
@@ -302,7 +312,7 @@ const DashboardOverview = () => {
             icon: <DollarSign size={20} />,
             color: 'bg-emerald-600',
             badgeColor: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
-            path: `/finance/cashbook?month=${cycle}`,
+            path: `/finance/cashbook?month=${cycle}&panel=transaction`,
             description: `${cycle} · ${billingCycleName}`,
             explanationVars: { cycle: `${cycle} (${billingCycleName})`, fees: money(totalStudentCollected), other: money(otherIncome) },
             statValue: money(otherIncome)
@@ -316,7 +326,7 @@ const DashboardOverview = () => {
             icon: <ArrowRightLeft size={20} />,
             color: 'bg-rose-500',
             badgeColor: 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300',
-            path: `/finance/cashbook?month=${cycle}`,
+            path: `/finance/cashbook?month=${cycle}&panel=transaction`,
             description: `${cycle} · ${billingCycleName}`,
             explanationVars: { cycle: `${cycle} (${billingCycleName})`, salaries: money(kpis.totalSalaries), other: money(otherExpenses) },
             statValue: money(otherExpenses)
@@ -333,7 +343,7 @@ const DashboardOverview = () => {
             badgeColor: balance < 0
                 ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
                 : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300',
-            path: `/finance/cashbook?month=${cycle}`,
+            path: `/finance/cashbook?month=${cycle}&panel=transaction`,
             description: `${cycle} · ${billingCycleName}`,
             explanationVars: { cycle: `${cycle} (${billingCycleName})`, income: money(kpis.totalIncome), expenses: money(kpis.totalExpenses) },
             statValue: `${money(kpis.totalIncome)} / ${money(kpis.totalExpenses)}`
@@ -505,15 +515,15 @@ const DashboardOverview = () => {
                     <div>
                         <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[10px] font-black uppercase tracking-widest text-brand-600 dark:text-brand-400">
-                                {locale ? 'Wareegga Xisaabeed ee Dashboard-ka' : 'Dashboard Billing Cycle'}
+                                {language === 'so' ? 'Wareegga Xisaabeed ee Dashboard-ka' : 'Dashboard Billing Cycle'}
                             </span>
                             {isCurrentActiveCycle ? (
                                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase border border-emerald-200 dark:border-emerald-900">
-                                    {locale ? '★ Bishan Hadda Jirta' : '★ Current Active Cycle'}
+                                    {language === 'so' ? '★ Bishan Hadda Jirta' : '★ Current Active Cycle'}
                                 </span>
                             ) : (
                                 <span className="px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-[10px] font-black uppercase border border-amber-200 dark:border-amber-900">
-                                    {locale ? 'Wareeg Gaar ah' : 'Filtered Cycle'}
+                                    {language === 'so' ? 'Wareeg Gaar ah' : 'Filtered Cycle'}
                                 </span>
                             )}
                         </div>
@@ -530,7 +540,7 @@ const DashboardOverview = () => {
                             type="button"
                             onClick={() => handleCycleChange(addCycles(selectedCycle, -1))}
                             className="p-2 rounded-xl text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 transition-all active:scale-95 shadow-none hover:shadow-sm"
-                            title={locale ? 'Wareeggii hore' : 'Previous Cycle'}
+                            title={language === 'so' ? 'Wareeggii hore' : 'Previous Cycle'}
                         >
                             <ChevronLeft size={18} strokeWidth={2.5} />
                         </button>
@@ -542,7 +552,7 @@ const DashboardOverview = () => {
                         >
                             {cycleOptions.map((c) => (
                                 <option key={c.key} value={c.key} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold">
-                                    {c.label} {c.isCurrent ? `★ (${locale ? 'Bishan' : 'Current'})` : ''}
+                                    {c.label} {c.isCurrent ? `★ (${language === 'so' ? 'Bishan' : 'Current'})` : ''}
                                 </option>
                             ))}
                         </select>
@@ -551,7 +561,7 @@ const DashboardOverview = () => {
                             type="button"
                             onClick={() => handleCycleChange(addCycles(selectedCycle, 1))}
                             className="p-2 rounded-xl text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-white dark:hover:bg-slate-700 transition-all active:scale-95 shadow-none hover:shadow-sm"
-                            title={locale ? 'Wareegga xiga' : 'Next Cycle'}
+                            title={language === 'so' ? 'Wareegga xiga' : 'Next Cycle'}
                         >
                             <ChevronRight size={18} strokeWidth={2.5} />
                         </button>
@@ -563,10 +573,10 @@ const DashboardOverview = () => {
                             type="button"
                             onClick={() => handleCycleChange(currentCycle())}
                             className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-black text-xs uppercase tracking-wider shadow-sm transition-all active:scale-95"
-                            title={locale ? 'Kusoo noqo wareegga bishan hadda jirta' : 'Return to current cycle'}
+                            title={language === 'so' ? 'Kusoo noqo wareegga bishan hadda jirta' : 'Return to current cycle'}
                         >
                             <RotateCcw size={14} strokeWidth={2.5} />
-                            <span>{locale ? 'Bishan Hadda' : 'Current Cycle'}</span>
+                            <span>{language === 'so' ? 'Bishan Hadda' : 'Current Cycle'}</span>
                         </button>
                     )}
                 </div>
@@ -645,7 +655,7 @@ const DashboardOverview = () => {
                                 </p>
                             </div>
                             <button
-                                onClick={() => navigate(`/finance/cashbook?month=${selectedCycle}`)}
+                                onClick={() => navigate(`/finance/cashbook?month=${selectedCycle}&panel=transaction`)}
                                 className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1 transition-colors"
                             >
                                 <span>{t('dashboard.viewAll')}</span>

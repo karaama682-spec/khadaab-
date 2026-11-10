@@ -24,7 +24,7 @@ const classDisplayName = (cls) => {
  * Only payments up to the cycle close (paymentDate <= end) are attributed.
  */
 const buildCyclePayers = async (cycleKey) => {
-    const { end } = cycleRange(cycleKey);
+    const { start, end } = cycleRange(cycleKey);
     const students = await Student.find({
         $or: [
             { status: { $nin: ['Inactive', 'Exited'] } },
@@ -51,13 +51,24 @@ const buildCyclePayers = async (cycleKey) => {
             status: 'Completed',
             paymentDate: { $lte: end },
             ...cycleMatch('billingCycle', 'paymentDate', cycleKey)
-        }).select('studentId amount').lean()
+        }).select('studentId amount paymentDate createdAt').lean()
         : [];
 
     const paidByStudent = new Map();
+    const directPaidByStudent = new Map();
+    const advancePaidByStudent = new Map();
     for (const p of payments) {
         const sId = String(p.studentId);
-        paidByStudent.set(sId, (paidByStudent.get(sId) || 0) + (Number(p.amount) || 0));
+        const amt = Number(p.amount) || 0;
+        paidByStudent.set(sId, (paidByStudent.get(sId) || 0) + amt);
+
+        const pDate = p.paymentDate ? new Date(p.paymentDate) : (p.createdAt ? new Date(p.createdAt) : null);
+        const isPastAdvance = pDate && pDate < start;
+        if (isPastAdvance) {
+            advancePaidByStudent.set(sId, (advancePaidByStudent.get(sId) || 0) + amt);
+        } else {
+            directPaidByStudent.set(sId, (directPaidByStudent.get(sId) || 0) + amt);
+        }
     }
 
     const groups = new Map();
@@ -92,6 +103,7 @@ const buildCyclePayers = async (cycleKey) => {
 
     let totalExpected = 0;
     let totalCollected = 0;
+    let advanceCarriedIn = 0;
     let totalDebt = 0;
     const debtStudentSet = new Set();
     const result = [];
@@ -99,10 +111,22 @@ const buildCyclePayers = async (cycleKey) => {
     for (const g of groups.values()) {
         const studentDetails = [];
         let paidAmount = 0;
+        let directPaid = 0;
+        let advancePaid = 0;
         for (const s of g.students) {
             const paid = paidByStudent.get(String(s._id)) || 0;
+            const dPaid = directPaidByStudent.get(String(s._id)) || 0;
+            const aPaid = advancePaidByStudent.get(String(s._id)) || 0;
             const fee = getStudentFeeForCycle(s, cycleKey);
-            paidAmount += Math.min(fee, paid);
+
+            const cappedDirect = Math.min(fee, dPaid);
+            const cappedAdvance = Math.min(Math.max(0, fee - cappedDirect), aPaid);
+            const cappedPaid = cappedDirect + cappedAdvance;
+
+            paidAmount += cappedPaid;
+            directPaid += cappedDirect;
+            advancePaid += cappedAdvance;
+
             const remaining = Math.max(0, fee - paid);
             if (remaining > 0) {
                 debtStudentSet.add(String(s._id));
@@ -114,13 +138,17 @@ const buildCyclePayers = async (cycleKey) => {
                 className: classDisplayName(s.classId),
                 monthlyFee: fee,
                 paid,
+                directPaid: dPaid,
+                advancePaid: aPaid,
                 remaining,
-                isPaid: fee > 0 && paid >= fee
+                isPaid: fee > 0 && paid >= fee,
+                isAdvancePaid: dPaid === 0 && aPaid > 0 && paid >= fee
             });
         }
         const remaining = Math.max(0, g.totalFee - paidAmount);
         totalExpected += g.totalFee;
-        totalCollected += paidAmount;
+        totalCollected += directPaid;
+        advanceCarriedIn += advancePaid;
         totalDebt += remaining;
 
         result.push({
@@ -135,8 +163,11 @@ const buildCyclePayers = async (cycleKey) => {
             studentCount: g.students.length,
             totalFee: g.totalFee,
             paidAmount,
+            directPaid,
+            advancePaid,
             remaining,
             paid: g.totalFee > 0 && paidAmount >= g.totalFee,
+            isAdvance: directPaid === 0 && advancePaid > 0 && paidAmount >= g.totalFee,
             month: cycleKey,
             cycle: cycleKey
         });
@@ -150,6 +181,7 @@ const buildCyclePayers = async (cycleKey) => {
         payers: result,
         totalExpected,
         totalCollected,
+        advanceCarriedIn,
         totalDebt,
         payerCount: debtPayers.length,
         studentCount: debtStudentSet.size
@@ -169,27 +201,49 @@ const ensureCycleSnapshot = async (cycleKey) => {
 
     let snapshot = await CycleDebtSnapshot.findOne({ cycle: cycleKey }).lean();
 
-    // If a valid sealed snapshot exists with real expected data or payers, keep it immutable
-    // and ensure top-level totals strictly match the arithmetic sum of genuine payers
+    // If a valid sealed snapshot exists with real expected data or payers
     if (snapshot && Array.isArray(snapshot.payers) && snapshot.payers.length > 0) {
+        // If snapshot lacks advance separation, rebuild it to capture advanceCarriedIn and directPaid
+        if (snapshot.advanceCarriedIn === undefined || (snapshot.payers.length > 0 && snapshot.payers[0].directPaid === undefined)) {
+            const data = await buildCyclePayers(cycleKey);
+            await CycleDebtSnapshot.updateOne(
+                { _id: snapshot._id },
+                {
+                    $set: {
+                        totalDebt: data.totalDebt,
+                        totalExpected: data.totalExpected,
+                        totalCollected: data.totalCollected,
+                        advanceCarriedIn: data.advanceCarriedIn,
+                        payerCount: data.payerCount,
+                        studentCount: data.studentCount,
+                        payers: data.payers
+                    }
+                }
+            );
+            return await CycleDebtSnapshot.findById(snapshot._id).lean();
+        }
+
         const sumFee = snapshot.payers.reduce((acc, p) => acc + (Number(p.totalFee) || 0), 0);
-        const sumPaid = snapshot.payers.reduce((acc, p) => acc + (Number(p.paidAmount) || 0), 0);
+        const sumDirectPaid = snapshot.payers.reduce((acc, p) => acc + (Number(p.directPaid !== undefined ? p.directPaid : p.paidAmount) || 0), 0);
+        const sumAdvancePaid = snapshot.payers.reduce((acc, p) => acc + (Number(p.advancePaid) || 0), 0);
         const sumDebt = snapshot.payers.reduce((acc, p) => acc + (p.paid ? 0 : (Number(p.remaining) || 0)), 0);
         const payerDebtors = snapshot.payers.filter(p => (Number(p.remaining) || 0) > 0 && !p.paid).length;
-        if (snapshot.totalExpected !== sumFee || snapshot.totalDebt !== sumDebt || snapshot.totalCollected !== sumPaid) {
+        if (snapshot.totalExpected !== sumFee || snapshot.totalDebt !== sumDebt || snapshot.totalCollected !== sumDirectPaid || snapshot.advanceCarriedIn !== sumAdvancePaid) {
             await CycleDebtSnapshot.updateOne(
                 { _id: snapshot._id },
                 {
                     $set: {
                         totalExpected: sumFee,
-                        totalCollected: sumPaid,
+                        totalCollected: sumDirectPaid,
+                        advanceCarriedIn: sumAdvancePaid,
                         totalDebt: sumDebt,
                         payerCount: payerDebtors
                     }
                 }
             ).catch(() => {});
             snapshot.totalExpected = sumFee;
-            snapshot.totalCollected = sumPaid;
+            snapshot.totalCollected = sumDirectPaid;
+            snapshot.advanceCarriedIn = sumAdvancePaid;
             snapshot.totalDebt = sumDebt;
             snapshot.payerCount = payerDebtors;
         }
@@ -210,6 +264,7 @@ const ensureCycleSnapshot = async (cycleKey) => {
                         totalDebt: data.totalDebt,
                         totalExpected: data.totalExpected,
                         totalCollected: data.totalCollected,
+                        advanceCarriedIn: data.advanceCarriedIn,
                         payerCount: data.payerCount,
                         studentCount: data.studentCount,
                         payers: data.payers
@@ -229,6 +284,7 @@ const ensureCycleSnapshot = async (cycleKey) => {
             totalDebt: data.totalDebt,
             totalExpected: data.totalExpected,
             totalCollected: data.totalCollected,
+            advanceCarriedIn: data.advanceCarriedIn,
             payerCount: data.payerCount,
             studentCount: data.studentCount,
             payers: data.payers

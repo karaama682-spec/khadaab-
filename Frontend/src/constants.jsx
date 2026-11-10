@@ -20,7 +20,8 @@ import {
   ClipboardList,
   PenSquare,
   Award,
-  BookmarkCheck
+  BookmarkCheck,
+  Calendar
 } from 'lucide-react';
 import { UserRole } from './types.js';
 
@@ -30,7 +31,7 @@ export const NAV_CONFIG = [
     translationKey: 'dashboard',
     path: '/',
     icon: LayoutDashboard,
-    roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.TEACHER],
+    roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT],
     subItems: []
   },
   {
@@ -62,6 +63,7 @@ export const NAV_CONFIG = [
     roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER],
     subItems: [
       { label: 'Classes', translationKey: 'classes', path: '/academic/classes', icon: BookOpen },
+      { label: 'Subjects', translationKey: 'subjects', path: '/academic/subjects', icon: BookOpen },
       { label: 'Teachers', translationKey: 'teachers', path: '/academic/teachers', icon: GraduationCap },
       { label: 'Students', translationKey: 'students', path: '/academic/students', icon: Users },
       { label: 'Guardians', translationKey: 'guardians', path: '/academic/guardians', icon: Users },
@@ -88,9 +90,11 @@ export const NAV_CONFIG = [
     icon: ClipboardList,
     roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER, UserRole.TEACHER],
     subItems: [
-      { label: 'Exams', translationKey: 'exams', path: '/exams', icon: ClipboardList },
-      { label: 'Mark Entry', translationKey: 'markEntry', path: '/exams/marks', icon: PenSquare },
-      { label: 'Results', translationKey: 'results', path: '/exams/results', icon: Award },
+      { label: 'Exam Dashboard', translationKey: 'examDashboard', path: '/exams/dashboard', icon: LayoutDashboard, roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER] },
+      { label: 'Exams', translationKey: 'exams', path: '/exams', icon: ClipboardList, roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER] },
+      { label: 'Exam Timetable', translationKey: 'examSchedule', path: '/exams/schedule', icon: Calendar, roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER, UserRole.TEACHER] },
+      { label: 'Mark Entry', translationKey: 'markEntry', path: '/exams/marks', icon: PenSquare, roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER, UserRole.TEACHER] },
+      { label: 'Results', translationKey: 'results', path: '/exams/results', icon: Award, roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER] },
     ]
   },
   {
@@ -121,7 +125,7 @@ export const NAV_CONFIG = [
     translationKey: 'reports',
     path: '/reports',
     icon: FileText,
-    roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT, UserRole.TEACHER],
+    roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER, UserRole.ACCOUNTANT],
     subItems: [
       { label: 'Fee Payment Report', translationKey: 'feePaymentReport', path: '/reports/payments', icon: Receipt },
       { label: 'Category Summary Report', translationKey: 'categorySummaryReport', path: '/reports/category-summary', icon: FileBarChart },

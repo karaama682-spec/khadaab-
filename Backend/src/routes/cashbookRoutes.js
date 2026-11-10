@@ -6,12 +6,17 @@ const {
     updateCategory,
     deleteCategory,
     getEntries,
+    getDeletedEntries,
     createEntry,
     updateEntry,
     deleteEntry,
+    restoreEntry,
+    permanentDeleteEntry,
+    emptyTrash,
     lookupPhone,
     getPayers,
-    togglePayer
+    togglePayer,
+    getCycleReconciliation
 } = require('../controllers/cashbookController');
 const { protect } = require('../middleware/authMiddleware');
 const { checkAnyPermission, checkAnyPermissionSet } = require('../middleware/roleMiddleware');
@@ -26,6 +31,7 @@ const canReadPayers = checkAnyPermissionSet([
 
 router.get('/lookup', protect, checkAnyPermission('Finance', ['Read']), lookupPhone);
 router.get('/payers', protect, canReadPayers, getPayers);
+router.get('/cycle-reconciliation', protect, canReadPayers, getCycleReconciliation);
 // Ticking a payer as paid records a payment, so it needs a Finance write.
 router.post('/payers/toggle', protect, checkAnyPermission('Finance', ['Add', 'Edit']), togglePayer);
 
@@ -52,6 +58,11 @@ router.route('/categories/:id')
 router.route('/entries')
     .get(protect, canReadCashbook, getEntries)
     .post(protect, canWriteCashbook, createEntry);
+
+router.get('/deleted-entries', protect, canReadCashbook, getDeletedEntries);
+router.post('/entries/:id/restore', protect, canWriteCashbook, restoreEntry);
+router.delete('/entries/:id/permanent', protect, canWriteCashbook, permanentDeleteEntry);
+router.delete('/entries/trash/empty', protect, canWriteCashbook, emptyTrash);
 
 router.route('/entries/:id')
     .put(protect, canWriteCashbook, updateEntry)

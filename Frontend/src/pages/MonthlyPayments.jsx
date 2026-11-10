@@ -2,12 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   CalendarRange, Search, Phone, ChevronDown, ChevronRight, Wallet, X,
-  CheckCircle2, Clock, AlertCircle, Users, ArrowUpRight, DollarSign, Filter, Printer, History
+  CheckCircle2, Clock, AlertCircle, Users, ArrowUpRight, DollarSign, Filter, Printer, History, Scale
 } from 'lucide-react';
 import api from '../services/api';
 import { useAlert } from '../components/common/alerts/useAlert';
 import { cycleShortLabel, cycleLabel, currentCycle } from '../utils/billingCycle';
 import { useLanguage } from '../i18n/LanguageContext.jsx';
+import CycleReconciliationModal from '../components/finance/CycleReconciliationModal';
 
 const fmtMoney = (n) =>
   Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -43,6 +44,7 @@ const MonthlyPayments = () => {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [expandedKey, setExpandedKey] = useState(null);
+  const [showReconModal, setShowReconModal] = useState(false);
 
   // Dynamic tenant / institute branding (salaax aldaareyn)
   const [tenantInfo, setTenantInfo] = useState(() => {
@@ -192,6 +194,7 @@ const MonthlyPayments = () => {
   const totals = useMemo(() => {
     let expected = 0;
     let collected = 0;
+    let advanceCarriedIn = 0;
     let pending = 0;
     let paidPayersCount = 0;
     let pendingPayersCount = 0;
@@ -200,9 +203,12 @@ const MonthlyPayments = () => {
     payers.forEach((p) => {
       const fee = Number(p.totalFee || 0);
       const paid = Number(p.paidAmount || 0);
+      const dPaid = Number(p.directPaid !== undefined ? p.directPaid : (p.isAdvance ? 0 : paid));
+      const aPaid = Number(p.advancePaid !== undefined ? p.advancePaid : (p.isAdvance ? paid : 0));
       const rem = Number(p.remaining !== undefined ? p.remaining : Math.max(0, fee - paid));
       expected += fee;
-      collected += paid;
+      collected += dPaid;
+      advanceCarriedIn += aPaid;
       pending += (p.paid ? 0 : rem);
       studentsCount += Number(p.studentCount !== undefined ? p.studentCount : (p.students?.length || 0));
 
@@ -217,6 +223,8 @@ const MonthlyPayments = () => {
     return {
       expected: isPreviousDebtView ? pending : expected,
       collected: isPreviousDebtView ? 0 : collected,
+      advanceCarriedIn: isPreviousDebtView ? 0 : advanceCarriedIn,
+      totalSettled: isPreviousDebtView ? 0 : (collected + advanceCarriedIn),
       pending,
       paidPayersCount: isPreviousDebtView ? 0 : paidPayersCount,
       pendingPayersCount: isPreviousDebtView ? payers.length : pendingPayersCount,
@@ -260,7 +268,7 @@ const MonthlyPayments = () => {
   };
 
   return (
-    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24 print:p-0 print:m-0 print:space-y-0 print:max-w-none print:pb-0">
+    <div className="p-3.5 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24 print:p-0 print:m-0 print:space-y-0 print:max-w-none print:pb-0">
       {/* Ultra-compact print style - 100% Pure White Paper, No Dark Fills */}
       <style>{`
         @media print {
@@ -478,6 +486,19 @@ const MonthlyPayments = () => {
             </select>
           </div>
 
+          {/* Reconciliation Audit Button */}
+          {!isPreviousDebtView && (
+            <button
+              type="button"
+              onClick={() => setShowReconModal(true)}
+              className="flex items-center gap-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 px-5 py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-indigo-600/30 transition-all active:scale-95 print:hidden"
+              title={locale === 'so' ? 'Dhaqdhaqaaqa Bisha & Xisaab-Xirka Khidmadaha (Tuition Roll-Forward Reconciliation)' : 'Monthly Tuition Reconciliation Audit'}
+            >
+              <Scale size={16} />
+              <span>{locale === 'so' ? 'Dhaqdhaqaaqa Bisha' : 'Reconciliation'}</span>
+            </button>
+          )}
+
           {/* Print Button */}
           <button
             type="button"
@@ -532,7 +553,13 @@ const MonthlyPayments = () => {
             ${fmtMoney(totals.collected)}
           </div>
           <p className="mt-1 text-xs font-medium text-slate-400">
-            {t('monthlyPayments.paidPeople', { count: totals.paidPayersCount })}
+            {totals.advanceCarriedIn > 0 ? (
+              <span>
+                {t('monthlyPayments.paidPeople', { count: totals.paidPayersCount })} · (+${fmtMoney(totals.advanceCarriedIn)} {locale === 'so' ? 'Horumaris Hore' : 'Advance'})
+              </span>
+            ) : (
+              t('monthlyPayments.paidPeople', { count: totals.paidPayersCount })
+            )}
           </p>
         </div>
 
@@ -565,55 +592,67 @@ const MonthlyPayments = () => {
       {/* Filter Tabs & Search Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
         {/* Status Filter Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto rounded-2xl bg-slate-100/90 p-1.5 dark:bg-slate-800/90 w-fit">
-          <button
-            onClick={() => handleTabChange('all')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-              statusFilter === 'all'
-                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white'
-                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-            }`}
-          >
-            <span>{t('common.all')}</span>
-            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-extrabold text-slate-700 dark:bg-slate-600 dark:text-slate-200">
+        {!isPreviousDebtView ? (
+          <div className="flex items-center gap-2 overflow-x-auto rounded-2xl bg-slate-100/90 p-1.5 dark:bg-slate-800/90 w-fit">
+            <button
+              onClick={() => handleTabChange('all')}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                statusFilter === 'all'
+                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+              }`}
+            >
+              <span>{t('common.all')}</span>
+              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-extrabold text-slate-700 dark:bg-slate-600 dark:text-slate-200">
+                {payers.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange('paid')}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                statusFilter === 'paid'
+                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
+                  : 'text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400'
+              }`}
+            >
+              <CheckCircle2 size={14} />
+              <span>{t('monthlyPayments.tabPaid')}</span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                statusFilter === 'paid' ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+              }`}>
+                {totals.paidPayersCount}
+              </span>
+            </button>
+
+            <button
+              onClick={() => handleTabChange('pending')}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                statusFilter === 'pending'
+                  ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/30'
+                  : 'text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400'
+              }`}
+            >
+              <AlertCircle size={14} />
+              <span>{t('monthlyPayments.tabPending')}</span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
+                statusFilter === 'pending' ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+              }`}>
+                {totals.pendingPayersCount}
+              </span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-2xl bg-rose-50/80 dark:bg-rose-950/40 px-3.5 py-2 border border-rose-200/60 dark:border-rose-900/40">
+            <span className="flex items-center gap-1.5 text-xs font-black text-rose-700 dark:text-rose-300 uppercase tracking-wider">
+              <AlertCircle size={14} />
+              {locale === 'so' ? 'Kuwa Deynta Lagu Leeyahay Keliya' : 'Debtors Only (Remaining Balance)'}
+            </span>
+            <span className="rounded-full bg-rose-600 text-white px-2.5 py-0.5 text-[11px] font-black">
               {payers.length}
             </span>
-          </button>
-
-          <button
-            onClick={() => handleTabChange('paid')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-              statusFilter === 'paid'
-                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
-                : 'text-slate-500 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400'
-            }`}
-          >
-            <CheckCircle2 size={14} />
-            <span>{t('monthlyPayments.tabPaid')}</span>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
-              statusFilter === 'paid' ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-            }`}>
-              {totals.paidPayersCount}
-            </span>
-          </button>
-
-          <button
-            onClick={() => handleTabChange('pending')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
-              statusFilter === 'pending'
-                ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/30'
-                : 'text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400'
-            }`}
-          >
-            <AlertCircle size={14} />
-            <span>{t('monthlyPayments.tabPending')}</span>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
-              statusFilter === 'pending' ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-            }`}>
-              {totals.pendingPayersCount}
-            </span>
-          </button>
-        </div>
+          </div>
+        )}
 
         {/* Search */}
         <div className="flex items-center bg-white dark:bg-slate-900 rounded-2xl px-4 py-2.5 border border-slate-100 dark:border-slate-800 shadow-sm w-full max-w-md focus-within:ring-2 focus-within:ring-brand-500/20 transition-all">
@@ -718,10 +757,17 @@ const MonthlyPayments = () => {
                       </td>
                       <td className="px-5 py-4 text-center print:px-1.5 print:py-0.5 print:text-[7.5pt]">
                         {isFullyPaid ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-500/20 dark:bg-emerald-950/40 dark:text-emerald-300 print:border-emerald-700 print:text-emerald-900 print:px-1.5 print:py-0.2 print:text-[7pt]">
-                            <CheckCircle2 size={12} className="print:hidden" />
-                            <span>{t('monthlyPayments.statusPaid')}</span>
-                          </span>
+                          p.isAdvance ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-500/20 dark:bg-indigo-950/40 dark:text-indigo-300 print:border-indigo-700 print:text-indigo-900 print:px-1.5 print:py-0.2 print:text-[7pt]">
+                              <CheckCircle2 size={12} className="print:hidden" />
+                              <span>{locale === 'so' ? 'Bixisay (Horumaris)' : 'Paid (Advance)'}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-500/20 dark:bg-emerald-950/40 dark:text-emerald-300 print:border-emerald-700 print:text-emerald-900 print:px-1.5 print:py-0.2 print:text-[7pt]">
+                              <CheckCircle2 size={12} className="print:hidden" />
+                              <span>{t('monthlyPayments.statusPaid')}</span>
+                            </span>
+                          )
                         ) : isPartial ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-500/20 dark:bg-amber-950/40 dark:text-amber-300 print:border-amber-700 print:text-amber-900 print:px-1.5 print:py-0.2 print:text-[7pt]">
                             <Clock size={12} className="print:hidden" />
@@ -773,9 +819,15 @@ const MonthlyPayments = () => {
                                       </td>
                                       <td className="px-5 py-3 text-center">
                                         {sIsPaid ? (
-                                          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                                            ✓ {t('monthlyPayments.studentPaid')}
-                                          </span>
+                                          s.isAdvancePaid ? (
+                                            <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                                              ✓ {locale === 'so' ? 'Horumaris Hore' : 'Paid in Advance'}
+                                            </span>
+                                          ) : (
+                                            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                              ✓ {t('monthlyPayments.studentPaid')}
+                                            </span>
+                                          )
                                         ) : sPaid > 0 ? (
                                           <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
                                             {t('monthlyPayments.studentPartial')}
@@ -887,12 +939,15 @@ const MonthlyPayments = () => {
           </table>
         </div>
 
-        {/* Clean simple table footer count (No confusing extra totals) */}
-        <div className="flex items-center justify-between px-8 py-4 border-t border-slate-100 dark:border-slate-800 text-xs font-bold text-slate-400 print:hidden">
-          <span>{t('monthlyPayments.filteredCount', { count: filtered.length })}</span>
-          <span>{cycleLabel(monthKey)}</span>
-        </div>
       </div>
+
+      {/* Cycle Reconciliation Audit Modal */}
+      <CycleReconciliationModal
+        isOpen={showReconModal}
+        onClose={() => setShowReconModal(false)}
+        cycleKey={monthKey}
+        tenantInfo={tenantInfo}
+      />
     </div>
   );
 };

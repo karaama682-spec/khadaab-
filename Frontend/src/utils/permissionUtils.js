@@ -132,7 +132,18 @@ export const hasNavPermission = (user, currentRole, moduleLabel, subModuleLabel 
         const rUpper = String(r).toUpperCase().replace(/\s+/g, '_');
         return rUpper === roleUpper || rUpper === roleNormalized.toUpperCase();
       });
-      if (match) return true;
+      if (match) {
+        if (subModuleLabel && Array.isArray(navItem.subItems)) {
+          const subItem = navItem.subItems.find(s => s.label === subModuleLabel);
+          if (subItem && Array.isArray(subItem.roles)) {
+            return subItem.roles.some(r => {
+              const rUpper = String(r).toUpperCase().replace(/\s+/g, '_');
+              return rUpper === roleUpper || rUpper === roleNormalized.toUpperCase();
+            });
+          }
+        }
+        return true;
+      }
     }
   }
 

@@ -33,7 +33,16 @@ const CashbookCategoryReport = () => {
   const [wallets, setWallets] = useState([]);
   const [walletFilter, setWalletFilter] = useState('All');
   const [loading, setLoading] = useState(true);
-  const [selectedCycle, setSelectedCycle] = useState(currentCycle());
+  const [selectedCycle, setSelectedCycle] = useState(() => {
+    try {
+      const search = new URLSearchParams(window.location.search);
+      const urlCycle = search.get('month') || search.get('cycle');
+      if (urlCycle && /^\d{4}-\d{2}$/.test(urlCycle)) return urlCycle;
+      const saved = sessionStorage.getItem('active_billing_cycle');
+      if (saved && /^\d{4}-\d{2}$/.test(saved)) return saved;
+    } catch (_) {}
+    return currentCycle();
+  });
   // Default to the current billing cycle (25th→24th) so the report opens on the
   // same period its labels describe.
   const [dateFrom, setDateFrom] = useState(() => currentPeriod().from);
@@ -54,6 +63,11 @@ const CashbookCategoryReport = () => {
 
   const handleCycleSelect = (key) => {
     setSelectedCycle(key);
+    try {
+      if (key && /^\d{4}-\d{2}$/.test(key)) {
+        sessionStorage.setItem('active_billing_cycle', key);
+      }
+    } catch (_) {}
     if (!key) {
       setDateFrom('');
       setDateTo('');
@@ -387,7 +401,7 @@ const CashbookCategoryReport = () => {
   );
 
   return (
-    <div className="p-6 lg:p-8 space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24">
+    <div className="p-3.5 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-[1800px] mx-auto animate-in fade-in duration-500 pb-24">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 px-1 print:hidden">
         <div className="flex items-center gap-5">

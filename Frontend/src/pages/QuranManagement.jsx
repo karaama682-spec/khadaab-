@@ -512,7 +512,7 @@ const QuranManagement = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-8 max-w-[1700px] mx-auto animate-in fade-in duration-500 pb-28">
+    <div className="p-4 sm:p-3.5 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 max-w-[1700px] mx-auto animate-in fade-in duration-500 pb-28">
 
       {/* ========================================================================= */}
       {/* 1. TOP HEADER BANNER (SCREEN ONLY) */}
