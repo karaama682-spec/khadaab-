@@ -198,6 +198,89 @@ const createQuranLessonRecord = async (req, res) => {
     }
 };
 
+// Helper to revert student progress when a lesson record is deleted
+const revertStudentProgressAfterRecordDelete = async (record) => {
+    try {
+        if (!record || !record.studentId) return;
+        const student = await Student.findById(record.studentId);
+        if (!student) return;
+
+        // Find the most recent remaining record for this student
+        const prevRecord = await QuranLessonRecord.findOne({
+            studentId: student._id,
+            _id: { $ne: record._id }
+        }).sort({ date: -1, createdAt: -1 });
+
+        if (prevRecord) {
+            const pSurah = prevRecord.actualSurahNumber || prevRecord.surahNumber || 1;
+            const pSurahObj = QURAN_SURAHS.find(s => s.number === pSurah) || QURAN_SURAHS[0];
+            const pFrom = prevRecord.actualFromVerse || prevRecord.fromVerse || 1;
+            const pTo = prevRecord.actualToVerse || prevRecord.toVerse || pFrom;
+            const maxV = pSurahObj.verses || 100;
+
+            let nextSurah = pSurah;
+            let nextFrom = pTo + 1;
+            if (prevRecord.status === 'passed') {
+                if (nextFrom > maxV) {
+                    nextSurah = nextSurah < 114 ? nextSurah + 1 : 1;
+                    nextFrom = 1;
+                }
+            } else {
+                nextFrom = pFrom;
+            }
+            const nSurahObj = QURAN_SURAHS.find(s => s.number === nextSurah) || QURAN_SURAHS[0];
+            const pace = student.quranProgress?.dailyPace || student.expectedLessonConfig?.dailyPace || 5;
+            const nextTo = Math.min(nSurahObj.verses || 100, nextFrom + (pace - 1));
+
+            student.quranProgress = {
+                surahNumber: nextSurah,
+                surahName: nSurahObj.nameSo || nSurahObj.nameAr,
+                fromVerse: nextFrom,
+                dailyPace: pace,
+                lastStatus: prevRecord.status,
+                lastUpdated: new Date()
+            };
+            student.expectedLessonConfig = {
+                ...(student.expectedLessonConfig ? student.expectedLessonConfig.toObject() : {}),
+                surahNumber: nextSurah,
+                surahName: nSurahObj.nameSo || nSurahObj.nameAr,
+                fromVerse: nextFrom,
+                toVerse: nextTo,
+                dailyPace: pace,
+                lastAssignedAt: new Date()
+            };
+        } else {
+            // No previous record, revert to initial expectation of deleted record
+            const rSurah = record.expectedSurahNumber || record.surahNumber || 1;
+            const rFrom = record.expectedFromVerse || record.fromVerse || 1;
+            const rSurahObj = QURAN_SURAHS.find(s => s.number === rSurah) || QURAN_SURAHS[0];
+            const pace = student.expectedLessonConfig?.dailyPace || student.quranProgress?.dailyPace || 5;
+            const rTo = Math.min(rSurahObj.verses || 100, rFrom + (pace - 1));
+
+            student.quranProgress = {
+                surahNumber: rSurah,
+                surahName: rSurahObj.nameSo || rSurahObj.nameAr,
+                fromVerse: rFrom,
+                dailyPace: pace,
+                lastStatus: 'passed',
+                lastUpdated: new Date()
+            };
+            student.expectedLessonConfig = {
+                ...(student.expectedLessonConfig ? student.expectedLessonConfig.toObject() : {}),
+                surahNumber: rSurah,
+                surahName: rSurahObj.nameSo || rSurahObj.nameAr,
+                fromVerse: rFrom,
+                toVerse: rTo,
+                dailyPace: pace,
+                lastAssignedAt: new Date()
+            };
+        }
+        await student.save();
+    } catch (err) {
+        console.error('Error reverting student progress after record deletion:', err);
+    }
+};
+
 // @desc    Update a Quran lesson record
 // @route   PUT /api/quran/lessons/:id
 // @access  Private
@@ -226,6 +309,15 @@ const updateQuranLessonRecord = async (req, res) => {
         const record = await QuranLessonRecord.findById(id);
         if (!record) {
             return res.status(404).json({ message: 'Quran lesson record not found' });
+        }
+
+        // Teacher check: Allow teachers to edit records belonging to their assigned class
+        if (req.user?.role === 'Teacher') {
+            const teacherClasses = await Class.find({ teacherId: req.user._id });
+            const teacherClassIds = teacherClasses.map(c => c._id.toString());
+            if (record.classId && !teacherClassIds.includes(record.classId.toString())) {
+                return res.status(403).json({ message: 'Ma lihid awood aad ku beddesho cashir fasal aadan dhigin.' });
+            }
         }
 
         if (studentId) record.studentId = studentId;
@@ -273,6 +365,63 @@ const updateQuranLessonRecord = async (req, res) => {
         });
 
         const updated = await record.save();
+
+        // Sync student progress with updated lesson
+        if (record.studentId) {
+            const student = await Student.findById(record.studentId);
+            if (student) {
+                const actSurah = record.actualSurahNumber || record.surahNumber || 1;
+                const actSurahObj = QURAN_SURAHS.find(s => s.number === actSurah) || QURAN_SURAHS[0];
+                const maxVerses = actSurahObj.verses || 100;
+                const actFrom = record.actualFromVerse || record.fromVerse || 1;
+                const actTo = record.actualToVerse || record.toVerse || actFrom;
+                const pace = student.quranProgress?.dailyPace || (actTo - actFrom + 1) || 5;
+
+                if (record.status === 'passed') {
+                    let nextSurahNum = actSurah;
+                    let nextFrom = actTo + 1;
+                    let nextSurahObj = actSurahObj;
+
+                    if (nextFrom > maxVerses) {
+                        nextSurahNum = nextSurahNum < 114 ? nextSurahNum + 1 : 1;
+                        nextFrom = 1;
+                        nextSurahObj = QURAN_SURAHS.find(s => s.number === nextSurahNum) || QURAN_SURAHS[0];
+                    }
+
+                    const nextMaxV = nextSurahObj.verses || 100;
+                    const nextTo = Math.min(nextMaxV, nextFrom + (pace - 1));
+
+                    student.quranProgress = {
+                        surahNumber: nextSurahNum,
+                        surahName: nextSurahObj.nameSo || nextSurahObj.nameAr,
+                        fromVerse: nextFrom,
+                        dailyPace: pace,
+                        lastStatus: 'passed',
+                        lastUpdated: new Date()
+                    };
+                    student.expectedLessonConfig = {
+                        ...(student.expectedLessonConfig ? student.expectedLessonConfig.toObject() : {}),
+                        surahNumber: nextSurahNum,
+                        surahName: nextSurahObj.nameSo || nextSurahObj.nameAr,
+                        fromVerse: nextFrom,
+                        toVerse: nextTo,
+                        dailyPace: pace,
+                        lastAssignedAt: new Date()
+                    };
+                } else {
+                    student.quranProgress = {
+                        surahNumber: actSurah,
+                        surahName: actSurahObj.nameSo || actSurahObj.nameAr,
+                        fromVerse: actFrom,
+                        dailyPace: pace,
+                        lastStatus: 'repeat',
+                        lastUpdated: new Date()
+                    };
+                }
+                await student.save();
+            }
+        }
+
         const populated = await QuranLessonRecord.findById(updated._id)
             .populate('studentId', 'fullName studentCode rollNumber fatherPhone classId')
             .populate('classId', 'name className')
@@ -285,7 +434,7 @@ const updateQuranLessonRecord = async (req, res) => {
     }
 };
 
-// @desc    Delete a Quran lesson record
+// @desc    Delete a Quran lesson record (Individual delete)
 // @route   DELETE /api/quran/lessons/:id
 // @access  Private
 const deleteQuranLessonRecord = async (req, res) => {
@@ -296,16 +445,77 @@ const deleteQuranLessonRecord = async (req, res) => {
             return res.status(404).json({ message: 'Quran lesson record not found' });
         }
 
-        // Teachers cannot delete records
+        // Allow Teachers if the record belongs to a class assigned to them
         if (req.user?.role === 'Teacher') {
-            return res.status(403).json({ message: 'Macallimiinta looma ogola inay tirtiraan diiwaanka cashirada.' });
+            const teacherClasses = await Class.find({ teacherId: req.user._id });
+            const teacherClassIds = teacherClasses.map(c => c._id.toString());
+            if (record.classId && !teacherClassIds.includes(record.classId.toString())) {
+                return res.status(403).json({ message: 'Ma lihid awood aad ku tirtirto cashir fasal aadan dhigin.' });
+            }
         }
 
+        // Revert student progress before deleting record
+        await revertStudentProgressAfterRecordDelete(record);
+
         await QuranLessonRecord.findByIdAndDelete(id);
-        res.status(200).json({ message: 'Quran lesson record deleted successfully' });
+        res.status(200).json({ message: 'Diiwaanka cashirka ardayga si guul leh ayaa loo tirtiray' });
     } catch (error) {
         console.error('Error deleting Quran lesson record:', error);
         res.status(500).json({ message: 'Failed to delete Quran lesson record', error: error.message });
+    }
+};
+
+// @desc    Delete all Quran lesson records for a class on a specific date (Delete All Sheet)
+// @route   DELETE /api/quran/lessons/class-sheet
+// @access  Private
+const deleteClassQuranSheet = async (req, res) => {
+    try {
+        const { classId, date } = req.query;
+        if (!classId) {
+            return res.status(400).json({ message: 'Fasalka waa qasab (Class ID is required)' });
+        }
+
+        // Teacher permission check: Must be assigned to this class
+        if (req.user?.role === 'Teacher') {
+            const teacherClasses = await Class.find({ teacherId: req.user._id });
+            const teacherClassIds = teacherClasses.map(c => c._id.toString());
+            if (!teacherClassIds.includes(classId.toString())) {
+                return res.status(403).json({ message: 'Ma lihid awood aad ku tirtirto xaashida fasal aadan dhigin.' });
+            }
+        }
+
+        const targetDate = date ? new Date(date) : new Date();
+        const startOfDay = new Date(targetDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(targetDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const records = await QuranLessonRecord.find({
+            classId,
+            date: { $gte: startOfDay, $lte: endOfDay }
+        });
+
+        if (records.length === 0) {
+            return res.status(200).json({ message: 'Ma jiraan cashiro la keydiyay taariikhdan.', deletedCount: 0 });
+        }
+
+        // Revert progress for each student whose record is being deleted
+        for (const rec of records) {
+            await revertStudentProgressAfterRecordDelete(rec);
+        }
+
+        const deleteResult = await QuranLessonRecord.deleteMany({
+            classId,
+            date: { $gte: startOfDay, $lte: endOfDay }
+        });
+
+        res.status(200).json({
+            message: `Dhammaan cashiradii fasalka ee maalintaas waa la wada tirtiray (${deleteResult.deletedCount} xabbo).`,
+            deletedCount: deleteResult.deletedCount
+        });
+    } catch (error) {
+        console.error('Error deleting class Quran sheet:', error);
+        res.status(500).json({ message: 'Failed to delete class Quran sheet', error: error.message });
     }
 };
 
@@ -477,6 +687,14 @@ const getClassQuranSheet = async (req, res) => {
                 iskuXir: iskuXirInfo,
                 todayRecord: existingRecord ? {
                     _id: existingRecord._id,
+                    surahNumber: existingRecord.actualSurahNumber || existingRecord.surahNumber,
+                    surahName: existingRecord.actualSurahName || existingRecord.surahName,
+                    fromVerse: existingRecord.actualFromVerse || existingRecord.fromVerse,
+                    toVerse: existingRecord.actualToVerse || existingRecord.toVerse,
+                    actualSurahNumber: existingRecord.actualSurahNumber || existingRecord.surahNumber,
+                    actualSurahName: existingRecord.actualSurahName || existingRecord.surahName,
+                    actualFromVerse: existingRecord.actualFromVerse || existingRecord.fromVerse,
+                    actualToVerse: existingRecord.actualToVerse || existingRecord.toVerse,
                     status: existingRecord.status,
                     isDeviated: existingRecord.isDeviated,
                     deviationReason: existingRecord.deviationReason || '',
@@ -1075,6 +1293,7 @@ module.exports = {
     createQuranLessonRecord,
     updateQuranLessonRecord,
     deleteQuranLessonRecord,
+    deleteClassQuranSheet,
     getClassQuranSheet,
     batchRecordQuranLessons,
     updateStudentQuranProgress,

@@ -88,6 +88,21 @@ const QuranLessonManagement = () => {
   const [sheetSearchQuery, setSheetSearchQuery] = useState('');
   const [sheetLoading, setSheetLoading] = useState(false);
   const [sheetSaving, setSheetSaving] = useState(false);
+  const [sheetDeleting, setSheetDeleting] = useState(false);
+
+  // Individual student edit modal for class sheet
+  const [sheetEditStudent, setSheetEditStudent] = useState(null);
+  const [sheetEditForm, setSheetEditForm] = useState({
+    surahNumber: 1,
+    surahName: '',
+    fromVerse: 1,
+    toVerse: 5,
+    status: 'passed',
+    note: '',
+    deviationReason: '',
+    iskuXirResult: 'none'
+  });
+  const [sheetEditSaving, setSheetEditSaving] = useState(false);
 
   // Modal for editing single student's Quran starting point (Bisinka & Aayadda)
   const [progressModalStudent, setProgressModalStudent] = useState(null);
@@ -259,7 +274,9 @@ const QuranLessonManagement = () => {
           iskuXirConfig: isku,
           iskuXirResult: hasToday ? (s.todayRecord.iskuXirResult || 'none') : (isku.hasIskuXir ? 'passed' : 'none'),
           lessonType: 'sabaq',
-          isSavedToday: hasToday
+          isSavedToday: hasToday,
+          todayRecordId: hasToday ? s.todayRecord._id : null,
+          todayRecord: s.todayRecord || null
         };
       });
 
@@ -469,6 +486,165 @@ const QuranLessonManagement = () => {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Khalad ayaa dhacay markii xaashida la keydinayay.' });
     } finally {
       setSheetSaving(false);
+    }
+  };
+
+  // Delete all lesson records for current class and date (Delete All)
+  const handleDeleteClassSheet = async () => {
+    if (!sheetClassId) return;
+    const confirmDelete = window.confirm(
+      'Ma hubtaa inaad tirtirto dhammaan cashirada la keydiyay ee fasalkan taariikhda la doortay? Xogta cashirada waa la tirtirayaa ardaydana dib ayaa loo celinayaa.'
+    );
+    if (!confirmDelete) return;
+
+    try {
+      setSheetDeleting(true);
+      const res = await api.delete('/quran/lessons/class-sheet', {
+        params: { classId: sheetClassId, date: sheetDate }
+      });
+      setMessage({ type: 'success', text: res.data.message || 'Dhammaan cashiradii fasalka waa la tirtiray.' });
+      await Promise.all([
+        loadClassSheet(sheetClassId, sheetDate),
+        loadAccountabilityReport(accountabilityDate, sheetClassId, selectedBranchId),
+        api.get('/quran/lessons').then(r => setRecords(r.data || [])).catch(() => {})
+      ]);
+    } catch (err) {
+      console.error('Error deleting class sheet:', err);
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Ma suurtogalin in la tirtiro xaashida fasalka.' });
+    } finally {
+      setSheetDeleting(false);
+    }
+  };
+
+  // Delete individual student lesson record
+  const handleDeleteStudentSheetRecord = async (item) => {
+    if (item.todayRecordId) {
+      const confirmDelete = window.confirm(
+        `Ma hubtaa inaad tirtirto diiwaanka cashirka ee ardayga: "${item.fullName}"?`
+      );
+      if (!confirmDelete) return;
+
+      try {
+        await api.delete(`/quran/lessons/${item.todayRecordId}`);
+        setMessage({ type: 'success', text: `Diiwaanka cashirka ee "${item.fullName}" waa la tirtiray.` });
+        await Promise.all([
+          loadClassSheet(sheetClassId, sheetDate),
+          loadAccountabilityReport(accountabilityDate, sheetClassId, selectedBranchId),
+          api.get('/quran/lessons').then(r => setRecords(r.data || [])).catch(() => {})
+        ]);
+      } catch (err) {
+        console.error('Error deleting student record:', err);
+        setMessage({ type: 'error', text: err.response?.data?.message || 'Ma suurtogalin in la tirtiro cashirka ardayga.' });
+      }
+    } else {
+      // Unsaved in DB yet - reset row back to expected values
+      const exp = item.expectedLesson || {};
+      setSheetStudents(prev => prev.map(s => {
+        if (s.studentId === item.studentId) {
+          return {
+            ...s,
+            surahNumber: exp.surahNumber || 1,
+            surahName: exp.surahName || 'Al-Faatixa',
+            fromVerse: exp.fromVerse || 1,
+            toVerse: exp.toVerse || 5,
+            status: 'passed',
+            note: '',
+            deviationReason: '',
+            isDeviated: false,
+            iskuXirResult: s.iskuXir?.hasIskuXir ? 'passed' : 'none'
+          };
+        }
+        return s;
+      }));
+      setMessage({ type: 'info', text: `Qiimeynta ardayga "${item.fullName}" dib ayaa loo bilaabay.` });
+    }
+  };
+
+  // Open individual edit modal for student
+  const handleOpenSheetEditModal = (item) => {
+    setSheetEditStudent(item);
+    setSheetEditForm({
+      surahNumber: item.surahNumber || item.expectedLesson?.surahNumber || 1,
+      surahName: item.surahName || item.expectedLesson?.surahName || '',
+      fromVerse: item.fromVerse || item.expectedLesson?.fromVerse || 1,
+      toVerse: item.toVerse || item.expectedLesson?.toVerse || 5,
+      status: item.status || 'passed',
+      note: item.note || '',
+      deviationReason: item.deviationReason || '',
+      iskuXirResult: item.iskuXirResult || 'none'
+    });
+  };
+
+  // Save individual edit modal
+  const handleSaveSheetEditModal = async (e) => {
+    e?.preventDefault();
+    if (!sheetEditStudent) return;
+
+    const sNum = Number(sheetEditForm.surahNumber) || 1;
+    const surahObj = QURAN_SURAHS.find(s => s.number === sNum) || QURAN_SURAHS[0];
+    const maxV = surahObj.verses || 100;
+    const fVerse = Math.max(1, Math.min(Number(sheetEditForm.fromVerse) || 1, maxV));
+    const tVerse = Math.max(fVerse, Math.min(Number(sheetEditForm.toVerse) || fVerse, maxV));
+    const sName = `${surahObj.number}. ${surahObj.nameAr} (${surahObj.nameSo})`;
+
+    const exp = sheetEditStudent.expectedLesson || {};
+    const isDeviated = (sNum !== Number(exp.surahNumber)) ||
+                       (fVerse !== Number(exp.fromVerse)) ||
+                       (tVerse !== Number(exp.toVerse));
+
+    if (isDeviated && !sheetEditForm.deviationReason?.trim()) {
+      setMessage({ type: 'error', text: 'Fadlan geli sababta aad qorshaha Admin-ka u beddeshay.' });
+      return;
+    }
+
+    try {
+      setSheetEditSaving(true);
+      if (sheetEditStudent.todayRecordId) {
+        // Record exists in DB, update directly
+        await api.put(`/quran/lessons/${sheetEditStudent.todayRecordId}`, {
+          surahNumber: sNum,
+          surahName: sName,
+          fromVerse: fVerse,
+          toVerse: tVerse,
+          status: sheetEditForm.status,
+          note: sheetEditForm.note,
+          deviationReason: sheetEditForm.deviationReason,
+          iskuXirResult: sheetEditForm.iskuXirResult
+        });
+        setMessage({ type: 'success', text: `Cashirka ardayga "${sheetEditStudent.fullName}" si guul leh ayaa loo cusbooneysiiyey!` });
+        await Promise.all([
+          loadClassSheet(sheetClassId, sheetDate),
+          loadAccountabilityReport(accountabilityDate, sheetClassId, selectedBranchId),
+          api.get('/quran/lessons').then(r => setRecords(r.data || [])).catch(() => {})
+        ]);
+      } else {
+        // Record not saved yet in DB, update local sheet state
+        setSheetStudents(prev => prev.map(s => {
+          if (s.studentId === sheetEditStudent.studentId) {
+            return {
+              ...s,
+              surahNumber: sNum,
+              surahName: sName,
+              fromVerse: fVerse,
+              toVerse: tVerse,
+              maxVerses: maxV,
+              status: sheetEditForm.status,
+              note: sheetEditForm.note,
+              deviationReason: sheetEditForm.deviationReason,
+              isDeviated,
+              iskuXirResult: sheetEditForm.iskuXirResult
+            };
+          }
+          return s;
+        }));
+        setMessage({ type: 'success', text: `Cashirka ardayga "${sheetEditStudent.fullName}" waa la beddelay. Guji "Keydi Xaashida" si aad u keydiso.` });
+      }
+      setSheetEditStudent(null);
+    } catch (err) {
+      console.error('Error saving student edit:', err);
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Ma suurtogalin in la beddelo cashirka.' });
+    } finally {
+      setSheetEditSaving(false);
     }
   };
 
@@ -1056,6 +1232,17 @@ const QuranLessonManagement = () => {
                     <Save size={13} />
                     <span>{sheetSaving ? 'Waa la keydinayaa...' : 'Keydi Xaashida'}</span>
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDeleteClassSheet}
+                    disabled={sheetDeleting || sheetSaving}
+                    className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95 disabled:opacity-50"
+                    title="Tirtir dhammaan cashirada la keydiyay ee fasalkan taariikhda la doortay"
+                  >
+                    <Trash2 size={13} className={sheetDeleting ? 'animate-spin' : ''} />
+                    <span>{sheetDeleting ? 'Waa la tirtirayaa...' : 'Tirtir Xaashida'}</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -1158,12 +1345,13 @@ const QuranLessonManagement = () => {
                       <th className="py-4 px-4 sm:px-6">Isku-xirka (4 Maalmood)</th>
                       <th className="py-4 px-4 sm:px-6 text-center">Natiijada</th>
                       <th className="py-4 px-4 sm:px-6">Mulaaxado & Sabab</th>
+                      <th className="py-4 px-3 sm:px-4 text-center">Hawlaha</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-semibold">
                     {displayedSheetStudents.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="py-12 text-center text-slate-400 font-bold text-xs">
+                        <td colSpan={8} className="py-12 text-center text-slate-400 font-bold text-xs">
                           {sheetSearchQuery
                             ? `Arday laguma helin raadinta "${sheetSearchQuery}".`
                             : 'Fasalkaan arday laguma helin.'}
@@ -1383,6 +1571,29 @@ const QuranLessonManagement = () => {
                                 />
                               </div>
                             )}
+                          </td>
+
+                          {/* Individual Student Actions: Edit & Delete */}
+                          <td className="py-4 px-3 sm:px-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenSheetEditModal(item)}
+                                className="p-1.5 rounded-xl text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 border border-teal-200/60 dark:border-teal-800 transition-all active:scale-90"
+                                title="Wax ka beddel cashirka ardayga (Edit)"
+                              >
+                                <Edit2 size={13} />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteStudentSheetRecord(item)}
+                                className="p-1.5 rounded-xl text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900 border border-rose-200/60 dark:border-rose-800 transition-all active:scale-90"
+                                title={item.isSavedToday ? "Tirtir diiwaanka cashirka ardayga" : "Dib u celi (Reset)"}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -2165,6 +2376,209 @@ const QuranLessonManagement = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: WAX KA BEDDEL CASHIRKA ARDAYGA (CLASS SHEET INDIVIDUAL EDIT) */}
+      {/* ========================================================================= */}
+      {sheetEditStudent && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-[32px] p-6 sm:p-7 max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl animate-in zoom-in-95 duration-200 space-y-4">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <Edit2 size={16} className="text-teal-600" />
+                  <span>Wax ka beddel Cashirka Ardayga</span>
+                </h3>
+                <p className="text-xs text-slate-500 font-bold mt-0.5">
+                  Ardayga: <span className="text-teal-600 font-black">{sheetEditStudent.fullName}</span> {sheetEditStudent.rollNumber ? `(#${sheetEditStudent.rollNumber})` : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSheetEditStudent(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSheetEditModal} className="space-y-3.5">
+              {/* Surah Dropdown */}
+              <div>
+                <label className="block text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
+                  Suuradda *
+                </label>
+                <select
+                  value={sheetEditForm.surahNumber}
+                  onChange={(e) => {
+                    const num = Number(e.target.value);
+                    const sObj = QURAN_SURAHS.find(s => s.number === num) || QURAN_SURAHS[0];
+                    setSheetEditForm(prev => ({
+                      ...prev,
+                      surahNumber: num,
+                      surahName: `${sObj.number}. ${sObj.nameAr} (${sObj.nameSo})`
+                    }));
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                >
+                  {QURAN_SURAHS.map(s => (
+                    <option key={s.number} value={s.number}>
+                      {s.number}. {s.nameSo} ({s.nameAr}) - {s.verses} aayadood
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Verse Range: From - To */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
+                    Ka bilaabo Aayadda *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={sheetEditForm.fromVerse}
+                    onChange={(e) => setSheetEditForm(prev => ({ ...prev, fromVerse: Math.max(1, Number(e.target.value) || 1) }))}
+                    className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
+                    Ilaa Aayadda *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={sheetEditForm.toVerse}
+                    onChange={(e) => setSheetEditForm(prev => ({ ...prev, toVerse: Math.max(1, Number(e.target.value) || 1) }))}
+                    className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                </div>
+              </div>
+
+              {/* Sabaq Status Toggle */}
+              <div>
+                <label className="block text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
+                  Xaaladda Sabaqa (Natiijada) *
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSheetEditForm(prev => ({ ...prev, status: 'passed' }))}
+                    className={`py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+                      sheetEditForm.status === 'passed'
+                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                    }`}
+                  >
+                    <CheckCircle2 size={14} />
+                    <span>Gudbay ✓</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSheetEditForm(prev => ({ ...prev, status: 'repeat' }))}
+                    className={`py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+                      sheetEditForm.status === 'repeat'
+                        ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                    }`}
+                  >
+                    <RotateCcw size={14} />
+                    <span>Tikraar ↺</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Isku-Xir Status if student has Isku-Xir */}
+              {sheetEditStudent.studentType === 'HOREED' && sheetEditStudent.iskuXir?.hasIskuXir && (
+                <div>
+                  <label className="block text-[11px] font-black uppercase text-purple-700 dark:text-purple-300 mb-1">
+                    Natiijada Isku-Xirka (4 Maalin)
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSheetEditForm(prev => ({ ...prev, iskuXirResult: 'passed' }))}
+                      className={`py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+                        sheetEditForm.iskuXirResult === 'passed'
+                          ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      <CheckCircle2 size={14} />
+                      <span>Isku-Xir: Gudbay ✓</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSheetEditForm(prev => ({ ...prev, iskuXirResult: 'repeat' }))}
+                      className={`py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+                        sheetEditForm.iskuXirResult === 'repeat'
+                          ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      <RotateCcw size={14} />
+                      <span>Isku-Xir: Tikraar ↺</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Note */}
+              <div>
+                <label className="block text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
+                  Mulaaxad / Xusuusin
+                </label>
+                <input
+                  type="text"
+                  placeholder="Xusuusin ama tilmaan dheeraad ah..."
+                  value={sheetEditForm.note}
+                  onChange={(e) => setSheetEditForm(prev => ({ ...prev, note: e.target.value }))}
+                  className="w-full px-3.5 py-2 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+
+              {/* Deviation Reason */}
+              <div>
+                <label className="block text-[11px] font-black uppercase text-amber-600 dark:text-amber-400 mb-1 flex items-center gap-1">
+                  <AlertTriangle size={12} />
+                  <span>Sababta Beddelka Qorshaha (Haddii aad beddeshay)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Geli sababta aad qorshaha Admin-ka u beddeshay..."
+                  value={sheetEditForm.deviationReason}
+                  onChange={(e) => setSheetEditForm(prev => ({ ...prev, deviationReason: e.target.value }))}
+                  className="w-full px-3.5 py-2 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/80 text-xs font-semibold text-amber-900 dark:text-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              {/* Modal Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSheetEditStudent(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200"
+                >
+                  Ka noqo
+                </button>
+                <button
+                  type="submit"
+                  disabled={sheetEditSaving}
+                  className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-black shadow-md shadow-teal-600/30 flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                >
+                  <Save size={13} className={sheetEditSaving ? 'animate-spin' : ''} />
+                  <span>{sheetEditSaving ? 'Waa la keydinayaa...' : 'Keydi Beddelka'}</span>
+                </button>
+              </div>
+            </form>
+
           </div>
         </div>
       )}
