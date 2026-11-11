@@ -95,6 +95,7 @@ const QuranManagement = () => {
   }, [location.pathname]);
 
   // Dedicated Plan Registration States
+  const [regClassId, setRegClassId] = useState('');
   const [regStudent, setRegStudent] = useState(null);
   const [regStudentSearchQuery, setRegStudentSearchQuery] = useState('');
   const [isRegStudentDropdownOpen, setIsRegStudentDropdownOpen] = useState(false);
@@ -231,18 +232,21 @@ const QuranManagement = () => {
     };
   }, [regStudent, classes]);
 
-  // Filter students for registration autocomplete search
+  // Filter students for registration autocomplete search strictly by selected class/halaqah
   const regFilteredStudents = useMemo(() => {
-    if (!regStudentSearchQuery.trim()) return branchStudents.slice(0, 15);
+    if (!regClassId) return [];
+    const pool = branchStudents.filter(s => {
+      const cId = s.classId?._id || s.classId;
+      return String(cId) === String(regClassId);
+    });
+    if (!regStudentSearchQuery.trim()) return pool;
     const q = regStudentSearchQuery.toLowerCase().trim();
-    return branchStudents.filter(s =>
+    return pool.filter(s =>
       (s.fullName && s.fullName.toLowerCase().includes(q)) ||
       (s.studentCode && s.studentCode.toLowerCase().includes(q)) ||
-      (s.rollNumber && s.rollNumber.toString().includes(q)) ||
-      (s.classId?.name && s.classId.name.toLowerCase().includes(q)) ||
-      (s.classId?.className && s.classId.className.toLowerCase().includes(q))
-    ).slice(0, 20);
-  }, [branchStudents, regStudentSearchQuery]);
+      (s.rollNumber && s.rollNumber.toString().includes(q))
+    );
+  }, [branchStudents, regClassId, regStudentSearchQuery]);
 
   // Filter 114 Surahs for registration dropdown
   const regFilteredSurahs = useMemo(() => {
@@ -258,6 +262,8 @@ const QuranManagement = () => {
   }, [regSurahSearchQuery, regSurah]);
 
   const handleSelectRegStudent = (student) => {
+    const cId = student.classId?._id || student.classId;
+    if (cId) setRegClassId(String(cId));
     setRegStudent(student);
     setRegStudentSearchQuery(student.fullName || '');
     setIsRegStudentDropdownOpen(false);
@@ -282,6 +288,7 @@ const QuranManagement = () => {
   };
 
   const resetRegForm = () => {
+    setRegClassId('');
     setRegStudent(null);
     setRegStudentSearchQuery('');
     setRegStudentType('LAQDIIN');
@@ -295,6 +302,14 @@ const QuranManagement = () => {
 
   const handleSaveStudentPlan = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
+    if (!regClassId) {
+      showAlert({
+        type: 'warning',
+        title: 'Dooro Xalaqadda',
+        message: 'Fadlan marka hore dooro Xalaqadda / Fasalka.'
+      });
+      return;
+    }
     if (!regStudent) {
       showAlert({
         type: 'warning',
@@ -1007,12 +1022,37 @@ const QuranManagement = () => {
             </div>
 
             <form onSubmit={handleSaveStudentPlan} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
 
-                {/* Field 1: Dooro Ardayga */}
-                <div className="relative md:col-span-2 lg:col-span-1" ref={regStudentDropdownRef}>
+                {/* Field 1: Xalaqadda / Fasalka */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    1. Xalaqadda / Fasalka *
+                  </label>
+                  <select
+                    required
+                    value={regClassId}
+                    onChange={(e) => {
+                      const newCId = e.target.value;
+                      setRegClassId(newCId);
+                      setRegStudent(null);
+                      setRegStudentSearchQuery('');
+                    }}
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all cursor-pointer"
+                  >
+                    <option value="">-- Dooro Xalaqadda --</option>
+                    {branchClasses.map(c => (
+                      <option key={c._id} value={c._id}>
+                        {c.name || c.className}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Field 2: Dooro Ardayga */}
+                <div className="relative" ref={regStudentDropdownRef}>
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                    <span>1. Dooro Ardayga *</span>
+                    <span>2. Dooro Ardayga *</span>
                     {regStudent && (
                       <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
                         <Check size={12} /> Doortay
@@ -1023,14 +1063,17 @@ const QuranManagement = () => {
                     <input
                       type="text"
                       required
-                      placeholder="Raadi magaca ardayga..."
+                      disabled={!regClassId}
+                      placeholder={regClassId ? "Raadi ardayga..." : "Marka hore xalaqad dooro..."}
                       value={regStudentSearchQuery}
                       onChange={(e) => {
                         setRegStudentSearchQuery(e.target.value);
                         setIsRegStudentDropdownOpen(true);
                       }}
-                      onFocus={() => setIsRegStudentDropdownOpen(true)}
-                      className="w-full px-4 py-3 pl-10 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                      onFocus={() => {
+                        if (regClassId) setIsRegStudentDropdownOpen(true);
+                      }}
+                      className="w-full px-4 py-3 pl-10 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:bg-slate-100 dark:disabled:bg-slate-900/50 disabled:cursor-not-allowed transition-all"
                     />
                     <User size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
                     {regStudentSearchQuery && (
@@ -1047,11 +1090,14 @@ const QuranManagement = () => {
                     )}
                   </div>
 
-                  {isRegStudentDropdownOpen && regFilteredStudents.length > 0 && (
+                  {isRegStudentDropdownOpen && regClassId && (
                     <div className="absolute z-30 left-0 right-0 mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
-                      {regFilteredStudents.map((s) => {
-                        const halName = s.classId?.name || s.classId?.className || 'Halaqad';
-                        return (
+                      {regFilteredStudents.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-slate-400 font-bold">
+                          Xalaqaddan arday kuma jirto ama lama helin.
+                        </div>
+                      ) : (
+                        regFilteredStudents.map((s) => (
                           <div
                             key={s._id}
                             onClick={() => handleSelectRegStudent(s)}
@@ -1060,23 +1106,23 @@ const QuranManagement = () => {
                             <div>
                               <p className="text-sm font-bold text-slate-900 dark:text-white">{s.fullName}</p>
                               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                                Roll #{s.rollNumber || s.studentCode || 'N/A'} • <span className="text-emerald-600 dark:text-emerald-400 font-bold">{halName}</span>
+                                Roll #{s.rollNumber || s.studentCode || 'N/A'}
                               </p>
                             </div>
                             <span className="text-xs font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1 rounded-lg">
                               Dooro
                             </span>
                           </div>
-                        );
-                      })}
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
 
-                {/* Field 2: Nooca Ardayga (LAQDIIN vs HOREED) */}
+                {/* Field 3: Nooca Ardayga (LAQDIIN vs HOREED) */}
                 <div className="space-y-1.5">
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                    2. Nooca Ardayga *
+                    3. Nooca Ardayga *
                   </label>
                   <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                     <button
@@ -1106,10 +1152,10 @@ const QuranManagement = () => {
                   </div>
                 </div>
 
-                {/* Field 3: Bisinka uu marayo (Suuradda) */}
+                {/* Field 4: Bisinka uu marayo (Suuradda) */}
                 <div className="relative" ref={regSurahDropdownRef}>
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                    <span>3. Suuradda Bisinka *</span>
+                    <span>4. Suuradda Bisinka *</span>
                     {regSurah && (
                       <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
                         #{regSurah.number}
