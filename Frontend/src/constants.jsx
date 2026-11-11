@@ -42,6 +42,12 @@ export const NAV_CONFIG = [
     roles: [UserRole.SUPER_ADMIN, UserRole.INSTITUTE_ADMIN, UserRole.BRANCH_MANAGER, UserRole.TEACHER],
     subItems: [
       {
+        label: 'Diiwaangelinta Qorshaha & Bisinka',
+        translationKey: 'quranPlanRegistration',
+        path: '/quran/plan-registration',
+        icon: GraduationCap
+      },
+      {
         label: 'Jadwalka Suuradaha',
         translationKey: 'quranSurahs',
         path: '/quran/surahs',

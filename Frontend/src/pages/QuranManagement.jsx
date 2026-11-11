@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   BookOpen, ShieldCheck, CheckSquare, GraduationCap, Sliders, Sparkles, Plus, Search, Check, RotateCcw,
   Printer, FileDown, Trash2, Edit3, Filter, Calendar,
@@ -78,8 +79,20 @@ const QuranManagement = () => {
   const [statusFilter, setStatusFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('');
 
+  const location = useLocation();
   // View Switcher: 'registration' (Diiwaangelinta Qorshaha & Bisinka) | 'examinations' (Diiwaanka Imtixaanaadka & Natiijooyinka)
-  const [activeView, setActiveView] = useState('registration');
+  const [activeView, setActiveView] = useState(() => {
+    if (location.pathname.includes('surahs')) return 'examinations';
+    return 'registration';
+  });
+
+  useEffect(() => {
+    if (location.pathname.includes('plan-registration')) {
+      setActiveView('registration');
+    } else if (location.pathname.includes('surahs')) {
+      setActiveView('examinations');
+    }
+  }, [location.pathname]);
 
   // Dedicated Plan Registration States
   const [regStudent, setRegStudent] = useState(null);

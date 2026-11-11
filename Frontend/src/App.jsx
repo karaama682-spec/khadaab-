@@ -296,7 +296,8 @@ const App = () => {
                 <RoleGuard currentRole={currentRole} user={user}>
                   <Routes>
                     <Route path="/" element={<DashboardOverview />} />
-                    <Route path="/quran" element={<Navigate to="/quran/surahs" replace />} />
+                    <Route path="/quran" element={<Navigate to="/quran/plan-registration" replace />} />
+                    <Route path="/quran/plan-registration" element={<QuranManagement />} />
                     <Route path="/quran/surahs" element={<QuranManagement />} />
                     <Route path="/quran/lessons" element={<QuranLessonManagement />} />
 

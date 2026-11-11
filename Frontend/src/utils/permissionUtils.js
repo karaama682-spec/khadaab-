@@ -75,7 +75,7 @@ export const roleHasPermission = (role, moduleName, action = 'Read', subModuleNa
   const modulePerms = role.permissions[moduleName];
   if (!modulePerms || typeof modulePerms !== 'object') return false;
 
-  if (subModuleName) {
+  if (subModuleName && modulePerms[subModuleName]) {
     return permissionObjectHasAction(modulePerms[subModuleName], normalizedAction);
   }
 
