@@ -7,13 +7,17 @@ const {
     deleteQuranLessonRecord,
     getClassQuranSheet,
     batchRecordQuranLessons,
-    updateStudentQuranProgress
+    updateStudentQuranProgress,
+    assignStudentQuranPlan,
+    getAccountabilityReport
 } = require('../controllers/quranLessonController');
 const { protect } = require('../middleware/authMiddleware');
 
 router.get('/class-sheet', protect, getClassQuranSheet);
 router.post('/batch', protect, batchRecordQuranLessons);
 router.put('/progress/:studentId', protect, updateStudentQuranProgress);
+router.put('/admin/assign-expectation', protect, assignStudentQuranPlan);
+router.get('/accountability/report', protect, getAccountabilityReport);
 
 router.route('/')
     .get(protect, getQuranLessonRecords)

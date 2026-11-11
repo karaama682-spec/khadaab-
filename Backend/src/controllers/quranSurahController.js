@@ -1,6 +1,7 @@
 const QuranSurahRecord = require('../models/QuranSurahRecord');
 const Student = require('../models/Student');
 const Class = require('../models/Class');
+const { QURAN_SURAHS } = require('../data/quranSurahs');
 
 // @desc    Get all Quran surah records with optional filtering
 // @route   GET /api/quran/surahs
@@ -23,7 +24,7 @@ const getQuranSurahRecords = async (req, res) => {
             query.classId = classId;
         }
 
-        if (branchId) {
+        if (branchId && branchId !== 'All' && branchId !== 'ALL') {
             query.branchId = branchId;
         }
 
@@ -42,8 +43,8 @@ const getQuranSurahRecords = async (req, res) => {
         }
 
         const records = await QuranSurahRecord.find(query)
-            .populate('studentId', 'fullName studentCode rollNumber fatherPhone classId branchId')
-            .populate('classId', 'name className branchId')
+            .populate('studentId', 'fullName studentCode rollNumber fatherPhone classId branchId studentType expectedLessonConfig iskuXirConfig')
+            .populate('classId', 'name className branchId teacherId')
             .populate('branchId', 'name')
             .populate('teacherId', 'fullName username')
             .sort({ date: -1, createdAt: -1 });
@@ -55,7 +56,7 @@ const getQuranSurahRecords = async (req, res) => {
     }
 };
 
-// @desc    Create a new Quran surah record
+// @desc    Create a new Quran surah record & update student's Quran curriculum blueprint
 // @route   POST /api/quran/surahs
 // @access  Private
 const createQuranSurahRecord = async (req, res) => {
@@ -68,6 +69,13 @@ const createQuranSurahRecord = async (req, res) => {
             halaqahName,
             surahName,
             surahNumber,
+            fromVerse,
+            toVerse,
+            pageRange,
+            lineRange,
+            dailyPace,
+            studentType, // 'LAQDIIN' | 'HOREED'
+            iskuXirConfig,
             status,
             repeatCount,
             note,
@@ -87,6 +95,13 @@ const createQuranSurahRecord = async (req, res) => {
         let resolvedHalaqah = halaqahName;
         let resolvedBranchId = branchId;
 
+        const sNum = surahNumber ? Number(surahNumber) : 1;
+        const surahObj = QURAN_SURAHS.find(s => s.number === sNum) || QURAN_SURAHS[0];
+        const maxV = surahObj.verses || 100;
+        const fVerse = fromVerse ? Math.max(1, Math.min(Number(fromVerse), maxV)) : 1;
+        const tVerse = toVerse ? Math.min(maxV, Math.max(fVerse, Number(toVerse))) : Math.min(maxV, fVerse + 4);
+        const pace = dailyPace ? Math.max(1, Number(dailyPace)) : (tVerse - fVerse + 1);
+
         if (studentId) {
             const student = await Student.findById(studentId).populate('classId');
             if (student) {
@@ -100,6 +115,49 @@ const createQuranSurahRecord = async (req, res) => {
                 if (!resolvedBranchId) {
                     resolvedBranchId = student.branchId || (student.classId && student.classId.branchId) || undefined;
                 }
+
+                // Update student curriculum blueprint
+                if (studentType) {
+                    student.studentType = studentType === 'HOREED' ? 'HOREED' : 'LAQDIIN';
+                }
+
+                student.expectedLessonConfig = {
+                    surahNumber: sNum,
+                    surahName: `${surahObj.number}. ${surahObj.nameAr} (${surahObj.nameSo})`,
+                    fromVerse: fVerse,
+                    toVerse: tVerse,
+                    pageRange: pageRange ? String(pageRange).trim() : '',
+                    lineRange: lineRange ? String(lineRange).trim() : '',
+                    dailyPace: pace,
+                    lastAssignedBy: req.user?._id,
+                    lastAssignedAt: new Date()
+                };
+
+                student.quranProgress = {
+                    surahNumber: sNum,
+                    surahName: surahObj.nameSo || surahObj.nameAr,
+                    fromVerse: fVerse,
+                    dailyPace: pace,
+                    lastStatus: status === 'repeat' ? 'repeat' : 'passed',
+                    lastUpdated: new Date()
+                };
+
+                if (student.studentType === 'HOREED' && iskuXirConfig) {
+                    const iskuSNum = Number(iskuXirConfig.surahNumber) || 1;
+                    const iskuSurah = QURAN_SURAHS.find(s => s.number === iskuSNum) || QURAN_SURAHS[0];
+                    student.iskuXirConfig = {
+                        isActive: Boolean(iskuXirConfig.isActive),
+                        revisionDays: Array.isArray(iskuXirConfig.revisionDays) ? iskuXirConfig.revisionDays : [],
+                        surahNumber: iskuSNum,
+                        surahName: iskuSurah.nameSo || iskuSurah.nameAr,
+                        fromVerse: Number(iskuXirConfig.fromVerse) || 1,
+                        toVerse: Number(iskuXirConfig.toVerse) || iskuSurah.verses,
+                        pageRange: iskuXirConfig.pageRange ? String(iskuXirConfig.pageRange).trim() : '',
+                        notes: iskuXirConfig.notes ? String(iskuXirConfig.notes).trim() : ''
+                    };
+                }
+
+                await student.save();
             }
         }
 
@@ -110,7 +168,7 @@ const createQuranSurahRecord = async (req, res) => {
             branchId: resolvedBranchId,
             halaqahName: resolvedHalaqah || '',
             surahName: surahName.trim(),
-            surahNumber: surahNumber ? Number(surahNumber) : undefined,
+            surahNumber: sNum,
             status: status === 'repeat' ? 'repeat' : 'passed',
             repeatCount: status === 'repeat' ? Math.max(1, Number(repeatCount) || 1) : 1,
             note: note ? note.trim() : '',
@@ -120,7 +178,7 @@ const createQuranSurahRecord = async (req, res) => {
 
         const savedRecord = await record.save();
         const populated = await QuranSurahRecord.findById(savedRecord._id)
-            .populate('studentId', 'fullName studentCode rollNumber fatherPhone classId branchId')
+            .populate('studentId', 'fullName studentCode rollNumber fatherPhone classId branchId studentType')
             .populate('classId', 'name className branchId')
             .populate('branchId', 'name')
             .populate('teacherId', 'fullName username');

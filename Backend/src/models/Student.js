@@ -100,6 +100,90 @@ const studentSchema = new mongoose.Schema({
         fileSize: { type: Number, default: 0 },
         uploadedAt: { type: Date, default: null }
     },
+    // Student Type for Quran curriculum: LAQDIIN (beginners/readers) or HOREED (memorizers with Isku-Xir)
+    studentType: {
+        type: String,
+        enum: ['LAQDIIN', 'HOREED'],
+        default: 'LAQDIIN'
+    },
+    // Admin Expectation Blueprint: The exact lesson Admin planned for this student
+    expectedLessonConfig: {
+        surahNumber: {
+            type: Number,
+            default: 1
+        },
+        surahName: {
+            type: String,
+            default: 'Al-Faatixa'
+        },
+        fromVerse: {
+            type: Number,
+            default: 1
+        },
+        toVerse: {
+            type: Number,
+            default: 5
+        },
+        pageRange: {
+            type: String,
+            default: '',
+            trim: true
+        },
+        lineRange: {
+            type: String,
+            default: '',
+            trim: true
+        },
+        dailyPace: {
+            type: Number,
+            default: 5
+        },
+        lastAssignedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        },
+        lastAssignedAt: {
+            type: Date,
+            default: Date.now
+        }
+    },
+    // ISKU XIR Schedule (Specific for HOREED students)
+    iskuXirConfig: {
+        isActive: {
+            type: Boolean,
+            default: false
+        },
+        revisionDays: [{
+            type: String,
+            trim: true
+        }], // e.g. ['Sabti', 'Talaado'] or ['Saturday', 'Tuesday']
+        surahNumber: {
+            type: Number,
+            default: 1
+        },
+        surahName: {
+            type: String,
+            default: 'Al-Faatixa'
+        },
+        fromVerse: {
+            type: Number,
+            default: 1
+        },
+        toVerse: {
+            type: Number,
+            default: 7
+        },
+        pageRange: {
+            type: String,
+            default: '',
+            trim: true
+        },
+        notes: {
+            type: String,
+            default: '',
+            trim: true
+        }
+    },
     // Daily Quran progression state (current surah, verse, daily pace, and status)
     quranProgress: {
         surahNumber: {

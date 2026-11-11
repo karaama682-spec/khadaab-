@@ -56,6 +56,82 @@ const quranLessonRecordSchema = new mongoose.Schema({
         trim: true,
         default: ''
     },
+    // Accountability & Audit: Expected lesson set by Admin vs actual delivered
+    studentType: {
+        type: String,
+        enum: ['LAQDIIN', 'HOREED'],
+        default: 'LAQDIIN'
+    },
+    expectedSurahNumber: {
+        type: Number
+    },
+    expectedSurahName: {
+        type: String,
+        trim: true
+    },
+    expectedFromVerse: {
+        type: Number
+    },
+    expectedToVerse: {
+        type: Number
+    },
+    expectedPageOrLines: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    actualSurahNumber: {
+        type: Number
+    },
+    actualSurahName: {
+        type: String,
+        trim: true
+    },
+    actualFromVerse: {
+        type: Number
+    },
+    actualToVerse: {
+        type: Number
+    },
+    // Did teacher deviate from Admin's assigned lesson?
+    isDeviated: {
+        type: Boolean,
+        default: false,
+        index: true
+    },
+    // Mandatory if teacher modified Admin's assignment
+    deviationReason: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    // Isku-xir evaluation (Horeed students on scheduled revision days)
+    isIskuXirDay: {
+        type: Boolean,
+        default: false
+    },
+    iskuXirResult: {
+        type: String,
+        enum: ['passed', 'repeat', 'none'],
+        default: 'none'
+    },
+    assignedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    recordedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    auditHistory: [
+        {
+            action: { type: String, required: true },
+            performedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+            role: { type: String },
+            timestamp: { type: Date, default: Date.now },
+            details: { type: String }
+        }
+    ],
     date: {
         type: Date,
         default: Date.now,

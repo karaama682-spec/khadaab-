@@ -28,7 +28,11 @@ import {
   Settings,
   Save,
   Check,
-  ArrowRight
+  ArrowRight,
+  ShieldCheck,
+  AlertTriangle,
+  Eye,
+  CheckCheck
 } from 'lucide-react';
 import api from '../services/api';
 import { QURAN_SURAHS } from '../data/quranSurahs';
@@ -56,6 +60,24 @@ const QuranLessonManagement = () => {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
+
+  // Current user & Teacher Role Scoping
+  const currentUser = useMemo(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('userInfo') || '{}');
+    } catch {
+      return {};
+    }
+  }, []);
+  const isTeacher = (currentUser?.role || '').toLowerCase().includes('teacher');
+  const isAdmin = !isTeacher;
+
+  // Accountability Report States
+  const [accountabilityData, setAccountabilityData] = useState(null);
+  const [accountabilityLoading, setAccountabilityLoading] = useState(false);
+  const [accountabilityDate, setAccountabilityDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [accountabilityFilterClass, setAccountabilityFilterClass] = useState('All');
+  const [accountabilityFilterStatus, setAccountabilityFilterStatus] = useState('All');
 
   // ==========================================
   // CLASS SHEET STATES (Batch grading & Auto-progression)
@@ -202,19 +224,38 @@ const QuranLessonManagement = () => {
 
       const list = (res.data.students || []).map(s => {
         const hasToday = !!s.todayRecord;
+        const exp = s.expectedLesson || {};
+        const act = s.actualLesson || exp;
+        const isku = s.iskuXir || {};
+
+        const currentSurah = hasToday ? (s.todayRecord.actualSurahNumber || act.surahNumber || exp.surahNumber) : exp.surahNumber;
+        const currentFrom = hasToday ? (s.todayRecord.actualFromVerse || act.fromVerse || exp.fromVerse) : exp.fromVerse;
+        const currentTo = hasToday ? (s.todayRecord.actualToVerse || act.toVerse || exp.toVerse) : exp.toVerse;
+
+        const isDeviated = (Number(currentSurah) !== Number(exp.surahNumber)) ||
+                           (Number(currentFrom) !== Number(exp.fromVerse)) ||
+                           (Number(currentTo) !== Number(exp.toVerse));
+
         return {
           studentId: s.studentId,
           fullName: s.fullName,
           rollNumber: s.rollNumber,
           studentCode: s.studentCode,
-          quranProgress: s.quranProgress,
-          surahNumber: hasToday ? s.todayRecord.surahNumber || s.scheduledLesson.surahNumber : s.scheduledLesson.surahNumber,
-          surahName: hasToday ? s.todayRecord.surahName : s.scheduledLesson.surahName,
-          fromVerse: hasToday ? s.todayRecord.fromVerse : s.scheduledLesson.fromVerse,
-          toVerse: hasToday ? s.todayRecord.toVerse : s.scheduledLesson.toVerse,
-          maxVerses: s.scheduledLesson.maxVerses,
-          status: hasToday ? s.todayRecord.status : 'passed', // default to passed
+          studentType: s.studentType || 'LAQDIIN',
+          expectedLesson: exp,
+          surahNumber: currentSurah,
+          surahName: hasToday ? (s.todayRecord.actualSurahName || s.todayRecord.surahName || exp.surahName) : exp.surahName,
+          fromVerse: currentFrom,
+          toVerse: currentTo,
+          maxVerses: exp.maxVerses || 286,
+          pageOrLines: exp.pageOrLines || '',
+          status: hasToday ? s.todayRecord.status : 'passed',
           note: hasToday ? (s.todayRecord.note || '') : '',
+          deviationReason: hasToday ? (s.todayRecord.deviationReason || '') : '',
+          isDeviated: hasToday ? !!s.todayRecord.isDeviated : isDeviated,
+          isIskuXirDay: isku.isToday,
+          iskuXirConfig: isku,
+          iskuXirResult: hasToday ? (s.todayRecord.iskuXirResult || 'none') : (isku.isToday ? 'passed' : 'none'),
           lessonType: 'sabaq',
           isSavedToday: hasToday
         };
@@ -328,7 +369,7 @@ const QuranLessonManagement = () => {
     }
   };
 
-  // Submit the entire class sheet in batch
+  // Submit the entire class sheet in batch with strict Rule 4 validation
   const handleSaveClassSheet = async () => {
     if (!sheetClassId) {
       setMessage({ type: 'error', text: 'Fadlan dooro fasal.' });
@@ -340,39 +381,75 @@ const QuranLessonManagement = () => {
       return;
     }
 
+    // RULE 4 CHECK: Teachers must not silently modify assigned lesson!
+    for (const s of sheetStudents) {
+      const exp = s.expectedLesson || {};
+      const isDeviated = (Number(s.surahNumber) !== Number(exp.surahNumber)) ||
+                         (Number(s.fromVerse) !== Number(exp.fromVerse)) ||
+                         (Number(s.toVerse) !== Number(exp.toVerse));
+      if (isDeviated && (!s.deviationReason || !s.deviationReason.trim())) {
+        setMessage({
+          type: 'error',
+          text: `Macallinka looma ogola inuu qorshaha Admin-ka beddelo isagoo aan sabab bixin (Ardayga: "${s.fullName}"). Fadlan geli sababta aad qorshaha u beddeshay.`
+        });
+        return;
+      }
+    }
+
     try {
       setSheetSaving(true);
       setMessage(null);
 
       const payload = {
         classId: sheetClassId,
-        branchId: selectedBranchId && selectedBranchId !== 'ALL' ? selectedBranchId : undefined,
+        branchId: selectedBranchId && selectedBranchId !== 'ALL' && selectedBranchId !== 'All' ? selectedBranchId : undefined,
         date: sheetDate,
-        lessons: sheetStudents.map(s => ({
-          studentId: s.studentId,
-          surahNumber: s.surahNumber,
-          surahName: s.surahName,
-          fromVerse: Number(s.fromVerse) || 1,
-          toVerse: Number(s.toVerse) || Number(s.fromVerse) || 1,
-          status: s.status || 'passed',
-          note: s.note || '',
-          lessonType: s.lessonType || 'sabaq'
-        }))
+        lessons: sheetStudents.map(s => {
+          const exp = s.expectedLesson || {};
+          const isDeviated = (Number(s.surahNumber) !== Number(exp.surahNumber)) ||
+                             (Number(s.fromVerse) !== Number(exp.fromVerse)) ||
+                             (Number(s.toVerse) !== Number(exp.toVerse));
+          return {
+            studentId: s.studentId,
+            expectedSurahNumber: exp.surahNumber,
+            expectedSurahName: exp.surahName,
+            expectedFromVerse: exp.fromVerse,
+            expectedToVerse: exp.toVerse,
+            expectedPageOrLines: exp.pageOrLines,
+            surahNumber: Number(s.surahNumber),
+            surahName: s.surahName,
+            fromVerse: Number(s.fromVerse) || 1,
+            toVerse: Number(s.toVerse) || Number(s.fromVerse) || 1,
+            status: s.status || 'passed',
+            note: s.note || '',
+            deviationReason: isDeviated ? (s.deviationReason || '').trim() : '',
+            isIskuXirDay: Boolean(s.isIskuXirDay),
+            iskuXirResult: s.iskuXirResult || 'none',
+            lessonType: s.lessonType || 'sabaq'
+          };
+        })
       };
 
       const res = await api.post('/quran/lessons/batch', payload);
 
       const passedCount = sheetStudents.filter(s => s.status === 'passed').length;
       const repeatCount = sheetStudents.filter(s => s.status === 'repeat').length;
+      const deviatedCount = sheetStudents.filter(s => {
+        const exp = s.expectedLesson || {};
+        return (Number(s.surahNumber) !== Number(exp.surahNumber)) ||
+               (Number(s.fromVerse) !== Number(exp.fromVerse)) ||
+               (Number(s.toVerse) !== Number(exp.toVerse));
+      }).length;
 
       setMessage({
         type: 'success',
-        text: `Si guul leh ayaa loo keydiyey xaashida maanta! (${passedCount} Gudbay - si toos ah ayey aayaduhu ugu kordheen, ${repeatCount} Tikraar - halkoodii ayey ku nagaadeen).`
+        text: `Si guul leh ayaa loo keydiyey xaashida maanta! (${passedCount} Gudbay, ${repeatCount} Tikraar${deviatedCount > 0 ? `, ${deviatedCount} sabab la xusay` : ''}).`
       });
 
-      // Reload class sheet and global records
+      // Reload class sheet, accountability report, and global records
       await Promise.all([
         loadClassSheet(sheetClassId, sheetDate),
+        loadAccountabilityReport(accountabilityDate, sheetClassId, selectedBranchId),
         api.get('/quran/lessons').then(r => setRecords(r.data || [])).catch(() => {})
       ]);
     } catch (err) {
@@ -380,6 +457,25 @@ const QuranLessonManagement = () => {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Khalad ayaa dhacay markii xaashida la keydinayay.' });
     } finally {
       setSheetSaving(false);
+    }
+  };
+
+  // Fetch Accountability Report
+  const loadAccountabilityReport = async (date = accountabilityDate, classId = sheetClassId, branchId = selectedBranchId) => {
+    try {
+      setAccountabilityLoading(true);
+      const res = await api.get('/quran/lessons/accountability/report', {
+        params: {
+          date,
+          classId: classId && classId !== 'All' ? classId : undefined,
+          branchId: branchId && branchId !== 'All' && branchId !== 'ALL' ? branchId : undefined
+        }
+      });
+      setAccountabilityData(res.data);
+    } catch (err) {
+      console.error('Error loading accountability report:', err);
+    } finally {
+      setAccountabilityLoading(false);
     }
   };
 
@@ -807,6 +903,21 @@ const QuranLessonManagement = () => {
             <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-950/20 font-black">
               Toos & Automatic
             </span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('accountability');
+              loadAccountabilityReport(accountabilityDate, sheetClassId, selectedBranchId);
+            }}
+            className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-xs transition-all ${
+              activeTab === 'accountability'
+                ? 'bg-teal-500 text-slate-950 shadow-lg shadow-teal-500/40 scale-105'
+                : 'bg-white/5 hover:bg-white/10 text-teal-200 border border-teal-500/20'
+            }`}
+          >
+            <ShieldCheck size={16} />
+            <span>Kormeerka & La-Xisaabtanka (Accountability)</span>
           </button>
 
           <button

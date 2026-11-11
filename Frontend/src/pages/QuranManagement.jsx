@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  BookOpen, Sparkles, Plus, Search, Check, RotateCcw,
+  BookOpen, ShieldCheck, CheckSquare, GraduationCap, Sliders, Sparkles, Plus, Search, Check, RotateCcw,
   Printer, FileDown, Trash2, Edit3, Filter, Calendar,
   User, CheckCircle2, AlertCircle, X, ChevronDown, Award, RefreshCw, Building2
 } from 'lucide-react';
@@ -51,6 +51,22 @@ const QuranManagement = () => {
   const [status, setStatus] = useState('passed'); // 'passed' (✓) or 'repeat' (•)
   const [repeatCount, setRepeatCount] = useState(3);
   const [recordDate, setRecordDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  // Accountability & Student Quran Blueprint States
+  const [studentType, setStudentType] = useState('LAQDIIN'); // 'LAQDIIN' | 'HOREED'
+  const [fromVerse, setFromVerse] = useState(1);
+  const [toVerse, setToVerse] = useState(5);
+  const [pageRange, setPageRange] = useState('');
+  const [lineRange, setLineRange] = useState('');
+  const [dailyPace, setDailyPace] = useState(5);
+
+  // ISKU-XIR Schedule States (For HOREED students)
+  const [isIskuXirActive, setIsIskuXirActive] = useState(false);
+  const [iskuXirDays, setIskuXirDays] = useState(['Sabti', 'Talaado']);
+  const [iskuXirSurahNum, setIskuXirSurahNum] = useState(1);
+  const [iskuXirFromVerse, setIskuXirFromVerse] = useState(1);
+  const [iskuXirToVerse, setIskuXirToVerse] = useState(7);
+  const [iskuXirNotes, setIskuXirNotes] = useState('');
 
   // Edit modal state
   const [editingRecord, setEditingRecord] = useState(null);
@@ -122,6 +138,24 @@ const QuranManagement = () => {
   }, []);
 
   // Filter students strictly by the active Dugsi branch
+  // Selected student's class and assigned teacher
+  const selectedStudentClassInfo = useMemo(() => {
+    if (!selectedStudent) return null;
+    const cId = selectedStudent.classId?._id || selectedStudent.classId;
+    const foundClass = classes.find(c => String(c._id) === String(cId));
+    const teacherName = foundClass?.teacherId?.fullName || foundClass?.teacherId?.username || foundClass?.teacherId?.name || null;
+    return {
+      className: foundClass?.name || foundClass?.className || halaqahName || 'Lama garanayo',
+      teacherName: teacherName || 'Fasalkan macallin looma xilsaarin'
+    };
+  }, [selectedStudent, classes, halaqahName]);
+
+  const toggleIskuXirDay = (day) => {
+    setIskuXirDays(prev => 
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+    );
+  };
+
   const branchStudents = useMemo(() => {
     if (!selectedBranchId || selectedBranchId === 'All') return students;
     return students.filter(s => {
@@ -188,9 +222,32 @@ const QuranManagement = () => {
     // Close dropdown
     setIsStudentDropdownOpen(false);
 
-    // Keep surah and note blank ready for entry, and focus surah input
-    setSelectedSurah(null);
-    setSurahSearchQuery('');
+    // Auto-populate student type and curriculum blueprint
+    setStudentType(student.studentType || 'LAQDIIN');
+    const expConfig = student.expectedLessonConfig || {};
+    const qProg = student.quranProgress || {};
+    const sNum = expConfig.surahNumber || qProg.surahNumber || 1;
+    const sObj = QURAN_SURAHS.find(s => s.number === sNum) || QURAN_SURAHS[0];
+    setSelectedSurah(sObj);
+    setSurahSearchQuery(`${sObj.number}. ${sObj.nameAr} (${sObj.nameSo})`);
+    setFromVerse(expConfig.fromVerse || qProg.fromVerse || 1);
+    setToVerse(expConfig.toVerse || Math.min(sObj.verses, (expConfig.fromVerse || qProg.fromVerse || 1) + 4));
+    setPageRange(expConfig.pageRange || '');
+    setLineRange(expConfig.lineRange || '');
+    setDailyPace(expConfig.dailyPace || qProg.dailyPace || 5);
+
+    if (student.iskuXirConfig) {
+      setIsIskuXirActive(Boolean(student.iskuXirConfig.isActive));
+      setIskuXirDays(student.iskuXirConfig.revisionDays || ['Sabti', 'Talaado']);
+      setIskuXirSurahNum(student.iskuXirConfig.surahNumber || 1);
+      setIskuXirFromVerse(student.iskuXirConfig.fromVerse || 1);
+      setIskuXirToVerse(student.iskuXirConfig.toVerse || 7);
+      setIskuXirNotes(student.iskuXirConfig.notes || '');
+    } else {
+      setIsIskuXirActive(false);
+      setIskuXirDays(['Sabti', 'Talaado']);
+    }
+
     setNote('');
     setStatus('passed');
     setRepeatCount(3);
@@ -259,7 +316,21 @@ const QuranManagement = () => {
         status,
         repeatCount: status === 'repeat' ? Math.max(1, Number(repeatCount) || 1) : 1,
         note: note.trim(),
-        date: recordDate
+        date: recordDate,
+        studentType,
+        fromVerse: Number(fromVerse) || 1,
+        toVerse: Number(toVerse) || (Number(fromVerse) || 1) + 4,
+        pageRange,
+        lineRange,
+        dailyPace: Number(dailyPace) || 5,
+        iskuXirConfig: studentType === 'HOREED' ? {
+          isActive: isIskuXirActive,
+          revisionDays: iskuXirDays,
+          surahNumber: iskuXirSurahNum,
+          fromVerse: Number(iskuXirFromVerse) || 1,
+          toVerse: Number(iskuXirToVerse) || 7,
+          notes: iskuXirNotes
+        } : undefined
       };
 
       const res = await api.post('/quran/surahs', payload);
@@ -750,6 +821,55 @@ const QuranManagement = () => {
               )}
             </div>
 
+            {/* INFO BANNER: Assigned Class & Teacher */}
+            {selectedStudent && (
+              <div className="md:col-span-2 lg:col-span-4 p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-blue-500/10 border border-emerald-500/20 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold shadow-md shadow-emerald-500/30">
+                    <GraduationCap size={18} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-2">
+                      <span>{selectedStudent.fullName}</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold">
+                        {studentType}
+                      </span>
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                      Fasalka: <span className="font-bold text-slate-700 dark:text-slate-200">{selectedStudentClassInfo?.className}</span> • Macallinka: <span className="font-bold text-emerald-600 dark:text-emerald-400">{selectedStudentClassInfo?.teacherName}</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Student Type Selector */}
+                <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <span className="text-[10px] font-black uppercase text-slate-400 px-2">Nooca:</span>
+                  <button
+                    type="button"
+                    onClick={() => setStudentType('LAQDIIN')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                      studentType === 'LAQDIIN'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    LAQDIIN
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudentType('HOREED')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                      studentType === 'HOREED'
+                        ? 'bg-purple-600 text-white shadow-sm'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    HOREED (Xifdiye)
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Field 2: Xalaqadda (الحلقة) - Auto-filled from Student */}
             <div>
               <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
@@ -852,6 +972,184 @@ const QuranManagement = () => {
               </div>
             </div>
 
+          </div>
+
+          {/* QORSHAHA ADMIN-KA: AAYADAHA, BOGGA & XAWAARAHA */}
+          <div className="p-5 rounded-3xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 pb-3">
+              <div className="flex items-center gap-2">
+                <Sliders size={16} className="text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                  Qorshaha Cashirka (Admin Blueprint): Aayadaha, Bogga & Xawaaraha
+                </h3>
+              </div>
+              <span className="text-[11px] font-bold text-slate-500">
+                Macallinka ayaa arki doona qorshahan maalin kasta
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                  Aayadda Bilowga (From)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={fromVerse}
+                  onChange={(e) => {
+                    const f = Math.max(1, parseInt(e.target.value) || 1);
+                    setFromVerse(f);
+                    if (toVerse < f) setToVerse(f + 4);
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                  Aayadda Ku Eg (To)
+                </label>
+                <input
+                  type="number"
+                  min={fromVerse}
+                  value={toVerse}
+                  onChange={(e) => setToVerse(Math.max(fromVerse, parseInt(e.target.value) || fromVerse))}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                  Bogga / Safafka (Ikhtiyaari)
+                </label>
+                <input
+                  type="text"
+                  placeholder="tusaale: Bogga 45, safafka 1-15"
+                  value={pageRange}
+                  onChange={(e) => setPageRange(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                  Xawaaraha (Aayadood Maalinkii)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={dailyPace}
+                  onChange={(e) => setDailyPace(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* JADWALKA ISKU-XIR (KALIYA ARDAYDA HOREED) */}
+            {studentType === 'HOREED' && (
+              <div className="mt-3 p-4 rounded-2xl bg-purple-500/10 border border-purple-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse"></span>
+                    <h4 className="text-xs font-black text-purple-900 dark:text-purple-300 uppercase tracking-wider">
+                      Jadwalka ISKU-XIR (Revision Schedule ee HOREED)
+                    </h4>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-purple-700 dark:text-purple-300">
+                    <input
+                      type="checkbox"
+                      checked={isIskuXirActive}
+                      onChange={(e) => setIsIskuXirActive(e.target.checked)}
+                      className="rounded text-purple-600 focus:ring-purple-500"
+                    />
+                    <span>Hawlgeli Isku-xirka</span>
+                  </label>
+                </div>
+
+                {isIskuXirActive && (
+                  <div className="space-y-3 pt-2">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-purple-800 dark:text-purple-400 mb-1.5">
+                        Maalmaha uu ardaygu leeyahay Isku-Xir:
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {['Sabti', 'Axad', 'Isniin', 'Talaado', 'Arbaco', 'Khamiis', 'Jimce'].map(day => (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => toggleIskuXirDay(day)}
+                            className={`px-3 py-1 rounded-xl text-xs font-black transition-all ${
+                              iskuXirDays.includes(day)
+                                ? 'bg-purple-600 text-white shadow-sm'
+                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-purple-100 dark:hover:bg-slate-700 border border-purple-200 dark:border-slate-700'
+                            }`}
+                          >
+                            {day} {iskuXirDays.includes(day) ? '✓' : ''}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-purple-800 dark:text-purple-300 mb-1">
+                          Suuradda Isku-xirka
+                        </label>
+                        <select
+                          value={iskuXirSurahNum}
+                          onChange={(e) => setIskuXirSurahNum(Number(e.target.value))}
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-purple-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                        >
+                          {QURAN_SURAHS.map(s => (
+                            <option key={s.number} value={s.number}>
+                              {s.number}. {s.nameAr} ({s.nameSo})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-purple-800 dark:text-purple-300 mb-1">
+                          Aayadaha Isku-xirka (From - To)
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="1"
+                            value={iskuXirFromVerse}
+                            onChange={(e) => setIskuXirFromVerse(Number(e.target.value) || 1)}
+                            className="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-purple-200 dark:border-slate-700 text-xs font-bold text-center text-slate-900 dark:text-white"
+                          />
+                          <span className="text-xs text-slate-400">-</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={iskuXirToVerse}
+                            onChange={(e) => setIskuXirToVerse(Number(e.target.value) || 1)}
+                            className="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-purple-200 dark:border-slate-700 text-xs font-bold text-center text-slate-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-purple-800 dark:text-purple-300 mb-1">
+                          Xusuusin Isku-xir
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Faallada dib-u-eegista..."
+                          value={iskuXirNotes}
+                          onChange={(e) => setIskuXirNotes(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-purple-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Row 2: Mulaaxadada (الملاحظة) & Tikraarka (التكرار) */}
