@@ -991,11 +991,8 @@ const QuranManagement = () => {
                 </div>
                 <div>
                   <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                    Diiwaangeli Qorshaha & Bisinka Ardayga (تسجيل خطة وبسملة الطالب)
+                    Diiwaangeli Qorshaha & Bisinka
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                    Halkan ku diiwaangeli ardayga noociisa (Laqdiin ama Horeed), Bisinka uu marayo, iyo inta Sadar ama Bog uu maalin kasta qaato.
-                  </p>
                 </div>
               </div>
 
@@ -1015,7 +1012,7 @@ const QuranManagement = () => {
                 {/* Field 1: Dooro Ardayga */}
                 <div className="relative md:col-span-2 lg:col-span-1" ref={regStudentDropdownRef}>
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                    <span>1. Dooro Ardayga (الطالب) *</span>
+                    <span>1. Dooro Ardayga *</span>
                     {regStudent && (
                       <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
                         <Check size={12} /> Doortay
@@ -1079,7 +1076,7 @@ const QuranManagement = () => {
                 {/* Field 2: Nooca Ardayga (LAQDIIN vs HOREED) */}
                 <div className="space-y-1.5">
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                    2. Nooca Ardayga (نوع الطالب) *
+                    2. Nooca Ardayga *
                   </label>
                   <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                     <button
@@ -1104,7 +1101,7 @@ const QuranManagement = () => {
                       }`}
                     >
                       <Award size={14} />
-                      <span>HOREED (Xifdiye)</span>
+                      <span>HOREED</span>
                     </button>
                   </div>
                 </div>
@@ -1112,7 +1109,7 @@ const QuranManagement = () => {
                 {/* Field 3: Bisinka uu marayo (Suuradda) */}
                 <div className="relative" ref={regSurahDropdownRef}>
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                    <span>3. Suuradda Bisinka (السورة) *</span>
+                    <span>3. Suuradda Bisinka *</span>
                     {regSurah && (
                       <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
                         #{regSurah.number}
@@ -1178,7 +1175,7 @@ const QuranManagement = () => {
                             ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300'
                             : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
                         }`}>
-                          {regStudentType === 'HOREED' ? 'HOREED (Xifdiye)' : 'LAQDIIN'}
+                          {regStudentType === 'HOREED' ? 'HOREED' : 'LAQDIIN'}
                         </span>
                       </p>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
@@ -1191,23 +1188,20 @@ const QuranManagement = () => {
 
               {/* Qorshaha: Aayadda Bilowga & Qiyaasta Maalinlaha ah (Sadar ama Bog) */}
               <div className="p-5 rounded-3xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-700/60 pb-3">
+                <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 pb-3">
                   <div className="flex items-center gap-2">
                     <Sliders size={16} className="text-emerald-600 dark:text-emerald-400" />
                     <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                      Qiyaasta Cashirka Maalinlaha ah: Sadar ama Bog
+                      Qiyaasta Maalinta
                     </h3>
                   </div>
-                  <span className="text-[11px] font-bold text-slate-500">
-                    Labaduba (Horjeed iyo Laqdiin) xulashada Sadarka ama Bogga waa laga wada siman yahay
-                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   {/* Aayadda Bilowga */}
                   <div>
                     <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                      Aayadda uu ka bilaabayo (From Verse) *
+                      Aayadda Bilowga *
                     </label>
                     <input
                       type="number"
@@ -1218,16 +1212,13 @@ const QuranManagement = () => {
                       onChange={(e) => setRegFromVerse(Math.max(1, parseInt(e.target.value) || 1))}
                       className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      Suuradda {regSurah?.nameSo} waxay leedahay {regSurah?.verses || 7} aayadood.
-                    </p>
                   </div>
 
                   {/* Pace Unit Switcher (Sadar vs Bog) */}
                   <div className="md:col-span-2 space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                        Qiyaasta Cashirka Maalin kasta (Sadar ama Bog) *
+                        Qiyaasta Maalin kasta *
                       </label>
                       <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
                         <button
@@ -1242,7 +1233,7 @@ const QuranManagement = () => {
                               : 'text-slate-600 dark:text-slate-400 hover:text-emerald-600'
                           }`}
                         >
-                          Sadar (Lines)
+                          Sadar
                         </button>
                         <button
                           type="button"
@@ -1256,7 +1247,7 @@ const QuranManagement = () => {
                               : 'text-slate-600 dark:text-slate-400 hover:text-emerald-600'
                           }`}
                         >
-                          Bog (Pages)
+                          Bog
                         </button>
                       </div>
                     </div>
@@ -1321,7 +1312,7 @@ const QuranManagement = () => {
                                   : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
                               }`}
                             >
-                              {bCount === 0.5 ? 'Nus Bog (½)' : `${bCount} Bog`}
+                              {bCount === 0.5 ? '½ Bog' : `${bCount} Bog`}
                             </button>
                           ))}
                         </div>
@@ -1330,23 +1321,6 @@ const QuranManagement = () => {
                   </div>
                 </div>
               </div>
-
-              {/* Explanatory Notice for Horeed Students */}
-              {regStudentType === 'HOREED' && (
-                <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/50 flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 mt-0.5">
-                    <Sparkles size={18} />
-                  </div>
-                  <div className="text-xs text-purple-900 dark:text-purple-200 space-y-1">
-                    <p className="font-black text-sm">
-                      Nidaamka Tooska ah ee Isku-Xirka (4 Maalmood):
-                    </p>
-                    <p className="leading-relaxed">
-                      Ardayda Horeedka Isku-xirkooda halkan gacanta laguma qoro! Nidaamka ayaa toos (Automatic) u soo aqrinaya wixii uu ardaygu ku gudbay <strong>4-tii maalin ee u dambeysay</strong>. Macallinkuna wuxuu xaashidiisa maalinlaha ah ku arki doonaa Isku-xirkaas isagoo hal mar ku qiimeynaya.
-                    </p>
-                  </div>
-                </div>
-              )}
 
               {/* Action Submit Bar */}
               <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
@@ -1363,7 +1337,7 @@ const QuranManagement = () => {
                   ) : (
                     <>
                       <Check size={16} strokeWidth={3} />
-                      <span>Keydi Qorshaha Ardayga (حفظ الخطة)</span>
+                      <span>Keydi Qorshaha</span>
                     </>
                   )}
                 </button>
@@ -1428,8 +1402,8 @@ const QuranManagement = () => {
                     className="px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
                   >
                     <option value="All">Dhammaan Noocyada</option>
-                    <option value="LAQDIIN">LAQDIIN (Akhriste)</option>
-                    <option value="HOREED">HOREED (Xifdiye)</option>
+                    <option value="LAQDIIN">LAQDIIN</option>
+                    <option value="HOREED">HOREED</option>
                   </select>
                 </div>
               </div>
@@ -1441,13 +1415,13 @@ const QuranManagement = () => {
                 <thead>
                   <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400">
                     <th className="py-4 px-5">#</th>
-                    <th className="py-4 px-5">Ardayga (الطالب)</th>
+                    <th className="py-4 px-5">Ardayga</th>
                     <th className="py-4 px-5">Fasalka & Macallinka</th>
                     <th className="py-4 px-5">Nooca</th>
                     <th className="py-4 px-5">Bisinka uu Marayo</th>
                     <th className="py-4 px-5">Qiyaasta Maalinlaha</th>
                     <th className="py-4 px-5">Isku-xirka (4 Maalin)</th>
-                    <th className="py-4 px-5 text-right">Falka (Action)</th>
+                    <th className="py-4 px-5 text-right">Falka</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-semibold">
@@ -1598,12 +1572,8 @@ const QuranManagement = () => {
             </div>
             <div>
               <h2 className="text-lg font-black text-slate-900 dark:text-white">
-                Diiwaangeli Imtixaanka Suuradda (تسجيل اختبار سورة)
+                Diiwaangeli Imtixaanka Suuradda
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Gali magaca ardayga si ay xalaqaddiisu toos ugu soo baxdo (ardayda laanta {branches.find(b => b._id === selectedBranchId)?.name || 'Dugsiga'}).
-              </p>
-
             </div>
           </div>
 
@@ -1620,10 +1590,10 @@ const QuranManagement = () => {
         <form onSubmit={handleSubmitRecord} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
 
-            {/* Field 1: Magaca Ardayga (الاسم) - Autocomplete Search */}
+            {/* Field 1: Magaca Ardayga - Autocomplete Search */}
             <div className="relative" ref={studentDropdownRef}>
               <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                <span>1. Magaca Ardayga (الاسم) *</span>
+                <span>1. Magaca Ardayga *</span>
                 {selectedStudent && (
                   <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
                     <Check size={12} /> Doortay
@@ -1739,8 +1709,7 @@ const QuranManagement = () => {
             {/* Field 2: Xalaqadda (الحلقة) - Auto-filled from Student */}
             <div>
               <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                <span>2. Xalaqadda (الحلقة)</span>
-                <span className="text-[10px] text-slate-400 font-semibold">(Toos u soo baxaysa)</span>
+                <span>2. Xalaqadda</span>
               </label>
               <input
                 type="text"
@@ -1751,10 +1720,10 @@ const QuranManagement = () => {
               />
             </div>
 
-            {/* Field 3: Suuradda (السورة) - Left blank ready for entry */}
+            {/* Field 3: Suuradda - Left blank ready for entry */}
             <div className="relative" ref={surahDropdownRef}>
               <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                <span>3. Suuradda (السورة) *</span>
+                <span>3. Suuradda *</span>
                 {selectedSurah && (
                   <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
                     #{selectedSurah.number}
@@ -1821,10 +1790,10 @@ const QuranManagement = () => {
               )}
             </div>
 
-            {/* Field 4: Taariikhda (التاريخ) */}
+            {/* Field 4: Taariikhda */}
             <div>
               <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                4. Taariikhda (التاريخ) *
+                4. Taariikhda *
               </label>
               <div className="relative">
                 <input
@@ -1846,18 +1815,15 @@ const QuranManagement = () => {
               <div className="flex items-center gap-2">
                 <Sliders size={16} className="text-emerald-600 dark:text-emerald-400" />
                 <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                  Qorshaha Cashirka (Admin Blueprint): Aayadaha, Bogga & Xawaaraha
+                  Qorshaha Cashirka
                 </h3>
               </div>
-              <span className="text-[11px] font-bold text-slate-500">
-                Macallinka ayaa arki doona qorshahan maalin kasta
-              </span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                  Aayadda Bilowga (From)
+                  Aayadda Bilowga
                 </label>
                 <input
                   type="number"
@@ -1874,7 +1840,7 @@ const QuranManagement = () => {
 
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                  Aayadda Ku Eg (To)
+                  Aayadda Ku Eg
                 </label>
                 <input
                   type="number"

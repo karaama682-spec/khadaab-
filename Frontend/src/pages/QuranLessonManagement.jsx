@@ -1108,11 +1108,11 @@ const QuranLessonManagement = () => {
                   <thead>
                     <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400">
                       <th className="py-4 px-3 sm:px-4">#</th>
-                      <th className="py-4 px-4 sm:px-6">Ardayga (الطالب)</th>
-                      <th className="py-4 px-4 sm:px-6">Waajibka / Bisinka & Qiyaasta</th>
-                      <th className="py-4 px-4 sm:px-6">Sabaqa Maanta (Aayadaha)</th>
-                      <th className="py-4 px-4 sm:px-6">Isku-xirka (4 Maalmood - Horeed)</th>
-                      <th className="py-4 px-4 sm:px-6 text-center">Natiijada Sabaqa</th>
+                      <th className="py-4 px-4 sm:px-6">Ardayga</th>
+                      <th className="py-4 px-4 sm:px-6">Waajibka (Bisinka & Qiyaasta)</th>
+                      <th className="py-4 px-4 sm:px-6">Sabaqa Maanta</th>
+                      <th className="py-4 px-4 sm:px-6">Isku-xirka (4 Maalmood)</th>
+                      <th className="py-4 px-4 sm:px-6 text-center">Natiijada</th>
                       <th className="py-4 px-4 sm:px-6">Mulaaxado & Sabab</th>
                     </tr>
                   </thead>
@@ -1448,7 +1448,7 @@ const QuranLessonManagement = () => {
               <div>
                 <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
                   <Plus className="text-teal-600" size={20} />
-                  <span>Diiwaangeli Cashir Gooni ah (Single Entry)</span>
+                  <span>Diiwaangeli Cashir Gooni ah</span>
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
                   U isticmaal diiwaangelinta arday gooni ah oo cashir gaar ah qaadanaya.
@@ -1464,7 +1464,7 @@ const QuranLessonManagement = () => {
                 {/* Field 1: Dooro Ardayga */}
                 <div className="relative" ref={studentDropdownRef}>
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                    <span>1. Ardayga (الطالب) *</span>
+                    <span>1. Ardayga *</span>
                     {selectedStudent && (
                       <span className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">
                         #{selectedStudent.rollNumber || selectedStudent.studentCode || ''}
@@ -1527,7 +1527,7 @@ const QuranLessonManagement = () => {
                 {/* Field 2: Fasalka */}
                 <div>
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    2. Xalaqadda / Fasalka (الحلقة)
+                    2. Xalaqadda / Fasalka
                   </label>
                   <input
                     type="text"
@@ -1541,7 +1541,7 @@ const QuranLessonManagement = () => {
                 {/* Field 3: Dooro Suuradda */}
                 <div className="relative" ref={surahDropdownRef}>
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                    <span>3. Suuradda (السورة) *</span>
+                    <span>3. Suuradda *</span>
                     {selectedSurah && (
                       <span className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">
                         {selectedSurah.verses} aayadood
@@ -1596,7 +1596,7 @@ const QuranLessonManagement = () => {
                 {/* Field 4: Taariikhda */}
                 <div>
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    4. Taariikhda (التاريخ)
+                    4. Taariikhda
                   </label>
                   <input
                     type="date"
@@ -1611,7 +1611,7 @@ const QuranLessonManagement = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 pt-1">
                 <div>
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    5. Laga bilaabo Aayadda (من الآية)
+                    5. Laga bilaabo Aayadda
                   </label>
                   <input
                     type="number"
@@ -1625,7 +1625,7 @@ const QuranLessonManagement = () => {
 
                 <div>
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                    <span>6. Ilaa Aayadda (إلى الآية)</span>
+                    <span>6. Ilaa Aayadda</span>
                     {selectedSurah && (
                       <span className="text-[10px] text-slate-400">Wadarta: {selectedSurah.verses}</span>
                     )}
@@ -1643,7 +1643,7 @@ const QuranLessonManagement = () => {
 
                 <div>
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    7. Nooca Cashirka (نوع الدرس)
+                    7. Nooca Cashirka
                   </label>
                   <select
                     value={lessonType}
@@ -1658,7 +1658,7 @@ const QuranLessonManagement = () => {
 
                 <div>
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
-                    8. Xaaladda Cashirka (النتيجة) *
+                    8. Xaaladda Cashirka *
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     <button
@@ -1694,7 +1694,7 @@ const QuranLessonManagement = () => {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 pt-1">
                 <div className="lg:col-span-3 space-y-2">
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                    9. Mulaaxadada Macallinka (الملاحظة)
+                    9. Mulaaxadada Macallinka
                   </label>
                   <input
                     type="text"
