@@ -312,7 +312,8 @@ const updateQuranLessonRecord = async (req, res) => {
         }
 
         // Teacher check: Allow teachers to edit records belonging to their assigned class
-        if (req.user?.role === 'Teacher') {
+        const isTeacherUser = req.user?.role === 'Teacher';
+        if (isTeacherUser) {
             const teacherClasses = await Class.find({ teacherId: req.user._id });
             const teacherClassIds = teacherClasses.map(c => c._id.toString());
             if (record.classId && !teacherClassIds.includes(record.classId.toString())) {
@@ -320,27 +321,36 @@ const updateQuranLessonRecord = async (req, res) => {
             }
         }
 
-        if (studentId) record.studentId = studentId;
-        if (studentName) record.studentName = studentName;
-        if (classId !== undefined) record.classId = classId;
-        if (halaqahName !== undefined) record.halaqahName = halaqahName;
-        if (surahName) {
-            record.surahName = surahName.trim();
-            record.actualSurahName = surahName.trim();
+        // Only Admin can change assigned Surah, verses, or date. Teachers can only evaluate (status, note, isku-xir).
+        if (!isTeacherUser) {
+            if (studentId) record.studentId = studentId;
+            if (studentName) record.studentName = studentName;
+            if (classId !== undefined) record.classId = classId;
+            if (halaqahName !== undefined) record.halaqahName = halaqahName;
+            if (surahName) {
+                record.surahName = surahName.trim();
+                record.actualSurahName = surahName.trim();
+            }
+            if (surahNumber !== undefined) {
+                record.surahNumber = surahNumber ? Number(surahNumber) : undefined;
+                record.actualSurahNumber = record.surahNumber;
+            }
+            if (fromVerse !== undefined) {
+                record.fromVerse = Number(fromVerse) || 1;
+                record.actualFromVerse = record.fromVerse;
+            }
+            if (toVerse !== undefined) {
+                record.toVerse = toVerse ? Number(toVerse) : undefined;
+                record.actualToVerse = record.toVerse;
+            }
+            if (lessonType) record.lessonType = lessonType;
+            if (date) record.date = new Date(date);
+            if (deviationReason !== undefined) {
+                record.deviationReason = deviationReason.trim();
+                record.isDeviated = Boolean(record.deviationReason);
+            }
         }
-        if (surahNumber !== undefined) {
-            record.surahNumber = surahNumber ? Number(surahNumber) : undefined;
-            record.actualSurahNumber = record.surahNumber;
-        }
-        if (fromVerse !== undefined) {
-            record.fromVerse = Number(fromVerse) || 1;
-            record.actualFromVerse = record.fromVerse;
-        }
-        if (toVerse !== undefined) {
-            record.toVerse = toVerse ? Number(toVerse) : undefined;
-            record.actualToVerse = record.toVerse;
-        }
-        if (lessonType) record.lessonType = lessonType;
+
         if (status) record.status = status;
         if (repeatCount !== undefined) {
             record.repeatCount = Math.max(1, Number(repeatCount) || 1);
@@ -348,11 +358,6 @@ const updateQuranLessonRecord = async (req, res) => {
             record.repeatCount = 1;
         }
         if (note !== undefined) record.note = note.trim();
-        if (date) record.date = new Date(date);
-        if (deviationReason !== undefined) {
-            record.deviationReason = deviationReason.trim();
-            record.isDeviated = Boolean(record.deviationReason);
-        }
         if (isIskuXirDay !== undefined) record.isIskuXirDay = Boolean(isIskuXirDay);
         if (iskuXirResult !== undefined) record.iskuXirResult = iskuXirResult;
 
@@ -768,6 +773,7 @@ const batchRecordQuranLessons = async (req, res) => {
             }
         }
 
+        const isTeacherGrading = req.user?.role === 'Teacher';
         const results = [];
 
         for (const item of lessons) {
@@ -782,13 +788,14 @@ const batchRecordQuranLessons = async (req, res) => {
             const expTo = Number(item.expectedToVerse || expConfig.toVerse || (expFrom + (expConfig.dailyPace || 5) - 1));
             const expSurahObj = QURAN_SURAHS.find(s => s.number === expSurah) || QURAN_SURAHS[0];
 
-            const actSurah = Number(item.surahNumber || expSurah);
-            const actSurahObj = QURAN_SURAHS.find(s => s.number === actSurah) || QURAN_SURAHS[0];
+            // If teacher is grading, strictly enforce the admin-assigned lesson (teachers cannot modify verses/surahs)
+            const actSurah = isTeacherGrading ? expSurah : Number(item.surahNumber || expSurah);
+            const actSurahObj = QURAN_SURAHS.find(s => s.number === actSurah) || expSurahObj;
             const maxVerses = actSurahObj.verses || 100;
-            const actFrom = Number(item.fromVerse) || 1;
-            const actTo = Number(item.toVerse) || Math.min(maxVerses, actFrom + 4);
+            const actFrom = isTeacherGrading ? expFrom : (Number(item.fromVerse) || 1);
+            const actTo = isTeacherGrading ? expTo : (Number(item.toVerse) || Math.min(maxVerses, actFrom + 4));
 
-            const isDeviated = (actSurah !== expSurah) || (actFrom !== expFrom) || (actTo !== expTo);
+            const isDeviated = !isTeacherGrading && ((actSurah !== expSurah) || (actFrom !== expFrom) || (actTo !== expTo));
             const deviationReason = isDeviated ? (item.deviationReason || '').trim() : '';
 
             const status = item.status === 'repeat' ? 'repeat' : 'passed';
@@ -956,6 +963,7 @@ const assignStudentQuranPlan = async (req, res) => {
     try {
         const {
             studentId,
+            classId,
             studentType, // 'LAQDIIN' | 'HOREED'
             surahNumber,
             fromVerse,
@@ -971,6 +979,10 @@ const assignStudentQuranPlan = async (req, res) => {
         const student = await Student.findById(studentId);
         if (!student) {
             return res.status(404).json({ message: 'Ardayga lama helin (Student not found)' });
+        }
+
+        if (classId) {
+            student.classId = classId;
         }
 
         const sNum = Number(surahNumber) || 1;

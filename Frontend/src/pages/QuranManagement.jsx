@@ -337,6 +337,7 @@ const QuranManagement = () => {
 
       const payload = {
         studentId: regStudent._id,
+        classId: regClassId,
         studentType: regStudentType,
         surahNumber: sNum,
         fromVerse: fVerse,

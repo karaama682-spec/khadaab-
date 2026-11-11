@@ -410,18 +410,20 @@ const QuranLessonManagement = () => {
       return;
     }
 
-    // RULE 4 CHECK: Teachers must not silently modify assigned lesson!
-    for (const s of sheetStudents) {
-      const exp = s.expectedLesson || {};
-      const isDeviated = (Number(s.surahNumber) !== Number(exp.surahNumber)) ||
-                         (Number(s.fromVerse) !== Number(exp.fromVerse)) ||
-                         (Number(s.toVerse) !== Number(exp.toVerse));
-      if (isDeviated && (!s.deviationReason || !s.deviationReason.trim())) {
-        setMessage({
-          type: 'error',
-          text: `Macallinka looma ogola inuu qorshaha Admin-ka beddelo isagoo aan sabab bixin (Ardayga: "${s.fullName}"). Fadlan geli sababta aad qorshaha u beddeshay.`
-        });
-        return;
+    // If Admin modifies assigned lesson, ensure a reason is given
+    if (!isTeacher) {
+      for (const s of sheetStudents) {
+        const exp = s.expectedLesson || {};
+        const isDeviated = (Number(s.surahNumber) !== Number(exp.surahNumber)) ||
+                           (Number(s.fromVerse) !== Number(exp.fromVerse)) ||
+                           (Number(s.toVerse) !== Number(exp.toVerse));
+        if (isDeviated && (!s.deviationReason || !s.deviationReason.trim())) {
+          setMessage({
+            type: 'error',
+            text: `Fadlan geli sababta aad qorshaha u beddeshay (Ardayga: "${s.fullName}").`
+          });
+          return;
+        }
       }
     }
 
@@ -435,9 +437,9 @@ const QuranLessonManagement = () => {
         date: sheetDate,
         lessons: sheetStudents.map(s => {
           const exp = s.expectedLesson || {};
-          const isDeviated = (Number(s.surahNumber) !== Number(exp.surahNumber)) ||
+          const isDeviated = !isTeacher && ((Number(s.surahNumber) !== Number(exp.surahNumber)) ||
                              (Number(s.fromVerse) !== Number(exp.fromVerse)) ||
-                             (Number(s.toVerse) !== Number(exp.toVerse));
+                             (Number(s.toVerse) !== Number(exp.toVerse)));
           return {
             studentId: s.studentId,
             expectedSurahNumber: exp.surahNumber,
@@ -445,10 +447,10 @@ const QuranLessonManagement = () => {
             expectedFromVerse: exp.fromVerse,
             expectedToVerse: exp.toVerse,
             expectedPageOrLines: exp.pageOrLines,
-            surahNumber: Number(s.surahNumber),
-            surahName: s.surahName,
-            fromVerse: Number(s.fromVerse) || 1,
-            toVerse: Number(s.toVerse) || Number(s.fromVerse) || 1,
+            surahNumber: isTeacher ? Number(exp.surahNumber || 1) : Number(s.surahNumber),
+            surahName: isTeacher ? exp.surahName : s.surahName,
+            fromVerse: isTeacher ? Number(exp.fromVerse || 1) : (Number(s.fromVerse) || 1),
+            toVerse: isTeacher ? Number(exp.toVerse || 5) : (Number(s.toVerse) || Number(s.fromVerse) || 1),
             status: s.status || 'passed',
             note: s.note || '',
             deviationReason: isDeviated ? (s.deviationReason || '').trim() : '',
@@ -580,17 +582,17 @@ const QuranLessonManagement = () => {
     e?.preventDefault();
     if (!sheetEditStudent) return;
 
-    const sNum = Number(sheetEditForm.surahNumber) || 1;
+    const exp = sheetEditStudent.expectedLesson || {};
+    const sNum = isTeacher ? Number(exp.surahNumber || 1) : (Number(sheetEditForm.surahNumber) || 1);
     const surahObj = QURAN_SURAHS.find(s => s.number === sNum) || QURAN_SURAHS[0];
     const maxV = surahObj.verses || 100;
-    const fVerse = Math.max(1, Math.min(Number(sheetEditForm.fromVerse) || 1, maxV));
-    const tVerse = Math.max(fVerse, Math.min(Number(sheetEditForm.toVerse) || fVerse, maxV));
-    const sName = `${surahObj.number}. ${surahObj.nameAr} (${surahObj.nameSo})`;
+    const fVerse = isTeacher ? Number(exp.fromVerse || 1) : Math.max(1, Math.min(Number(sheetEditForm.fromVerse) || 1, maxV));
+    const tVerse = isTeacher ? Number(exp.toVerse || fVerse) : Math.max(fVerse, Math.min(Number(sheetEditForm.toVerse) || fVerse, maxV));
+    const sName = exp.surahName || `${surahObj.number}. ${surahObj.nameAr} (${surahObj.nameSo})`;
 
-    const exp = sheetEditStudent.expectedLesson || {};
-    const isDeviated = (sNum !== Number(exp.surahNumber)) ||
+    const isDeviated = !isTeacher && ((sNum !== Number(exp.surahNumber)) ||
                        (fVerse !== Number(exp.fromVerse)) ||
-                       (tVerse !== Number(exp.toVerse));
+                       (tVerse !== Number(exp.toVerse)));
 
     if (isDeviated && !sheetEditForm.deviationReason?.trim()) {
       setMessage({ type: 'error', text: 'Fadlan geli sababta aad qorshaha Admin-ka u beddeshay.' });
@@ -1300,6 +1302,16 @@ const QuranLessonManagement = () => {
             )}
           </div>
 
+          {/* Teacher Plan Enforcement Notice */}
+          {isTeacher && sheetStudents.length > 0 && (
+            <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-xs font-bold text-teal-900 dark:text-teal-200">
+              <ShieldCheck size={16} className="text-teal-600 dark:text-teal-400 shrink-0" />
+              <span>
+                Qorshaha Quraanka (Suuradda iyo Aayadaha) waxaa si toos ah u xukuma Maamulka. Fadlan kaliya qiimee in ardaygu <strong>Gudbay ✓</strong> ama <strong>Tikraar ↺</strong> yahay.
+              </span>
+            </div>
+          )}
+
           {/* Interactive Class Sheet Table */}
           <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-200/80 dark:border-slate-800 shadow-xl overflow-hidden">
             {sheetLoading ? (
@@ -1419,14 +1431,16 @@ const QuranLessonManagement = () => {
                                 </p>
                               </div>
 
-                              <button
-                                type="button"
-                                onClick={() => handleOpenProgressModal(item)}
-                                className="p-2 rounded-xl text-slate-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-slate-800 transition-colors"
-                                title="Habee meesha ardaygu ka bilaabayo (Bisinka, Aayadda, Xawaaraha)"
-                              >
-                                <Settings size={16} />
-                              </button>
+                              {!isTeacher && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenProgressModal(item)}
+                                  className="p-2 rounded-xl text-slate-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-slate-800 transition-colors"
+                                  title="Habee meesha ardaygu ka bilaabayo (Bisinka, Aayadda, Xawaaraha)"
+                                >
+                                  <Settings size={16} />
+                                </button>
+                              )}
                             </div>
                           </td>
 
@@ -1436,28 +1450,35 @@ const QuranLessonManagement = () => {
                               <span className="font-black text-slate-800 dark:text-white text-xs font-arabic block">
                                 {item.surahName}
                               </span>
-                              <div className="flex items-center gap-1.5 text-xs">
-                                <span className="text-[11px] text-slate-400 font-bold">Aayadaha:</span>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  max={item.maxVerses || 286}
-                                  value={item.fromVerse}
-                                  onChange={(e) => handleUpdateSheetField(item.studentId, 'fromVerse', Number(e.target.value) || 1)}
-                                  className="w-14 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500"
-                                />
-                                <span className="text-slate-400 font-bold">-</span>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  max={item.maxVerses || 286}
-                                  value={item.toVerse}
-                                  onChange={(e) => handleUpdateSheetField(item.studentId, 'toVerse', Number(e.target.value) || 1)}
-                                  className="w-14 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500"
-                                />
-                              </div>
+                              {isTeacher ? (
+                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300">
+                                  <span className="text-[10px] text-slate-400">Aayadaha:</span>
+                                  <span className="text-teal-600 dark:text-teal-400 font-black">{item.fromVerse} - {item.toVerse}</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5 text-xs">
+                                  <span className="text-[11px] text-slate-400 font-bold">Aayadaha:</span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max={item.maxVerses || 286}
+                                    value={item.fromVerse}
+                                    onChange={(e) => handleUpdateSheetField(item.studentId, 'fromVerse', Number(e.target.value) || 1)}
+                                    className="w-14 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                  />
+                                  <span className="text-slate-400 font-bold">-</span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max={item.maxVerses || 286}
+                                    value={item.toVerse}
+                                    onChange={(e) => handleUpdateSheetField(item.studentId, 'toVerse', Number(e.target.value) || 1)}
+                                    className="w-14 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+                                  />
+                                </div>
+                              )}
 
-                              {item.isDeviated && (
+                              {item.isDeviated && !isTeacher && (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded-md">
                                   <AlertTriangle size={11} /> Waa la beddelay
                                 </span>
@@ -1559,7 +1580,7 @@ const QuranLessonManagement = () => {
                               className="w-full min-w-[150px] px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500"
                             />
 
-                            {item.isDeviated && (
+                            {item.isDeviated && !isTeacher && (
                               <div>
                                 <input
                                   type="text"
@@ -2408,30 +2429,41 @@ const QuranLessonManagement = () => {
             </div>
 
             <form onSubmit={handleSaveSheetEditModal} className="space-y-3.5">
-              {/* Surah Dropdown */}
+              {/* Surah Selection */}
               <div>
-                <label className="block text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
-                  Suuradda *
+                <label className="block text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1 flex items-center justify-between">
+                  <span>Suuradda *</span>
+                  {isTeacher && (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
+                      🔒 Qorshaha Maamulka (Macallinku ma beddeli karo)
+                    </span>
+                  )}
                 </label>
-                <select
-                  value={sheetEditForm.surahNumber}
-                  onChange={(e) => {
-                    const num = Number(e.target.value);
-                    const sObj = QURAN_SURAHS.find(s => s.number === num) || QURAN_SURAHS[0];
-                    setSheetEditForm(prev => ({
-                      ...prev,
-                      surahNumber: num,
-                      surahName: `${sObj.number}. ${sObj.nameAr} (${sObj.nameSo})`
-                    }));
-                  }}
-                  className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                >
-                  {QURAN_SURAHS.map(s => (
-                    <option key={s.number} value={s.number}>
-                      {s.number}. {s.nameSo} ({s.nameAr}) - {s.verses} aayadood
-                    </option>
-                  ))}
-                </select>
+                {isTeacher ? (
+                  <div className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 font-arabic">
+                    {sheetEditForm.surahName || (QURAN_SURAHS.find(s => s.number === sheetEditForm.surahNumber) || QURAN_SURAHS[0]).nameSo}
+                  </div>
+                ) : (
+                  <select
+                    value={sheetEditForm.surahNumber}
+                    onChange={(e) => {
+                      const num = Number(e.target.value);
+                      const sObj = QURAN_SURAHS.find(s => s.number === num) || QURAN_SURAHS[0];
+                      setSheetEditForm(prev => ({
+                        ...prev,
+                        surahNumber: num,
+                        surahName: `${sObj.number}. ${sObj.nameAr} (${sObj.nameSo})`
+                      }));
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  >
+                    {QURAN_SURAHS.map(s => (
+                      <option key={s.number} value={s.number}>
+                        {s.number}. {s.nameSo} ({s.nameAr}) - {s.verses} aayadood
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* Verse Range: From - To */}
@@ -2440,25 +2472,37 @@ const QuranLessonManagement = () => {
                   <label className="block text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
                     Ka bilaabo Aayadda *
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={sheetEditForm.fromVerse}
-                    onChange={(e) => setSheetEditForm(prev => ({ ...prev, fromVerse: Math.max(1, Number(e.target.value) || 1) }))}
-                    className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
+                  {isTeacher ? (
+                    <div className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300">
+                      {sheetEditForm.fromVerse}
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      min="1"
+                      value={sheetEditForm.fromVerse}
+                      onChange={(e) => setSheetEditForm(prev => ({ ...prev, fromVerse: Math.max(1, Number(e.target.value) || 1) }))}
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-[11px] font-black uppercase text-slate-600 dark:text-slate-400 mb-1">
                     Ilaa Aayadda *
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={sheetEditForm.toVerse}
-                    onChange={(e) => setSheetEditForm(prev => ({ ...prev, toVerse: Math.max(1, Number(e.target.value) || 1) }))}
-                    className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
+                  {isTeacher ? (
+                    <div className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300">
+                      {sheetEditForm.toVerse}
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      min="1"
+                      value={sheetEditForm.toVerse}
+                      onChange={(e) => setSheetEditForm(prev => ({ ...prev, toVerse: Math.max(1, Number(e.target.value) || 1) }))}
+                      className="w-full px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  )}
                 </div>
               </div>
 
@@ -2544,20 +2588,22 @@ const QuranLessonManagement = () => {
                 />
               </div>
 
-              {/* Deviation Reason */}
-              <div>
-                <label className="block text-[11px] font-black uppercase text-amber-600 dark:text-amber-400 mb-1 flex items-center gap-1">
-                  <AlertTriangle size={12} />
-                  <span>Sababta Beddelka Qorshaha (Haddii aad beddeshay)</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Geli sababta aad qorshaha Admin-ka u beddeshay..."
-                  value={sheetEditForm.deviationReason}
-                  onChange={(e) => setSheetEditForm(prev => ({ ...prev, deviationReason: e.target.value }))}
-                  className="w-full px-3.5 py-2 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/80 text-xs font-semibold text-amber-900 dark:text-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
+              {/* Deviation Reason (Only for Admin) */}
+              {!isTeacher && (
+                <div>
+                  <label className="block text-[11px] font-black uppercase text-amber-600 dark:text-amber-400 mb-1 flex items-center gap-1">
+                    <AlertTriangle size={12} />
+                    <span>Sababta Beddelka Qorshaha (Haddii aad beddeshay)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Geli sababta aad qorshaha Admin-ka u beddeshay..."
+                    value={sheetEditForm.deviationReason}
+                    onChange={(e) => setSheetEditForm(prev => ({ ...prev, deviationReason: e.target.value }))}
+                    className="w-full px-3.5 py-2 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/80 text-xs font-semibold text-amber-900 dark:text-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              )}
 
               {/* Modal Action Buttons */}
               <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
