@@ -85,6 +85,7 @@ const QuranLessonManagement = () => {
   const [sheetClassId, setSheetClassId] = useState('');
   const [sheetDate, setSheetDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [sheetStudents, setSheetStudents] = useState([]);
+  const [sheetSearchQuery, setSheetSearchQuery] = useState('');
   const [sheetLoading, setSheetLoading] = useState(false);
   const [sheetSaving, setSheetSaving] = useState(false);
 
@@ -809,6 +810,18 @@ const QuranLessonManagement = () => {
     return { total, passed, repeat };
   }, [sheetStudents]);
 
+  // Filter sheet students by search query
+  const displayedSheetStudents = useMemo(() => {
+    if (!sheetSearchQuery.trim()) return sheetStudents;
+    const q = sheetSearchQuery.toLowerCase().trim();
+    return sheetStudents.filter(s =>
+      (s.fullName && s.fullName.toLowerCase().includes(q)) ||
+      (s.studentName && s.studentName.toLowerCase().includes(q)) ||
+      (s.rollNumber && s.rollNumber.toString().includes(q)) ||
+      (s.studentCode && s.studentCode.toLowerCase().includes(q))
+    );
+  }, [sheetStudents, sheetSearchQuery]);
+
   return (
     <div className="p-3 sm:p-5 lg:p-8 space-y-6 pb-28 max-w-[1600px] mx-auto animate-in fade-in duration-500">
 
@@ -984,7 +997,7 @@ const QuranLessonManagement = () => {
                 <div className="flex-1 min-w-[240px]">
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                     <Users size={14} className="text-teal-600" />
-                    <span>Dooro Fasalka / Xalaqadda (الفصل / الحلقة) *</span>
+                    <span>Dooro Fasalka / Xalaqadda *</span>
                   </label>
                   <select
                     value={sheetClassId}
@@ -1004,7 +1017,7 @@ const QuranLessonManagement = () => {
                 <div className="w-full sm:w-auto">
                   <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
                     <Calendar size={14} className="text-teal-600" />
-                    <span>Taariikhda Cashirka (التاريخ)</span>
+                    <span>Taariikhda Cashirka</span>
                   </label>
                   <input
                     type="date"
@@ -1051,22 +1064,57 @@ const QuranLessonManagement = () => {
               )}
             </div>
 
-            {/* Quick Helper Banner */}
-            <div className="mt-4 p-3.5 rounded-2xl bg-teal-50/70 dark:bg-teal-950/20 border border-teal-200/70 dark:border-teal-900/40 flex items-center justify-between flex-wrap gap-2 text-xs">
-              <div className="flex items-center gap-2 text-teal-900 dark:text-teal-200 font-semibold">
-                <Sparkles size={16} className="text-teal-600 shrink-0" />
-                <span>
-                  <strong>Nidaamka Automatic-ka ah:</strong> Markaad doorato <strong>"Gudbay ✓"</strong> ardaygu si toos ah ayuu hore ugu soconayaa aayadaha xaddigiisa maalinlaha ah. Haddii aad doorato <strong>"Tikraar ↺"</strong> bisinkiisa iyo aayaddiisu kama dhaqaaqayaan!
-                </span>
-              </div>
-              {sheetStudents.length > 0 && (
-                <div className="flex items-center gap-3 font-black text-xs shrink-0">
-                  <span className="text-slate-600 dark:text-slate-400">Ardayda: {sheetStats.total}</span>
-                  <span className="text-emerald-600 dark:text-emerald-400">Gudbay: {sheetStats.passed}</span>
-                  <span className="text-amber-600 dark:text-amber-400">Tikraar: {sheetStats.repeat}</span>
+            {/* Class Sheet Toolbar (Search & Statistics) */}
+            {sheetStudents.length > 0 && (
+              <div className="mt-4 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between flex-wrap gap-3">
+                {/* Search Bar with Search Button */}
+                <div className="flex items-center gap-2 flex-1 min-w-[260px] max-w-md">
+                  <div className="relative flex-1">
+                    <Search size={15} className="absolute left-3.5 top-3 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Raadi ardayga (magaca ama roll #)..."
+                      value={sheetSearchQuery}
+                      onChange={(e) => setSheetSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-8 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm transition-all"
+                    />
+                    {sheetSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSheetSearchQuery('')}
+                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                        title="Nadiifi raadinta"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all shrink-0 active:scale-95"
+                  >
+                    <Search size={14} />
+                    <span>Raadi</span>
+                  </button>
                 </div>
-              )}
-            </div>
+
+                {/* Stats Counters */}
+                <div className="flex items-center gap-2 font-black text-xs shrink-0">
+                  <span className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                    Ardayda: {sheetStats.total}
+                    {displayedSheetStudents.length < sheetStudents.length && (
+                      <span className="text-teal-600 ml-1">({displayedSheetStudents.length} la helay)</span>
+                    )}
+                  </span>
+                  <span className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40">
+                    Gudbay: {sheetStats.passed}
+                  </span>
+                  <span className="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40">
+                    Tikraar: {sheetStats.repeat}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Interactive Class Sheet Table */}
@@ -1117,7 +1165,16 @@ const QuranLessonManagement = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-semibold">
-                    {sheetStudents.map((item, index) => {
+                    {displayedSheetStudents.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-12 text-center text-slate-400 font-bold text-xs">
+                          {sheetSearchQuery
+                            ? `Arday laguma helin raadinta "${sheetSearchQuery}".`
+                            : 'Fasalkaan arday laguma helin.'}
+                        </td>
+                      </tr>
+                    ) : (
+                      displayedSheetStudents.map((item, index) => {
                       const isPassed = item.status === 'passed';
                       const isRepeat = item.status === 'repeat';
                       const isHoreed = item.studentType === 'HOREED';
@@ -1150,7 +1207,7 @@ const QuranLessonManagement = () => {
                                   ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
                                   : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
                               }`}>
-                                {isHoreed ? 'HOREED (Xifdiye)' : 'LAQDIIN'}
+                                {isHoreed ? 'HOREED' : 'LAQDIIN'}
                               </span>
 
                               {item.rollNumber && (
@@ -1270,12 +1327,10 @@ const QuranLessonManagement = () => {
                                   </div>
                                 </div>
                               ) : (
-                                <span className="text-[11px] text-slate-400 italic">
-                                  Weli 4 maalin ma dhamaysan (Bilaabe)
-                                </span>
+                                <span className="text-slate-400 text-xs font-medium">—</span>
                               )
                             ) : (
-                              <span className="text-slate-400 text-xs font-medium">— (Ma laha Isku-xir)</span>
+                              <span className="text-slate-400 text-xs font-medium">—</span>
                             )}
                           </td>
 
@@ -1335,7 +1390,7 @@ const QuranLessonManagement = () => {
                           </td>
                         </tr>
                       );
-                    })}
+                    }))}
                   </tbody>
                 </table>
               </div>
@@ -1872,13 +1927,13 @@ const QuranLessonManagement = () => {
                   <thead>
                     <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 print:bg-slate-100 print:text-black">
                       <th className="py-4 px-4 sm:px-6">#</th>
-                      <th className="py-4 px-4 sm:px-6">Ardayga (الطالب)</th>
-                      <th className="py-4 px-4 sm:px-6">Xalaqadda (الحلقة)</th>
-                      <th className="py-4 px-4 sm:px-6">Suuradda & Aayadaha (السورة)</th>
-                      <th className="py-4 px-4 sm:px-6">Nooca (النوع)</th>
-                      <th className="py-4 px-4 sm:px-6">Natiijada (النتيجة)</th>
-                      <th className="py-4 px-4 sm:px-6">Mulaaxado (الملاحظة)</th>
-                      <th className="py-4 px-4 sm:px-6">Taariikhda (التاريخ)</th>
+                      <th className="py-4 px-4 sm:px-6">Ardayga</th>
+                      <th className="py-4 px-4 sm:px-6">Xalaqadda</th>
+                      <th className="py-4 px-4 sm:px-6">Suuradda & Aayadaha</th>
+                      <th className="py-4 px-4 sm:px-6">Nooca</th>
+                      <th className="py-4 px-4 sm:px-6">Natiijada</th>
+                      <th className="py-4 px-4 sm:px-6">Mulaaxado</th>
+                      <th className="py-4 px-4 sm:px-6">Taariikhda</th>
                       <th className="py-4 px-4 sm:px-6 text-right print:hidden">Ficil</th>
                     </tr>
                   </thead>
