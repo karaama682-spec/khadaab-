@@ -988,25 +988,23 @@ const QuranLessonManagement = () => {
       {activeTab === 'class_sheet' && (
         <div className="space-y-6">
 
-          {/* Class & Date Selector Card */}
-          <div className="bg-white dark:bg-slate-900 rounded-[32px] p-6 sm:p-7 border border-slate-200/80 dark:border-slate-800 shadow-xl">
-            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5">
-              {/* Class & Date Dropdowns */}
-              <div className="flex flex-wrap items-center gap-4 flex-1">
+          {/* Class & Date Selector Card (Compact Single Line) */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-3 sm:p-4 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              {/* Left Side: Select Class & Date Picker in one line */}
+              <div className="flex flex-wrap items-center gap-2">
                 {/* Select Class */}
-                <div className="flex-1 min-w-[240px]">
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
-                    <Users size={14} className="text-teal-600" />
-                    <span>Dooro Fasalka / Xalaqadda *</span>
-                  </label>
+                <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5">
+                  <Users size={13} className="text-teal-600 shrink-0" />
+                  <span className="text-[10px] font-black uppercase text-slate-400 shrink-0">Fasalka:</span>
                   <select
                     value={sheetClassId}
                     onChange={(e) => setSheetClassId(e.target.value)}
-                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all cursor-pointer"
+                    className="bg-transparent text-xs font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer"
                   >
-                    <option value="">-- Dooro Fasal ama Xalaqo --</option>
+                    <option value="" className="text-slate-900 dark:text-white bg-white dark:bg-slate-900">-- Dooro Fasal --</option>
                     {branchClasses.map(c => (
-                      <option key={c._id} value={c._id}>
+                      <option key={c._id} value={c._id} className="text-slate-900 dark:text-white bg-white dark:bg-slate-900">
                         {c.name || c.className}
                       </option>
                     ))}
@@ -1014,51 +1012,49 @@ const QuranLessonManagement = () => {
                 </div>
 
                 {/* Date Picker */}
-                <div className="w-full sm:w-auto">
-                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
-                    <Calendar size={14} className="text-teal-600" />
-                    <span>Taariikhda Cashirka</span>
-                  </label>
+                <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5">
+                  <Calendar size={13} className="text-teal-600 shrink-0" />
+                  <span className="text-[10px] font-black uppercase text-slate-400 shrink-0">Taariikhda:</span>
                   <input
                     type="date"
                     value={sheetDate}
                     onChange={(e) => setSheetDate(e.target.value)}
-                    className="w-full sm:w-48 px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all cursor-pointer"
+                    className="bg-transparent text-xs font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer"
                   />
                 </div>
               </div>
 
-              {/* Batch Action Buttons */}
+              {/* Right Side: Action Buttons in the same line */}
               {sheetStudents.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2.5 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100 dark:border-slate-800">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => handleMarkAllStudents('passed')}
-                    className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition-all active:scale-95"
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
                     title="Dhammaan ardayda u calaamadee 'Gudbay'"
                   >
-                    <CheckCircle2 size={16} />
-                    <span>Dhammaan Gudbi ✓</span>
+                    <CheckCircle2 size={13} />
+                    <span>Gudbi Dhammaan ✓</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => handleMarkAllStudents('repeat')}
-                    className="px-4 py-2.5 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white font-black text-xs flex items-center gap-1.5 shadow-md shadow-amber-600/30 transition-all active:scale-95"
+                    className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95"
                     title="Dhammaan ardayda u calaamadee 'Tikraar'"
                   >
-                    <RotateCcw size={16} />
-                    <span>Dhammaan Tikraar ↺</span>
+                    <RotateCcw size={13} />
+                    <span>Tikraar ↺</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={handleSaveClassSheet}
                     disabled={sheetSaving}
-                    className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-black text-xs flex items-center gap-2 shadow-lg shadow-teal-600/30 transition-all active:scale-95 disabled:opacity-50"
+                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95 disabled:opacity-50"
                   >
-                    <Save size={16} />
-                    <span>{sheetSaving ? 'Waa la keydinayaa...' : 'Keydi Xaashida Maanta'}</span>
+                    <Save size={13} />
+                    <span>{sheetSaving ? 'Waa la keydinayaa...' : 'Keydi Xaashida'}</span>
                   </button>
                 </div>
               )}
@@ -1066,50 +1062,50 @@ const QuranLessonManagement = () => {
 
             {/* Class Sheet Toolbar (Search & Statistics) */}
             {sheetStudents.length > 0 && (
-              <div className="mt-4 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between flex-wrap gap-3">
+              <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between flex-wrap gap-2.5">
                 {/* Search Bar with Search Button */}
-                <div className="flex items-center gap-2 flex-1 min-w-[260px] max-w-md">
+                <div className="flex items-center gap-2 flex-1 min-w-[220px] max-w-sm">
                   <div className="relative flex-1">
-                    <Search size={15} className="absolute left-3.5 top-3 text-slate-400" />
+                    <Search size={13} className="absolute left-3 top-2 text-slate-400" />
                     <input
                       type="text"
-                      placeholder="Raadi ardayga (magaca ama roll #)..."
+                      placeholder="Raadi ardayga..."
                       value={sheetSearchQuery}
                       onChange={(e) => setSheetSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-8 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-sm transition-all"
+                      className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
                     />
                     {sheetSearchQuery && (
                       <button
                         type="button"
                         onClick={() => setSheetSearchQuery('')}
-                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                        className="absolute right-2 top-1.5 text-slate-400 hover:text-slate-600"
                         title="Nadiifi raadinta"
                       >
-                        <X size={14} />
+                        <X size={12} />
                       </button>
                     )}
                   </div>
                   <button
                     type="button"
-                    className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all shrink-0 active:scale-95"
+                    className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-all shrink-0 active:scale-95"
                   >
-                    <Search size={14} />
+                    <Search size={12} />
                     <span>Raadi</span>
                   </button>
                 </div>
 
                 {/* Stats Counters */}
-                <div className="flex items-center gap-2 font-black text-xs shrink-0">
-                  <span className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                <div className="flex items-center gap-1.5 font-bold text-xs shrink-0">
+                  <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                     Ardayda: {sheetStats.total}
                     {displayedSheetStudents.length < sheetStudents.length && (
-                      <span className="text-teal-600 ml-1">({displayedSheetStudents.length} la helay)</span>
+                      <span className="text-teal-600 ml-1 font-black">({displayedSheetStudents.length} la helay)</span>
                     )}
                   </span>
-                  <span className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40">
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40">
                     Gudbay: {sheetStats.passed}
                   </span>
-                  <span className="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40">
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40">
                     Tikraar: {sheetStats.repeat}
                   </span>
                 </div>
