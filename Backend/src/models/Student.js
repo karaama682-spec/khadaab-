@@ -138,6 +138,15 @@ const studentSchema = new mongoose.Schema({
             type: Number,
             default: 5
         },
+        paceUnit: {
+            type: String,
+            enum: ['sadar', 'bog', 'ayah'],
+            default: 'sadar'
+        },
+        paceCount: {
+            type: Number,
+            default: 7
+        },
         lastAssignedBy: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User'

@@ -253,9 +253,10 @@ const QuranLessonManagement = () => {
           note: hasToday ? (s.todayRecord.note || '') : '',
           deviationReason: hasToday ? (s.todayRecord.deviationReason || '') : '',
           isDeviated: hasToday ? !!s.todayRecord.isDeviated : isDeviated,
-          isIskuXirDay: isku.isToday,
+          iskuXir: isku,
+          isIskuXirDay: Boolean(isku.hasIskuXir || isku.isToday),
           iskuXirConfig: isku,
-          iskuXirResult: hasToday ? (s.todayRecord.iskuXirResult || 'none') : (isku.isToday ? 'passed' : 'none'),
+          iskuXirResult: hasToday ? (s.todayRecord.iskuXirResult || 'none') : (isku.hasIskuXir ? 'passed' : 'none'),
           lessonType: 'sabaq',
           isSavedToday: hasToday
         };
@@ -289,6 +290,16 @@ const QuranLessonManagement = () => {
     setSheetStudents(prev => prev.map(s => {
       if (s.studentId === studentId) {
         return { ...s, status: statusValue };
+      }
+      return s;
+    }));
+  };
+
+  // Toggle single student Isku-Xir result between 'passed' and 'repeat'
+  const handleToggleStudentIskuXir = (studentId, resultValue) => {
+    setSheetStudents(prev => prev.map(s => {
+      if (s.studentId === studentId) {
+        return { ...s, iskuXirResult: resultValue };
       }
       return s;
     }));
@@ -1096,18 +1107,23 @@ const QuranLessonManagement = () => {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                      <th className="py-4 px-4 sm:px-6">#</th>
+                      <th className="py-4 px-3 sm:px-4">#</th>
                       <th className="py-4 px-4 sm:px-6">Ardayga (الطالب)</th>
-                      <th className="py-4 px-4 sm:px-6">Bisinka & Bilowga (Starting Point)</th>
-                      <th className="py-4 px-4 sm:px-6">Cashirka Maanta (Aayadaha)</th>
-                      <th className="py-4 px-4 sm:px-6 text-center">Natiijada Maanta (Status)</th>
-                      <th className="py-4 px-4 sm:px-6">Mulaaxado (Note)</th>
+                      <th className="py-4 px-4 sm:px-6">Waajibka / Bisinka & Qiyaasta</th>
+                      <th className="py-4 px-4 sm:px-6">Sabaqa Maanta (Aayadaha)</th>
+                      <th className="py-4 px-4 sm:px-6">Isku-xirka (4 Maalmood - Horeed)</th>
+                      <th className="py-4 px-4 sm:px-6 text-center">Natiijada Sabaqa</th>
+                      <th className="py-4 px-4 sm:px-6">Mulaaxado & Sabab</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-semibold">
                     {sheetStudents.map((item, index) => {
                       const isPassed = item.status === 'passed';
                       const isRepeat = item.status === 'repeat';
+                      const isHoreed = item.studentType === 'HOREED';
+                      const exp = item.expectedLesson || {};
+                      const isIskuXirPassed = item.iskuXirResult === 'passed';
+                      const isIskuXirRepeat = item.iskuXirResult === 'repeat';
 
                       return (
                         <tr
@@ -1119,16 +1135,24 @@ const QuranLessonManagement = () => {
                           }`}
                         >
                           {/* Row Index */}
-                          <td className="py-4 px-4 sm:px-6 text-slate-400 font-bold">
+                          <td className="py-4 px-3 sm:px-4 text-slate-400 font-bold">
                             {index + 1}
                           </td>
 
-                          {/* Student Info */}
+                          {/* Student Info with Type Badge */}
                           <td className="py-4 px-4 sm:px-6">
                             <div className="font-bold text-slate-900 dark:text-white text-sm">
                               {item.fullName}
                             </div>
-                            <div className="flex items-center gap-2 mt-0.5">
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
+                                isHoreed
+                                  ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                                  : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                              }`}>
+                                {isHoreed ? 'HOREED (Xifdiye)' : 'LAQDIIN'}
+                              </span>
+
                               {item.rollNumber && (
                                 <span className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">
                                   Roll #{item.rollNumber}
@@ -1142,15 +1166,15 @@ const QuranLessonManagement = () => {
                             </div>
                           </td>
 
-                          {/* Starting Point & Progress Badge with Edit Button */}
+                          {/* Waajibka: Starting Point & Assigned Pace */}
                           <td className="py-4 px-4 sm:px-6">
                             <div className="flex items-center gap-2">
                               <div className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5">
                                 <p className="font-bold text-slate-900 dark:text-white text-xs font-arabic">
-                                  {item.quranProgress?.surahNumber}. {item.quranProgress?.nameSo || item.quranProgress?.surahName}
+                                  {exp.surahName || item.surahName}
                                 </p>
                                 <p className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">
-                                  Aayad: {item.quranProgress?.fromVerse || 1} • Xawaare: {item.quranProgress?.dailyPace || 5} aayad
+                                  Bilow: Aayad {exp.fromVerse || 1} • Qiyaas: {exp.pageOrLines || `${exp.paceCount || 5} ${exp.paceUnit === 'bog' ? 'Bog' : 'Sadar'}`}
                                 </p>
                               </div>
 
@@ -1165,7 +1189,7 @@ const QuranLessonManagement = () => {
                             </div>
                           </td>
 
-                          {/* Today's Scheduled Lesson (Surah & Verses) */}
+                          {/* Today's Scheduled Sabaq (Surah & Verses) */}
                           <td className="py-4 px-4 sm:px-6">
                             <div className="space-y-1.5">
                               <span className="font-black text-slate-800 dark:text-white text-xs font-arabic block">
@@ -1191,10 +1215,71 @@ const QuranLessonManagement = () => {
                                   className="w-14 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500"
                                 />
                               </div>
+
+                              {item.isDeviated && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded-md">
+                                  <AlertTriangle size={11} /> Waa la beddelay
+                                </span>
+                              )}
                             </div>
                           </td>
 
-                          {/* Quick Interactive Status Toggle: Gudbay vs Tikraar */}
+                          {/* Dynamic 4-Day Isku-Xir for HOREED */}
+                          <td className="py-4 px-4 sm:px-6">
+                            {isHoreed ? (
+                              item.iskuXir?.hasIskuXir ? (
+                                <div className="p-2.5 rounded-xl bg-purple-50/80 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-900/50 space-y-1.5 min-w-[200px]">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-black uppercase text-purple-700 dark:text-purple-300 flex items-center gap-1">
+                                      <Sparkles size={11} /> Isku-xir (4 Maalin)
+                                    </span>
+                                    <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400">
+                                      {item.iskuXir.daysCount} cashir
+                                    </span>
+                                  </div>
+                                  <p className="font-bold text-slate-900 dark:text-white text-xs font-arabic leading-tight">
+                                    {item.iskuXir.spanText}
+                                  </p>
+
+                                  {/* Isku-Xir Result Toggle */}
+                                  <div className="flex items-center gap-1.5 pt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleStudentIskuXir(item.studentId, 'passed')}
+                                      className={`flex-1 py-1 px-2 rounded-lg text-[10px] font-black transition-all flex items-center justify-center gap-1 ${
+                                        isIskuXirPassed
+                                          ? 'bg-purple-600 text-white shadow-sm'
+                                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-purple-100'
+                                      }`}
+                                    >
+                                      <CheckCircle2 size={12} />
+                                      <span>Gudbay ✓</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleStudentIskuXir(item.studentId, 'repeat')}
+                                      className={`flex-1 py-1 px-2 rounded-lg text-[10px] font-black transition-all flex items-center justify-center gap-1 ${
+                                        isIskuXirRepeat
+                                          ? 'bg-amber-600 text-white shadow-sm'
+                                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-amber-100'
+                                      }`}
+                                    >
+                                      <RotateCcw size={12} />
+                                      <span>Tikraar ↺</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-slate-400 italic">
+                                  Weli 4 maalin ma dhamaysan (Bilaabe)
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-slate-400 text-xs font-medium">— (Ma laha Isku-xir)</span>
+                            )}
+                          </td>
+
+                          {/* Sabaq Status Toggle: Gudbay vs Tikraar */}
                           <td className="py-4 px-4 sm:px-6 text-center">
                             <div className="inline-flex items-center gap-1.5 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
                               <button
@@ -1225,8 +1310,8 @@ const QuranLessonManagement = () => {
                             </div>
                           </td>
 
-                          {/* Note Field */}
-                          <td className="py-4 px-4 sm:px-6">
+                          {/* Note & Deviation Reason Field */}
+                          <td className="py-4 px-4 sm:px-6 space-y-1.5">
                             <input
                               type="text"
                               placeholder="Xusuusin..."
@@ -1234,6 +1319,19 @@ const QuranLessonManagement = () => {
                               onChange={(e) => handleUpdateSheetField(item.studentId, 'note', e.target.value)}
                               className="w-full min-w-[150px] px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500"
                             />
+
+                            {item.isDeviated && (
+                              <div>
+                                <input
+                                  type="text"
+                                  required
+                                  placeholder="Geli sababta aad qorshaha u beddeshay (Waajib)..."
+                                  value={item.deviationReason || ''}
+                                  onChange={(e) => handleUpdateSheetField(item.studentId, 'deviationReason', e.target.value)}
+                                  className="w-full min-w-[150px] px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-xs font-semibold text-rose-900 dark:text-rose-200 focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-rose-400"
+                                />
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );

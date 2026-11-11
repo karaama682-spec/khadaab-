@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   BookOpen, ShieldCheck, CheckSquare, GraduationCap, Sliders, Sparkles, Plus, Search, Check, RotateCcw,
   Printer, FileDown, Trash2, Edit3, Filter, Calendar,
-  User, CheckCircle2, AlertCircle, X, ChevronDown, Award, RefreshCw, Building2
+  User, CheckCircle2, AlertCircle, X, ChevronDown, Award, RefreshCw, Building2,
+  UserCheck, Layers, Settings, ArrowRight, Users
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import api from '../services/api';
@@ -77,6 +78,31 @@ const QuranManagement = () => {
   const [statusFilter, setStatusFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('');
 
+  // View Switcher: 'registration' (Diiwaangelinta Qorshaha & Bisinka) | 'examinations' (Diiwaanka Imtixaanaadka & Natiijooyinka)
+  const [activeView, setActiveView] = useState('registration');
+
+  // Dedicated Plan Registration States
+  const [regStudent, setRegStudent] = useState(null);
+  const [regStudentSearchQuery, setRegStudentSearchQuery] = useState('');
+  const [isRegStudentDropdownOpen, setIsRegStudentDropdownOpen] = useState(false);
+  const [regStudentType, setRegStudentType] = useState('LAQDIIN'); // 'LAQDIIN' | 'HOREED'
+  const [regSurah, setRegSurah] = useState(() => QURAN_SURAHS[0]);
+  const [regSurahSearchQuery, setRegSurahSearchQuery] = useState('1. الفاتحة (Al-Faatixa)');
+  const [isRegSurahDropdownOpen, setIsRegSurahDropdownOpen] = useState(false);
+  const [regFromVerse, setRegFromVerse] = useState(1);
+  const [regPaceUnit, setRegPaceUnit] = useState('sadar'); // 'sadar' | 'bog'
+  const [regPaceCount, setRegPaceCount] = useState(7);
+  const [regSubmitting, setRegSubmitting] = useState(false);
+
+  // Registered students overview table filters
+  const [regSearchFilter, setRegSearchFilter] = useState('');
+  const [regClassFilter, setRegClassFilter] = useState('All');
+  const [regTypeFilter, setRegTypeFilter] = useState('All'); // 'All' | 'LAQDIIN' | 'HOREED'
+
+  const regStudentDropdownRef = useRef(null);
+  const regSurahDropdownRef = useRef(null);
+  const regFormRef = useRef(null);
+
   // Refs for dropdown blur handling
   const studentDropdownRef = useRef(null);
   const surahDropdownRef = useRef(null);
@@ -132,6 +158,12 @@ const QuranManagement = () => {
       if (surahDropdownRef.current && !surahDropdownRef.current.contains(event.target)) {
         setIsSurahDropdownOpen(false);
       }
+      if (regStudentDropdownRef.current && !regStudentDropdownRef.current.contains(event.target)) {
+        setIsRegStudentDropdownOpen(false);
+      }
+      if (regSurahDropdownRef.current && !regSurahDropdownRef.current.contains(event.target)) {
+        setIsRegSurahDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -173,6 +205,182 @@ const QuranManagement = () => {
       return cBranchId === selectedBranchId;
     });
   }, [classes, selectedBranchId]);
+
+  // Selected student's class and assigned teacher for Dedicated Registration
+  const selectedRegStudentClassInfo = useMemo(() => {
+    if (!regStudent) return null;
+    const cId = regStudent.classId?._id || regStudent.classId;
+    const foundClass = classes.find(c => String(c._id) === String(cId));
+    const teacherName = foundClass?.teacherId?.fullName || foundClass?.teacherId?.username || foundClass?.teacherId?.name || null;
+    return {
+      className: foundClass?.name || foundClass?.className || 'Lama garanayo',
+      teacherName: teacherName || 'Fasalkan macallin looma xilsaarin'
+    };
+  }, [regStudent, classes]);
+
+  // Filter students for registration autocomplete search
+  const regFilteredStudents = useMemo(() => {
+    if (!regStudentSearchQuery.trim()) return branchStudents.slice(0, 15);
+    const q = regStudentSearchQuery.toLowerCase().trim();
+    return branchStudents.filter(s =>
+      (s.fullName && s.fullName.toLowerCase().includes(q)) ||
+      (s.studentCode && s.studentCode.toLowerCase().includes(q)) ||
+      (s.rollNumber && s.rollNumber.toString().includes(q)) ||
+      (s.classId?.name && s.classId.name.toLowerCase().includes(q)) ||
+      (s.classId?.className && s.classId.className.toLowerCase().includes(q))
+    ).slice(0, 20);
+  }, [branchStudents, regStudentSearchQuery]);
+
+  // Filter 114 Surahs for registration dropdown
+  const regFilteredSurahs = useMemo(() => {
+    if (!regSurahSearchQuery.trim() || (regSurah && regSurahSearchQuery === `${regSurah.number}. ${regSurah.nameAr} (${regSurah.nameSo})`)) {
+      return QURAN_SURAHS;
+    }
+    const q = regSurahSearchQuery.toLowerCase().trim();
+    return QURAN_SURAHS.filter(s =>
+      s.nameAr.includes(q) ||
+      (s.nameSo && s.nameSo.toLowerCase().includes(q)) ||
+      String(s.number).includes(q)
+    );
+  }, [regSurahSearchQuery, regSurah]);
+
+  const handleSelectRegStudent = (student) => {
+    setRegStudent(student);
+    setRegStudentSearchQuery(student.fullName || '');
+    setIsRegStudentDropdownOpen(false);
+
+    setRegStudentType(student.studentType || 'LAQDIIN');
+    const exp = student.expectedLessonConfig || {};
+    const prog = student.quranProgress || {};
+    const sNum = exp.surahNumber || prog.surahNumber || 1;
+    const sObj = QURAN_SURAHS.find(s => s.number === sNum) || QURAN_SURAHS[0];
+    setRegSurah(sObj);
+    setRegSurahSearchQuery(`${sObj.number}. ${sObj.nameAr} (${sObj.nameSo})`);
+    setRegFromVerse(exp.fromVerse || prog.fromVerse || 1);
+    const unit = exp.paceUnit || 'sadar';
+    setRegPaceUnit(unit);
+    setRegPaceCount(exp.paceCount || exp.dailyPace || (unit === 'bog' ? 1 : 7));
+  };
+
+  const handleSelectRegSurah = (surah) => {
+    setRegSurah(surah);
+    setRegSurahSearchQuery(`${surah.number}. ${surah.nameAr} (${surah.nameSo})`);
+    setIsRegSurahDropdownOpen(false);
+  };
+
+  const resetRegForm = () => {
+    setRegStudent(null);
+    setRegStudentSearchQuery('');
+    setRegStudentType('LAQDIIN');
+    const sObj = QURAN_SURAHS[0];
+    setRegSurah(sObj);
+    setRegSurahSearchQuery(`${sObj.number}. ${sObj.nameAr} (${sObj.nameSo})`);
+    setRegFromVerse(1);
+    setRegPaceUnit('sadar');
+    setRegPaceCount(7);
+  };
+
+  const handleSaveStudentPlan = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!regStudent) {
+      showAlert({
+        type: 'warning',
+        title: 'Dooro Ardayga',
+        message: 'Fadlan dooro ardayga aad doonayso inaad qorshaha u dejiso.'
+      });
+      return;
+    }
+    if (!regSurah) {
+      showAlert({
+        type: 'warning',
+        title: 'Dooro Suuradda',
+        message: 'Fadlan dooro suuradda bisinka ah.'
+      });
+      return;
+    }
+
+    try {
+      setRegSubmitting(true);
+      const sNum = regSurah.number;
+      const fVerse = Math.max(1, Number(regFromVerse) || 1);
+      const pCount = Math.max(1, Number(regPaceCount) || (regPaceUnit === 'bog' ? 1 : 7));
+      const estimatedVerses = regPaceUnit === 'bog' ? Math.max(1, pCount * 15) : Math.max(1, Math.round(pCount / 2));
+      const tVerse = Math.min(regSurah.verses, fVerse + estimatedVerses - 1);
+
+      const payload = {
+        studentId: regStudent._id,
+        studentType: regStudentType,
+        surahNumber: sNum,
+        fromVerse: fVerse,
+        toVerse: tVerse,
+        paceUnit: regPaceUnit,
+        paceCount: pCount,
+        pageRange: regPaceUnit === 'bog' ? `${pCount} Bog` : '',
+        lineRange: regPaceUnit === 'sadar' ? `${pCount} Sadar` : '',
+        dailyPace: estimatedVerses
+      };
+
+      const res = await api.put('/quran/lessons/admin/assign-expectation', payload);
+
+      setStudents(prev => prev.map(s => {
+        if (s._id === regStudent._id) {
+          return {
+            ...s,
+            studentType: regStudentType,
+            expectedLessonConfig: res.data.student?.expectedLessonConfig || payload,
+            quranProgress: res.data.student?.quranProgress || s.quranProgress
+          };
+        }
+        return s;
+      }));
+
+      showAlert({
+        type: 'success',
+        title: 'Guul!',
+        message: `Qorshaha ardayga "${regStudent.fullName}" si guul leh ayaa loo diiwaangeliyey (${regStudentType === 'HOREED' ? 'Horeed (Xifdiye)' : 'Laqdiin'}, Bisinka: ${regSurah.nameSo}, Qiyaasta: ${pCount} ${regPaceUnit === 'bog' ? 'Bog' : 'Sadar'}).`
+      });
+
+      resetRegForm();
+    } catch (err) {
+      console.error('Error saving plan:', err);
+      showAlert({
+        type: 'danger',
+        title: 'Khalad',
+        message: err.response?.data?.message || 'Lama guuleysan in qorshaha la keydiyo.'
+      });
+    } finally {
+      setRegSubmitting(false);
+    }
+  };
+
+  const handleEditStudentPlan = (st) => {
+    handleSelectRegStudent(st);
+    if (regFormRef.current) {
+      regFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  // Filtered list of registered students for the overview table
+  const displayedRegisteredStudents = useMemo(() => {
+    return branchStudents.filter(s => {
+      if (regClassFilter !== 'All') {
+        const cId = s.classId?._id || s.classId;
+        if (String(cId) !== String(regClassFilter)) return false;
+      }
+      if (regTypeFilter !== 'All') {
+        const sType = s.studentType || 'LAQDIIN';
+        if (sType !== regTypeFilter) return false;
+      }
+      if (regSearchFilter.trim()) {
+        const q = regSearchFilter.toLowerCase().trim();
+        const matchesName = s.fullName && s.fullName.toLowerCase().includes(q);
+        const matchesCode = s.studentCode && s.studentCode.toLowerCase().includes(q);
+        const matchesRoll = s.rollNumber && s.rollNumber.toString().includes(q);
+        if (!matchesName && !matchesCode && !matchesRoll) return false;
+      }
+      return true;
+    });
+  }, [branchStudents, regClassFilter, regTypeFilter, regSearchFilter]);
 
   // Filter students based on search query (ONLY within Dugsi students)
   const filteredStudents = useMemo(() => {
@@ -677,9 +885,654 @@ const QuranManagement = () => {
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. KPI STATISTICS CARDS (SCREEN ONLY) */}
+      {/* 2. VIEW SWITCHER TABS */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 print:hidden">
+      <div className="flex flex-wrap items-center gap-3 print:hidden">
+        <button
+          type="button"
+          onClick={() => setActiveView('registration')}
+          className={`flex items-center gap-2.5 px-6 py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all ${
+            activeView === 'registration'
+              ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/30 ring-2 ring-emerald-500/20 scale-[1.02]'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800'
+          }`}
+        >
+          <GraduationCap size={18} />
+          <span>📋 Diiwaangelinta Qorshaha & Bisinka (Registration)</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveView('examinations')}
+          className={`flex items-center gap-2.5 px-6 py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all ${
+            activeView === 'examinations'
+              ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/30 ring-2 ring-emerald-500/20 scale-[1.02]'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800'
+          }`}
+        >
+          <BookOpen size={18} />
+          <span>📝 Diiwaanka Imtixaanaadka & Natiijooyinka (Examinations)</span>
+        </button>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* VIEW 1: DIIWAANGELINTA QORSHAHA & BISINKA (DEDICATED ADMIN REGISTRATION) */}
+      {/* ========================================================================= */}
+      {activeView === 'registration' && (
+        <div className="space-y-6 print:hidden">
+          {/* Registration KPI Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
+            <div className="bg-white dark:bg-slate-900 rounded-[24px] p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
+                <Users size={24} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Wadarta Ardayda</p>
+                <p className="text-2xl font-black text-slate-900 dark:text-white mt-0.5">{branchStudents.length}</p>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 rounded-[24px] p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                <BookOpen size={24} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">Ardayda Laqdiinka</p>
+                <p className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-0.5">
+                  {branchStudents.filter(s => (s.studentType || 'LAQDIIN') === 'LAQDIIN').length}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 rounded-[24px] p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                <Award size={24} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400">Ardayda Horeedka (Xifdiye)</p>
+                <p className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-0.5">
+                  {branchStudents.filter(s => s.studentType === 'HOREED').length}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 rounded-[24px] p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <ShieldCheck size={24} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Qorshe Loo Dejiyey</p>
+                <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                  {branchStudents.filter(s => !!(s.expectedLessonConfig?.surahNumber || s.quranProgress?.surahNumber)).length}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* DEDICATED REGISTRATION FORM */}
+          <div ref={regFormRef} className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center font-bold shadow-lg shadow-emerald-600/30">
+                  <GraduationCap size={24} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-slate-900 dark:text-white">
+                    Diiwaangeli Qorshaha & Bisinka Ardayga (تسجيل خطة وبسملة الطالب)
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    Halkan ku diiwaangeli ardayga noociisa (Laqdiin ama Horeed), Bisinka uu marayo, iyo inta Sadar ama Bog uu maalin kasta qaato.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={resetRegForm}
+                className="self-start sm:self-center flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all border border-slate-200 dark:border-slate-700"
+              >
+                <RefreshCw size={14} />
+                <span>Nadiifi Foomka</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStudentPlan} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+
+                {/* Field 1: Dooro Ardayga */}
+                <div className="relative md:col-span-2 lg:col-span-1" ref={regStudentDropdownRef}>
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span>1. Dooro Ardayga (الطالب) *</span>
+                    {regStudent && (
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                        <Check size={12} /> Doortay
+                      </span>
+                    )}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Raadi magaca ardayga..."
+                      value={regStudentSearchQuery}
+                      onChange={(e) => {
+                        setRegStudentSearchQuery(e.target.value);
+                        setIsRegStudentDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsRegStudentDropdownOpen(true)}
+                      className="w-full px-4 py-3 pl-10 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                    />
+                    <User size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
+                    {regStudentSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRegStudentSearchQuery('');
+                          setRegStudent(null);
+                        }}
+                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
+
+                  {isRegStudentDropdownOpen && regFilteredStudents.length > 0 && (
+                    <div className="absolute z-30 left-0 right-0 mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                      {regFilteredStudents.map((s) => {
+                        const halName = s.classId?.name || s.classId?.className || 'Halaqad';
+                        return (
+                          <div
+                            key={s._id}
+                            onClick={() => handleSelectRegStudent(s)}
+                            className="p-3 hover:bg-emerald-50 dark:hover:bg-slate-700/60 cursor-pointer flex items-center justify-between transition-colors"
+                          >
+                            <div>
+                              <p className="text-sm font-bold text-slate-900 dark:text-white">{s.fullName}</p>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                                Roll #{s.rollNumber || s.studentCode || 'N/A'} • <span className="text-emerald-600 dark:text-emerald-400 font-bold">{halName}</span>
+                              </p>
+                            </div>
+                            <span className="text-xs font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1 rounded-lg">
+                              Dooro
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Field 2: Nooca Ardayga (LAQDIIN vs HOREED) */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    2. Nooca Ardayga (نوع الطالب) *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => setRegStudentType('LAQDIIN')}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
+                        regStudentType === 'LAQDIIN'
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-blue-600'
+                      }`}
+                    >
+                      <BookOpen size={14} />
+                      <span>LAQDIIN</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRegStudentType('HOREED')}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
+                        regStudentType === 'HOREED'
+                          ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-purple-600'
+                      }`}
+                    >
+                      <Award size={14} />
+                      <span>HOREED (Xifdiye)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Field 3: Bisinka uu marayo (Suuradda) */}
+                <div className="relative" ref={regSurahDropdownRef}>
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                    <span>3. Suuradda Bisinka (السورة) *</span>
+                    {regSurah && (
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                        #{regSurah.number}
+                      </span>
+                    )}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Dooro suuradda..."
+                      value={regSurahSearchQuery}
+                      onChange={(e) => {
+                        setRegSurahSearchQuery(e.target.value);
+                        setIsRegSurahDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsRegSurahDropdownOpen(true)}
+                      className="w-full px-4 py-3 pl-10 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-arabic"
+                    />
+                    <BookOpen size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
+                  </div>
+
+                  {isRegSurahDropdownOpen && regFilteredSurahs.length > 0 && (
+                    <div className="absolute z-30 left-0 right-0 mt-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                      {regFilteredSurahs.map((surah) => (
+                        <div
+                          key={surah.number}
+                          onClick={() => handleSelectRegSurah(surah)}
+                          className="p-3 hover:bg-emerald-50 dark:hover:bg-slate-700/60 cursor-pointer flex items-center justify-between transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-xs font-black text-slate-600 dark:text-slate-300">
+                              {surah.number}
+                            </span>
+                            <div>
+                              <p className="text-sm font-bold text-slate-900 dark:text-white font-arabic">
+                                {surah.nameAr}
+                              </p>
+                              <p className="text-[11px] text-slate-400">{surah.nameSo} ({surah.verses} aayadood)</p>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold text-emerald-600">Dooro</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+              {/* Student Details Banner (Class & Teacher) */}
+              {regStudent && (
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-blue-500/10 border border-emerald-500/20 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-md shadow-emerald-600/30">
+                      <GraduationCap size={20} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-2">
+                        <span>{regStudent.fullName}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                          regStudentType === 'HOREED'
+                            ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300'
+                            : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
+                        }`}>
+                          {regStudentType === 'HOREED' ? 'HOREED (Xifdiye)' : 'LAQDIIN'}
+                        </span>
+                      </p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                        Fasalka: <strong className="text-slate-700 dark:text-slate-200">{selectedRegStudentClassInfo?.className}</strong> • Macallinka: <strong className="text-emerald-600 dark:text-emerald-400">{selectedRegStudentClassInfo?.teacherName}</strong>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Qorshaha: Aayadda Bilowga & Qiyaasta Maalinlaha ah (Sadar ama Bog) */}
+              <div className="p-5 rounded-3xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-700/60 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Sliders size={16} className="text-emerald-600 dark:text-emerald-400" />
+                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                      Qiyaasta Cashirka Maalinlaha ah: Sadar ama Bog
+                    </h3>
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-500">
+                    Labaduba (Horjeed iyo Laqdiin) xulashada Sadarka ama Bogga waa laga wada siman yahay
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  {/* Aayadda Bilowga */}
+                  <div>
+                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+                      Aayadda uu ka bilaabayo (From Verse) *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={regSurah?.verses || 286}
+                      required
+                      value={regFromVerse}
+                      onChange={(e) => setRegFromVerse(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Suuradda {regSurah?.nameSo} waxay leedahay {regSurah?.verses || 7} aayadood.
+                    </p>
+                  </div>
+
+                  {/* Pace Unit Switcher (Sadar vs Bog) */}
+                  <div className="md:col-span-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                        Qiyaasta Cashirka Maalin kasta (Sadar ama Bog) *
+                      </label>
+                      <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRegPaceUnit('sadar');
+                            setRegPaceCount(7);
+                          }}
+                          className={`px-3 py-1 rounded-lg text-xs font-black transition-all ${
+                            regPaceUnit === 'sadar'
+                              ? 'bg-emerald-600 text-white shadow-sm'
+                              : 'text-slate-600 dark:text-slate-400 hover:text-emerald-600'
+                          }`}
+                        >
+                          Sadar (Lines)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRegPaceUnit('bog');
+                            setRegPaceCount(1);
+                          }}
+                          className={`px-3 py-1 rounded-lg text-xs font-black transition-all ${
+                            regPaceUnit === 'bog'
+                              ? 'bg-emerald-600 text-white shadow-sm'
+                              : 'text-slate-600 dark:text-slate-400 hover:text-emerald-600'
+                          }`}
+                        >
+                          Bog (Pages)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Sadar Mode Chips & Input */}
+                    {regPaceUnit === 'sadar' && (
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="1"
+                            max="50"
+                            value={regPaceCount}
+                            onChange={(e) => setRegPaceCount(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-24 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-black text-center text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                          />
+                          <span className="text-xs font-bold text-slate-500">Sadar</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {[3, 5, 7, 10, 15].map((cnt) => (
+                            <button
+                              key={cnt}
+                              type="button"
+                              onClick={() => setRegPaceCount(cnt)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                                regPaceCount === cnt
+                                  ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/30'
+                                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
+                              }`}
+                            >
+                              {cnt} Sadar
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bog Mode Chips & Input */}
+                    {regPaceUnit === 'bog' && (
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0.5"
+                            max="20"
+                            value={regPaceCount}
+                            onChange={(e) => setRegPaceCount(Math.max(0.5, parseFloat(e.target.value) || 1))}
+                            className="w-24 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-black text-center text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                          />
+                          <span className="text-xs font-bold text-slate-500">Bog</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {[0.5, 1, 2, 3].map((bCount) => (
+                            <button
+                              key={bCount}
+                              type="button"
+                              onClick={() => setRegPaceCount(bCount)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                                regPaceCount === bCount
+                                  ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/30'
+                                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
+                              }`}
+                            >
+                              {bCount === 0.5 ? 'Nus Bog (½)' : `${bCount} Bog`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Explanatory Notice for Horeed Students */}
+              {regStudentType === 'HOREED' && (
+                <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/50 flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                    <Sparkles size={18} />
+                  </div>
+                  <div className="text-xs text-purple-900 dark:text-purple-200 space-y-1">
+                    <p className="font-black text-sm">
+                      Nidaamka Tooska ah ee Isku-Xirka (4 Maalmood):
+                    </p>
+                    <p className="leading-relaxed">
+                      Ardayda Horeedka Isku-xirkooda halkan gacanta laguma qoro! Nidaamka ayaa toos (Automatic) u soo aqrinaya wixii uu ardaygu ku gudbay <strong>4-tii maalin ee u dambeysay</strong>. Macallinkuna wuxuu xaashidiisa maalinlaha ah ku arki doonaa Isku-xirkaas isagoo hal mar ku qiimeynaya.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Submit Bar */}
+              <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="submit"
+                  disabled={regSubmitting}
+                  className="flex items-center gap-2 px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-emerald-600/30 active:scale-95"
+                >
+                  {regSubmitting ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      <span>Waa la keydinayaa...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={16} strokeWidth={3} />
+                      <span>Keydi Qorshaha Ardayga (حفظ الخطة)</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* OVERVIEW TABLE: REGISTERED STUDENTS & THEIR PLANS */}
+          <div className="bg-white dark:bg-slate-900 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                    <BookOpen size={18} className="text-emerald-600" />
+                    <span>Jadwalka Qorsheyaasha Ardayda ee Diiwaangashan</span>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold">
+                      {displayedRegisteredStudents.length} arday
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Liiska ardayda laanta iyo qorsheyaashooda firfircoon (Bisinka, Sadarka ama Bogga). Guji "Habee" si aad wax uga beddesho.
+                  </p>
+                </div>
+              </div>
+
+              {/* Filters for registered table */}
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 pt-2">
+                <div className="relative flex-1 max-w-md">
+                  <input
+                    type="text"
+                    placeholder="Raadi ardayga, koodhka, ama roll number..."
+                    value={regSearchFilter}
+                    onChange={(e) => setRegSearchFilter(e.target.value)}
+                    className="w-full px-4 py-2.5 pl-10 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <Search size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                  {regSearchFilter && (
+                    <button
+                      onClick={() => setRegSearchFilter('')}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <select
+                    value={regClassFilter}
+                    onChange={(e) => setRegClassFilter(e.target.value)}
+                    className="px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    <option value="All">Dhammaan Fasalada</option>
+                    {branchClasses.map(c => (
+                      <option key={c._id} value={c._id}>{c.name || c.className}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={regTypeFilter}
+                    onChange={(e) => setRegTypeFilter(e.target.value)}
+                    className="px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    <option value="All">Dhammaan Noocyada</option>
+                    <option value="LAQDIIN">LAQDIIN (Akhriste)</option>
+                    <option value="HOREED">HOREED (Xifdiye)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Registered Students Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/75 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                    <th className="py-4 px-5">#</th>
+                    <th className="py-4 px-5">Ardayga (الطالب)</th>
+                    <th className="py-4 px-5">Fasalka & Macallinka</th>
+                    <th className="py-4 px-5">Nooca</th>
+                    <th className="py-4 px-5">Bisinka uu Marayo</th>
+                    <th className="py-4 px-5">Qiyaasta Maalinlaha</th>
+                    <th className="py-4 px-5">Isku-xirka (4 Maalin)</th>
+                    <th className="py-4 px-5 text-right">Falka (Action)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-semibold">
+                  {displayedRegisteredStudents.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                        Arday laguma helin xulashadaan.
+                      </td>
+                    </tr>
+                  ) : (
+                    displayedRegisteredStudents.map((st, idx) => {
+                      const exp = st.expectedLessonConfig || {};
+                      const prog = st.quranProgress || {};
+                      const sNum = exp.surahNumber || prog.surahNumber || 1;
+                      const surahObj = QURAN_SURAHS.find(s => s.number === sNum) || QURAN_SURAHS[0];
+                      const fromV = exp.fromVerse || prog.fromVerse || 1;
+                      const isHoreed = st.studentType === 'HOREED';
+                      const paceUnit = exp.paceUnit || 'sadar';
+                      const paceCount = exp.paceCount || exp.dailyPace || (paceUnit === 'bog' ? 1 : 7);
+
+                      const cId = st.classId?._id || st.classId;
+                      const foundCls = classes.find(c => String(c._id) === String(cId));
+                      const className = foundCls?.name || foundCls?.className || 'Fasal la\'aan';
+                      const teacherName = foundCls?.teacherId?.fullName || foundCls?.teacherId?.username || 'Lama xilsaarin';
+
+                      return (
+                        <tr key={st._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="py-4 px-5 text-slate-400 font-bold">{idx + 1}</td>
+                          <td className="py-4 px-5">
+                            <p className="font-bold text-slate-900 dark:text-white text-sm">{st.fullName}</p>
+                            <p className="text-[10px] text-slate-400">Roll #{st.rollNumber || st.studentCode || 'N/A'}</p>
+                          </td>
+                          <td className="py-4 px-5">
+                            <p className="font-bold text-slate-700 dark:text-slate-300">{className}</p>
+                            <p className="text-[10px] text-emerald-600 dark:text-emerald-400">{teacherName}</p>
+                          </td>
+                          <td className="py-4 px-5">
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black ${
+                              isHoreed
+                                ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                                : 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                            }`}>
+                              {isHoreed ? 'HOREED' : 'LAQDIIN'}
+                            </span>
+                          </td>
+                          <td className="py-4 px-5">
+                            <p className="font-bold text-slate-900 dark:text-white font-arabic">
+                              {surahObj.number}. {surahObj.nameAr} ({surahObj.nameSo})
+                            </p>
+                            <p className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">
+                              Aayadda: {fromV}
+                            </p>
+                          </td>
+                          <td className="py-4 px-5">
+                            <span className="font-black text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
+                              {paceCount} {paceUnit === 'bog' ? 'Bog' : 'Sadar'}
+                            </span>
+                          </td>
+                          <td className="py-4 px-5">
+                            {isHoreed ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-black text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2.5 py-1 rounded-lg">
+                                <Sparkles size={12} />
+                                <span>Toos (4 Maalmood)</span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-xs">—</span>
+                            )}
+                          </td>
+                          <td className="py-4 px-5 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleEditStudentPlan(st)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-emerald-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-emerald-600 text-xs font-bold transition-all border border-slate-200 dark:border-slate-700"
+                            >
+                              <Settings size={13} />
+                              <span>Habee / Beddel</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* VIEW 2: DIIWAANKA IMTIXAANAADKA (EXAMINATIONS & HISTORY) */}
+      {/* ========================================================================= */}
+      {activeView === 'examinations' && (
+        <div className="space-y-6">
+
+          {/* 3. KPI STATISTICS CARDS (SCREEN ONLY) */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 print:hidden">
         <div className="bg-white dark:bg-slate-900 rounded-[24px] p-5 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center shrink-0">
             <BookOpen size={24} />
@@ -1539,6 +2392,9 @@ const QuranManagement = () => {
         </div>
 
       </div>
+
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 6. EDIT RECORD MODAL */}

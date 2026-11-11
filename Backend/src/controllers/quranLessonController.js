@@ -377,7 +377,8 @@ const getClassQuranSheet = async (req, res) => {
             recordMap.set(String(r.studentId), r);
         });
 
-        const sheetStudents = students.map(s => {
+        // Asynchronously process sheet students with dynamic 4-day Isku-Xir for HOREED students
+        const sheetStudents = await Promise.all(students.map(async (s) => {
             const studentType = s.studentType || 'LAQDIIN';
             const expConfig = s.expectedLessonConfig || {};
             const progress = s.quranProgress || {
@@ -388,21 +389,62 @@ const getClassQuranSheet = async (req, res) => {
                 lastStatus: 'passed'
             };
 
-            // Calculate expected lesson
             const sNum = Number(expConfig.surahNumber || progress.surahNumber || 1);
             const surah = QURAN_SURAHS.find(item => item.number === sNum) || QURAN_SURAHS[0];
             const maxV = surah.verses || 100;
             const fromV = Math.max(1, Math.min(Number(expConfig.fromVerse || progress.fromVerse || 1), maxV));
-            const pace = Number(expConfig.dailyPace || progress.dailyPace || 5);
-            const toV = expConfig.toVerse ? Math.min(maxV, Number(expConfig.toVerse)) : Math.min(maxV, fromV + (pace - 1));
-            const pageOrLines = expConfig.pageRange || expConfig.lineRange || '';
+            const paceUnit = expConfig.paceUnit || 'sadar';
+            const paceCount = Number(expConfig.paceCount || expConfig.dailyPace || progress.dailyPace || 5);
+            const toV = expConfig.toVerse ? Math.min(maxV, Number(expConfig.toVerse)) : Math.min(maxV, fromV + (paceCount - 1));
 
-            // Check if today is an ISKU-XIR day for HOREED students
-            const iskuConfig = s.iskuXirConfig || {};
-            const revDays = (iskuConfig.revisionDays || []).map(d => String(d).toLowerCase());
-            const isIskuXirToday = studentType === 'HOREED' &&
-                Boolean(iskuConfig.isActive) &&
-                (revDays.includes(somaliDay.toLowerCase()) || revDays.includes(englishDay.toLowerCase()));
+            // DYNAMIC 4-DAY ISKU-XIR FOR HOREED STUDENTS:
+            // Reads from database what the student completed over the last 4 passed days!
+            let iskuXirInfo = null;
+            if (studentType === 'HOREED') {
+                const last4Passed = await QuranLessonRecord.find({
+                    studentId: s._id,
+                    status: 'passed',
+                    date: { $lt: startOfDay }
+                }).sort({ date: -1 }).limit(4);
+
+                if (last4Passed.length > 0) {
+                    const newest = last4Passed[0];
+                    const oldest = last4Passed[last4Passed.length - 1];
+                    const daysCount = last4Passed.length;
+
+                    let spanText = '';
+                    if (oldest.surahNumber === newest.surahNumber) {
+                        spanText = `${newest.surahName} (Aayadaha ${oldest.fromVerse} - ${newest.toVerse})`;
+                    } else {
+                        spanText = `${oldest.surahName} (Aayad ${oldest.fromVerse}) ilaa ${newest.surahName} (Aayad ${newest.toVerse})`;
+                    }
+
+                    iskuXirInfo = {
+                        hasIskuXir: true,
+                        isToday: true,
+                        daysCount,
+                        spanText,
+                        surahName: spanText,
+                        fromSurahNumber: oldest.surahNumber,
+                        toSurahNumber: newest.surahNumber,
+                        fromVerse: oldest.fromVerse,
+                        toVerse: newest.toVerse,
+                        records: last4Passed.map(r => ({
+                            date: r.date,
+                            surahName: r.surahName,
+                            fromVerse: r.fromVerse,
+                            toVerse: r.toVerse
+                        }))
+                    };
+                } else {
+                    iskuXirInfo = {
+                        hasIskuXir: false,
+                        isToday: false,
+                        daysCount: 0,
+                        spanText: 'Weli ma dhamaysan 4 cashir oo hore (Bilaabe Horeed)'
+                    };
+                }
+            }
 
             const existingRecord = recordMap.get(String(s._id));
 
@@ -412,6 +454,8 @@ const getClassQuranSheet = async (req, res) => {
                 studentCode: s.studentCode || '',
                 rollNumber: s.rollNumber || '',
                 studentType,
+                paceUnit,
+                paceCount,
                 expectedLesson: {
                     surahNumber: sNum,
                     surahName: `${surah.number}. ${surah.nameAr} (${surah.nameSo})`,
@@ -419,7 +463,9 @@ const getClassQuranSheet = async (req, res) => {
                     fromVerse: fromV,
                     toVerse: toV,
                     maxVerses: maxV,
-                    pageOrLines: pageOrLines
+                    paceUnit,
+                    paceCount,
+                    pageOrLines: expConfig.pageRange || expConfig.lineRange || (paceUnit === 'bog' ? `${paceCount} Bog` : `${paceCount} Sadar`)
                 },
                 actualLesson: {
                     surahNumber: existingRecord ? (existingRecord.actualSurahNumber || existingRecord.surahNumber) : sNum,
@@ -428,15 +474,7 @@ const getClassQuranSheet = async (req, res) => {
                     toVerse: existingRecord ? (existingRecord.actualToVerse || existingRecord.toVerse) : toV,
                     maxVerses: maxV
                 },
-                iskuXir: {
-                    isActive: Boolean(iskuConfig.isActive),
-                    isToday: isIskuXirToday,
-                    surahNumber: iskuConfig.surahNumber || 1,
-                    surahName: iskuConfig.surahName || 'Al-Faatixa',
-                    fromVerse: iskuConfig.fromVerse || 1,
-                    toVerse: iskuConfig.toVerse || 7,
-                    notes: iskuConfig.notes || ''
-                },
+                iskuXir: iskuXirInfo,
                 todayRecord: existingRecord ? {
                     _id: existingRecord._id,
                     status: existingRecord.status,
@@ -448,7 +486,7 @@ const getClassQuranSheet = async (req, res) => {
                     repeatCount: existingRecord.repeatCount || 1
                 } : null
             };
-        });
+        }));
 
         res.status(200).json({
             classId: cls._id,
@@ -704,6 +742,8 @@ const assignStudentQuranPlan = async (req, res) => {
             surahNumber,
             fromVerse,
             toVerse,
+            paceUnit, // 'sadar' | 'bog' | 'ayah'
+            paceCount, // e.g. 7 sadar or 1 bog
             pageRange,
             lineRange,
             dailyPace,
@@ -720,6 +760,8 @@ const assignStudentQuranPlan = async (req, res) => {
         const fVerse = Math.max(1, Math.min(Number(fromVerse) || 1, surah.verses));
         const tVerse = Math.min(surah.verses, Math.max(fVerse, Number(toVerse) || (fVerse + 4)));
         const pace = Math.max(1, Number(dailyPace) || (tVerse - fVerse + 1));
+        const pUnit = (paceUnit === 'bog' || paceUnit === 'ayah') ? paceUnit : 'sadar';
+        const pCount = Math.max(1, Number(paceCount) || Number(dailyPace) || (pUnit === 'bog' ? 1 : 7));
 
         student.studentType = studentType === 'HOREED' ? 'HOREED' : 'LAQDIIN';
 
@@ -728,8 +770,10 @@ const assignStudentQuranPlan = async (req, res) => {
             surahName: surah.nameSo || surah.nameAr,
             fromVerse: fVerse,
             toVerse: tVerse,
-            pageRange: pageRange ? String(pageRange).trim() : '',
-            lineRange: lineRange ? String(lineRange).trim() : '',
+            paceUnit: pUnit,
+            paceCount: pCount,
+            pageRange: pageRange ? String(pageRange).trim() : (pUnit === 'bog' ? `${pCount} Bog` : ''),
+            lineRange: lineRange ? String(lineRange).trim() : (pUnit === 'sadar' ? `${pCount} Sadar` : ''),
             dailyPace: pace,
             lastAssignedBy: req.user?._id,
             lastAssignedAt: new Date()
