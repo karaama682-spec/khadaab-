@@ -89,6 +89,7 @@ const QuranLessonManagement = () => {
   const [sheetLoading, setSheetLoading] = useState(false);
   const [sheetSaving, setSheetSaving] = useState(false);
   const [sheetDeleting, setSheetDeleting] = useState(false);
+  const [savingStudentId, setSavingStudentId] = useState(null);
 
   // Individual student edit modal for class sheet
   const [sheetEditStudent, setSheetEditStudent] = useState(null);
@@ -516,6 +517,73 @@ const QuranLessonManagement = () => {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Ma suurtogalin in la tirtiro xaashida fasalka.' });
     } finally {
       setSheetDeleting(false);
+    }
+  };
+
+  // Save individual student evaluation directly from the row
+  const handleSaveSingleStudent = async (studentItem) => {
+    if (!studentItem || !studentItem.studentId) return;
+
+    const exp = studentItem.expectedLesson || {};
+    const isDeviated = !isTeacher && ((Number(studentItem.surahNumber) !== Number(exp.surahNumber)) ||
+                       (Number(studentItem.fromVerse) !== Number(exp.fromVerse)) ||
+                       (Number(studentItem.toVerse) !== Number(exp.toVerse)));
+
+    if (isDeviated && (!studentItem.deviationReason || !studentItem.deviationReason.trim())) {
+      setMessage({
+        type: 'error',
+        text: `Fadlan geli sababta aad qorshaha u beddeshay (Ardayga: "${studentItem.fullName}").`
+      });
+      return;
+    }
+
+    try {
+      setSavingStudentId(studentItem.studentId);
+      setMessage(null);
+
+      const payload = {
+        classId: sheetClassId,
+        branchId: selectedBranchId && selectedBranchId !== 'ALL' && selectedBranchId !== 'All' ? selectedBranchId : undefined,
+        date: sheetDate,
+        lessons: [{
+          studentId: studentItem.studentId,
+          expectedSurahNumber: exp.surahNumber,
+          expectedSurahName: exp.surahName,
+          expectedFromVerse: exp.fromVerse,
+          expectedToVerse: exp.toVerse,
+          expectedPageOrLines: exp.pageOrLines,
+          surahNumber: isTeacher ? Number(exp.surahNumber || 1) : Number(studentItem.surahNumber),
+          surahName: isTeacher ? exp.surahName : studentItem.surahName,
+          fromVerse: isTeacher ? Number(exp.fromVerse || 1) : (Number(studentItem.fromVerse) || 1),
+          toVerse: isTeacher ? Number(exp.toVerse || 5) : (Number(studentItem.toVerse) || Number(studentItem.fromVerse) || 1),
+          status: studentItem.status || 'passed',
+          note: studentItem.note || '',
+          deviationReason: isDeviated ? (studentItem.deviationReason || '').trim() : '',
+          isIskuXirDay: Boolean(studentItem.isIskuXirDay),
+          iskuXirResult: studentItem.iskuXirResult || 'none',
+          lessonType: studentItem.lessonType || 'sabaq'
+        }]
+      };
+
+      const res = await api.post('/quran/lessons/batch', payload);
+
+      setMessage({
+        type: 'success',
+        text: `Si guul leh ayaa loo keydiyey cashirka ardayga "${studentItem.fullName}" (${studentItem.status === 'repeat' ? 'Tikraar ↺' : 'Gudbay ✓'}).`
+      });
+
+      // Reload class sheet, accountability report, and global records
+      await Promise.all([
+        loadClassSheet(sheetClassId, sheetDate),
+        loadAccountabilityReport(accountabilityDate, sheetClassId, selectedBranchId),
+        api.get('/quran/lessons').then(r => setRecords(r.data || [])).catch(() => {})
+      ]);
+    } catch (err) {
+      console.error('Error saving single student record:', err);
+      const serverMsg = err.response?.data?.message || err.response?.data?.error || err.message;
+      setMessage({ type: 'error', text: serverMsg ? `Khalad: ${serverMsg}` : `Ma suurtogalin in la keydiyo cashirka ardayga "${studentItem.fullName}".` });
+    } finally {
+      setSavingStudentId(null);
     }
   };
 
@@ -1595,22 +1663,45 @@ const QuranLessonManagement = () => {
                             )}
                           </td>
 
-                          {/* Individual Student Actions: Edit & Delete */}
+                          {/* Individual Student Actions: Save, Edit & Delete */}
                           <td className="py-4 px-3 sm:px-4 text-center">
                             <div className="flex items-center justify-center gap-1.5">
+                              {/* Save Single Student */}
+                              <button
+                                type="button"
+                                disabled={savingStudentId === item.studentId}
+                                onClick={() => handleSaveSingleStudent(item)}
+                                className={`px-2.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1 active:scale-95 shadow-sm ${
+                                  item.isSavedToday
+                                    ? 'bg-emerald-600 text-white hover:bg-emerald-700 ring-1 ring-emerald-500/50'
+                                    : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-600 hover:text-white border border-emerald-300 dark:border-emerald-800'
+                                }`}
+                                title="Keydi cashirka ardaygan (Save)"
+                              >
+                                {savingStudentId === item.studentId ? (
+                                  <RefreshCw size={13} className="animate-spin" />
+                                ) : (
+                                  <Save size={13} />
+                                )}
+                                <span className="text-[11px] font-bold">Keydi</span>
+                              </button>
+
+                              {/* Edit Single Student */}
                               <button
                                 type="button"
                                 onClick={() => handleOpenSheetEditModal(item)}
-                                className="p-1.5 rounded-xl text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900 border border-teal-200/60 dark:border-teal-800 transition-all active:scale-90"
+                                className="px-2 py-1.5 rounded-xl text-xs font-black text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-600 hover:text-white border border-teal-300 dark:border-teal-800 transition-all active:scale-95 flex items-center gap-1 shadow-sm"
                                 title="Wax ka beddel cashirka ardayga (Edit)"
                               >
                                 <Edit2 size={13} />
+                                <span className="text-[11px] font-bold">Edit</span>
                               </button>
 
+                              {/* Delete/Reset Single Student */}
                               <button
                                 type="button"
                                 onClick={() => handleDeleteStudentSheetRecord(item)}
-                                className="p-1.5 rounded-xl text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900 border border-rose-200/60 dark:border-rose-800 transition-all active:scale-90"
+                                className="p-1.5 rounded-xl text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-600 hover:text-white border border-rose-300 dark:border-rose-800 transition-all active:scale-95 shadow-sm"
                                 title={item.isSavedToday ? "Tirtir diiwaanka cashirka ardayga" : "Dib u celi (Reset)"}
                               >
                                 <Trash2 size={13} />
