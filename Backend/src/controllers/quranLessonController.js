@@ -748,10 +748,30 @@ const batchRecordQuranLessons = async (req, res) => {
             return res.status(403).json({ message: 'Ma lihid awood aad ku qiimeyso fasal aadan adigu dhigin.' });
         }
 
+        // Bulk fetch all relevant students in a single DB query
+        const studentIds = lessons.map(item => item.studentId).filter(Boolean);
+        const students = await Student.find({ _id: { $in: studentIds } });
+        const studentMap = new Map();
+        students.forEach(s => studentMap.set(String(s._id), s));
+
+        // Start / End of lesson day for record matching
+        const startOfDay = new Date(lessonDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(lessonDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        // Bulk fetch existing records for today in a single DB query
+        const existingRecords = await QuranLessonRecord.find({
+            studentId: { $in: studentIds },
+            date: { $gte: startOfDay, $lte: endOfDay }
+        });
+        const recordMap = new Map();
+        existingRecords.forEach(r => recordMap.set(String(r.studentId), r));
+
         // PRE-VALIDATION: Check Rule 4 (Teachers must not silently modify assigned lesson)
         for (const item of lessons) {
             if (!item.studentId) continue;
-            const student = await Student.findById(item.studentId);
+            const student = studentMap.get(String(item.studentId));
             if (!student) continue;
 
             const expConfig = student.expectedLessonConfig || {};
@@ -779,7 +799,7 @@ const batchRecordQuranLessons = async (req, res) => {
         for (const item of lessons) {
             if (!item.studentId) continue;
 
-            const student = await Student.findById(item.studentId);
+            const student = studentMap.get(String(item.studentId));
             if (!student) continue;
 
             const expConfig = student.expectedLessonConfig || {};
@@ -804,16 +824,7 @@ const batchRecordQuranLessons = async (req, res) => {
             const isIskuXirDay = Boolean(item.isIskuXirDay);
             const iskuXirResult = item.iskuXirResult || 'none';
 
-            // Upsert today's record
-            const startOfDay = new Date(lessonDate);
-            startOfDay.setHours(0, 0, 0, 0);
-            const endOfDay = new Date(lessonDate);
-            endOfDay.setHours(23, 59, 59, 999);
-
-            let record = await QuranLessonRecord.findOne({
-                studentId: student._id,
-                date: { $gte: startOfDay, $lte: endOfDay }
-            });
+            let record = recordMap.get(String(student._id));
 
             if (record) {
                 record.expectedSurahNumber = expSurah;
@@ -843,6 +854,9 @@ const batchRecordQuranLessons = async (req, res) => {
                 record.teacherId = req.user?._id;
                 record.recordedBy = req.user?._id;
 
+                if (!Array.isArray(record.auditHistory)) {
+                    record.auditHistory = [];
+                }
                 record.auditHistory.push({
                     action: isDeviated ? 'TEACHER_DEVIATED_LESSON' : 'TEACHER_RECORDED_LESSON',
                     performedBy: req.user?._id,
@@ -855,7 +869,7 @@ const batchRecordQuranLessons = async (req, res) => {
             } else {
                 record = await QuranLessonRecord.create({
                     studentId: student._id,
-                    studentName: student.fullName,
+                    studentName: student.fullName || 'Arday',
                     classId: classId || student.classId,
                     halaqahName,
                     branchId: branchId || student.branchId,
@@ -919,9 +933,13 @@ const batchRecordQuranLessons = async (req, res) => {
                     lastUpdated: new Date()
                 };
 
-                // Advance expectedLessonConfig automatically so Admin's next day expectation steps forward
+                // Advance expectedLessonConfig safely
+                const prevExp = student.expectedLessonConfig
+                    ? (typeof student.expectedLessonConfig.toObject === 'function' ? student.expectedLessonConfig.toObject() : { ...student.expectedLessonConfig })
+                    : {};
+
                 student.expectedLessonConfig = {
-                    ...(student.expectedLessonConfig ? student.expectedLessonConfig.toObject() : {}),
+                    ...prevExp,
                     surahNumber: nextSurahNum,
                     surahName: nextSurahObj.nameSo || nextSurahObj.nameAr,
                     fromVerse: nextFrom,

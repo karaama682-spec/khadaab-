@@ -485,7 +485,8 @@ const QuranLessonManagement = () => {
       ]);
     } catch (err) {
       console.error('Error saving class Quran sheet:', err);
-      setMessage({ type: 'error', text: err.response?.data?.message || 'Khalad ayaa dhacay markii xaashida la keydinayay.' });
+      const serverMsg = err.response?.data?.message || err.response?.data?.error || err.message;
+      setMessage({ type: 'error', text: serverMsg ? `Khalad: ${serverMsg}` : 'Khalad ayaa dhacay markii xaashida la keydinayay.' });
     } finally {
       setSheetSaving(false);
     }

@@ -33,7 +33,7 @@ const apiBaseUrl = resolveBaseUrl();
 
 const api = axios.create({
     baseURL: apiBaseUrl,
-    timeout: 15000,
+    timeout: 60000,
 });
 
 // Request interceptor to add auth token
