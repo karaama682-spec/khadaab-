@@ -1256,7 +1256,22 @@ const QuranManagement = () => {
                       max={regSurah?.verses || 286}
                       required
                       value={regFromVerse}
-                      onChange={(e) => setRegFromVerse(Math.max(1, parseInt(e.target.value) || 1))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setRegFromVerse('');
+                        } else {
+                          const n = parseInt(val, 10);
+                          setRegFromVerse(isNaN(n) ? '' : Math.max(1, n));
+                        }
+                      }}
+                      onBlur={() => {
+                        if (!regFromVerse || Number(regFromVerse) < 1) {
+                          setRegFromVerse(1);
+                        } else if (regSurah?.verses && Number(regFromVerse) > regSurah.verses) {
+                          setRegFromVerse(regSurah.verses);
+                        }
+                      }}
                       className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
@@ -1308,7 +1323,18 @@ const QuranManagement = () => {
                             min="1"
                             max="50"
                             value={regPaceCount}
-                            onChange={(e) => setRegPaceCount(Math.max(1, parseInt(e.target.value) || 1))}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '') {
+                                setRegPaceCount('');
+                              } else {
+                                const n = parseInt(val, 10);
+                                setRegPaceCount(isNaN(n) ? '' : Math.max(1, n));
+                              }
+                            }}
+                            onBlur={() => {
+                              if (!regPaceCount || Number(regPaceCount) < 1) setRegPaceCount(7);
+                            }}
                             className="w-24 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-black text-center text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
                           />
                           <span className="text-xs font-bold text-slate-500">Sadar</span>
@@ -1342,7 +1368,18 @@ const QuranManagement = () => {
                             min="0.5"
                             max="20"
                             value={regPaceCount}
-                            onChange={(e) => setRegPaceCount(Math.max(0.5, parseFloat(e.target.value) || 1))}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '') {
+                                setRegPaceCount('');
+                              } else {
+                                const n = parseFloat(val);
+                                setRegPaceCount(isNaN(n) ? '' : Math.max(0.5, n));
+                              }
+                            }}
+                            onBlur={() => {
+                              if (!regPaceCount || Number(regPaceCount) < 0.5) setRegPaceCount(1);
+                            }}
                             className="w-24 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-black text-center text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
                           />
                           <span className="text-xs font-bold text-slate-500">Bog</span>
@@ -1365,6 +1402,20 @@ const QuranManagement = () => {
                         </div>
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Live Lesson Calculation Preview */}
+                <div className="pt-3 border-t border-slate-200/60 dark:border-slate-700/60 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Cashirka la xisaabiyey:</span>
+                    <span className="font-black text-slate-800 dark:text-white font-arabic">
+                      {regSurah?.number}. {regSurah?.nameAr} ({regSurah?.nameSo})
+                    </span>
+                  </div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-black text-emerald-800 dark:text-emerald-300">
+                    <span>Aayadda {Number(regFromVerse) || 1} ilaa {Math.min(regSurah?.verses || 286, (Number(regFromVerse) || 1) + (regPaceUnit === 'bog' ? Math.max(1, Math.round((Number(regPaceCount) || 1) * 15)) : Math.max(1, Math.round((Number(regPaceCount) || 7) / 2))) - 1)}</span>
+                    <span className="text-[10px] opacity-75 font-bold">({regPaceCount || (regPaceUnit === 'bog' ? 1 : 7)} {regPaceUnit === 'bog' ? 'Bog' : 'Sadar'})</span>
                   </div>
                 </div>
               </div>
@@ -1877,9 +1928,20 @@ const QuranManagement = () => {
                   min="1"
                   value={fromVerse}
                   onChange={(e) => {
-                    const f = Math.max(1, parseInt(e.target.value) || 1);
-                    setFromVerse(f);
-                    if (toVerse < f) setToVerse(f + 4);
+                    const val = e.target.value;
+                    if (val === '') {
+                      setFromVerse('');
+                    } else {
+                      const f = parseInt(val, 10);
+                      setFromVerse(isNaN(f) ? '' : Math.max(1, f));
+                      if (!isNaN(f) && toVerse && Number(toVerse) < f) setToVerse(f + 4);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!fromVerse || Number(fromVerse) < 1) {
+                      setFromVerse(1);
+                      if (toVerse && Number(toVerse) < 1) setToVerse(5);
+                    }
                   }}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
@@ -1891,9 +1953,23 @@ const QuranManagement = () => {
                 </label>
                 <input
                   type="number"
-                  min={fromVerse}
+                  min={Number(fromVerse) || 1}
                   value={toVerse}
-                  onChange={(e) => setToVerse(Math.max(fromVerse, parseInt(e.target.value) || fromVerse))}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setToVerse('');
+                    } else {
+                      const n = parseInt(val, 10);
+                      setToVerse(isNaN(n) ? '' : n);
+                    }
+                  }}
+                  onBlur={() => {
+                    const minV = Number(fromVerse) || 1;
+                    if (!toVerse || Number(toVerse) < minV) {
+                      setToVerse(minV + 4);
+                    }
+                  }}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
               </div>
@@ -1920,7 +1996,18 @@ const QuranManagement = () => {
                   min="1"
                   max="100"
                   value={dailyPace}
-                  onChange={(e) => setDailyPace(Math.max(1, parseInt(e.target.value) || 1))}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '') {
+                      setDailyPace('');
+                    } else {
+                      const n = parseInt(val, 10);
+                      setDailyPace(isNaN(n) ? '' : Math.max(1, n));
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!dailyPace || Number(dailyPace) < 1) setDailyPace(5);
+                  }}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
               </div>
@@ -1998,7 +2085,17 @@ const QuranManagement = () => {
                             type="number"
                             min="1"
                             value={iskuXirFromVerse}
-                            onChange={(e) => setIskuXirFromVerse(Number(e.target.value) || 1)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '') setIskuXirFromVerse('');
+                              else {
+                                const n = parseInt(val, 10);
+                                setIskuXirFromVerse(isNaN(n) ? '' : Math.max(1, n));
+                              }
+                            }}
+                            onBlur={() => {
+                              if (!iskuXirFromVerse || Number(iskuXirFromVerse) < 1) setIskuXirFromVerse(1);
+                            }}
                             className="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-purple-200 dark:border-slate-700 text-xs font-bold text-center text-slate-900 dark:text-white"
                           />
                           <span className="text-xs text-slate-400">-</span>
@@ -2006,7 +2103,17 @@ const QuranManagement = () => {
                             type="number"
                             min="1"
                             value={iskuXirToVerse}
-                            onChange={(e) => setIskuXirToVerse(Number(e.target.value) || 1)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '') setIskuXirToVerse('');
+                              else {
+                                const n = parseInt(val, 10);
+                                setIskuXirToVerse(isNaN(n) ? '' : Math.max(1, n));
+                              }
+                            }}
+                            onBlur={() => {
+                              if (!iskuXirToVerse || Number(iskuXirToVerse) < 1) setIskuXirToVerse(7);
+                            }}
                             className="w-full px-2.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-purple-200 dark:border-slate-700 text-xs font-bold text-center text-slate-900 dark:text-white"
                           />
                         </div>
@@ -2119,7 +2226,17 @@ const QuranManagement = () => {
                       max="100"
                       required
                       value={repeatCount}
-                      onChange={(e) => setRepeatCount(Math.max(1, parseInt(e.target.value) || 1))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') setRepeatCount('');
+                        else {
+                          const n = parseInt(val, 10);
+                          setRepeatCount(isNaN(n) ? '' : Math.max(1, n));
+                        }
+                      }}
+                      onBlur={() => {
+                        if (!repeatCount || Number(repeatCount) < 1) setRepeatCount(1);
+                      }}
                       className="w-20 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-sm font-black text-amber-950 dark:text-amber-100 text-center focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
                     />
                     <div className="flex flex-wrap items-center gap-1.5 flex-1">
@@ -2549,11 +2666,19 @@ const QuranManagement = () => {
                         type="number"
                         min="1"
                         max="100"
-                        value={editingRecord.repeatCount || 1}
-                        onChange={(e) => setEditingRecord({
-                          ...editingRecord,
-                          repeatCount: Math.max(1, parseInt(e.target.value) || 1)
-                        })}
+                        value={editingRecord.repeatCount ?? 1}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditingRecord({
+                            ...editingRecord,
+                            repeatCount: val === '' ? '' : Math.max(1, parseInt(val, 10) || 1)
+                          });
+                        }}
+                        onBlur={() => {
+                          if (!editingRecord.repeatCount || Number(editingRecord.repeatCount) < 1) {
+                            setEditingRecord({ ...editingRecord, repeatCount: 1 });
+                          }
+                        }}
                         className="w-20 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-sm font-bold text-center"
                       />
                       <div className="flex flex-wrap gap-1">
