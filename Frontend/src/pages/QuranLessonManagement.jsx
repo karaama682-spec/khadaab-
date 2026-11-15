@@ -1427,7 +1427,7 @@ const QuranLessonManagement = () => {
                                   {exp.surahName || item.surahName}
                                 </p>
                                 <p className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">
-                                  Bilow: Aayad {exp.fromVerse || 1} • Qiyaas: {exp.pageOrLines || `${exp.paceCount || 5} ${exp.paceUnit === 'bog' ? 'Bog' : 'Sadar'}`}
+                                  Bilow: Aayad {exp.fromVerse || 1} • Qiyaas: {exp.pageOrLines || (exp.paceUnit === 'bog' ? (Number(exp.paceCount) === 2.5 ? '1 Maqro (2.5 Bog)' : Number(exp.paceCount) === 5 ? '½ Xisib (5 Bog)' : Number(exp.paceCount) === 10 ? '1 Xisib (10 Bog)' : `${exp.paceCount || 1} Bog`) : `${exp.paceCount || 5} Sadar`)}
                                 </p>
                               </div>
 

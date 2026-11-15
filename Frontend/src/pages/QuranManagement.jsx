@@ -23,6 +23,16 @@ const QUICK_NOTES = [
 
 const REPEAT_CHIPS = [1, 2, 3, 5, 7, 10];
 
+export const getBogPaceText = (count) => {
+  const n = Number(count);
+  if (n === 0.5) return '½ Bog';
+  if (n === 1.25) return '½ Maqro (1.25 Bog)';
+  if (n === 2.5) return '1 Maqro (2.5 Bog)';
+  if (n === 5) return '½ Xisib (5 Bog)';
+  if (n === 10) return '1 Xisib (10 Bog)';
+  return `${n || 1} Bog`;
+};
+
 const QuranManagement = () => {
   const { locale } = useLanguage();
   const { showAlert, showConfirm } = useAlert();
@@ -331,8 +341,10 @@ const QuranManagement = () => {
       setRegSubmitting(true);
       const sNum = regSurah.number;
       const fVerse = Math.max(1, Number(regFromVerse) || 1);
-      const pCount = Math.max(1, Number(regPaceCount) || (regPaceUnit === 'bog' ? 1 : 7));
-      const estimatedVerses = regPaceUnit === 'bog' ? Math.max(1, pCount * 15) : Math.max(1, Math.round(pCount / 2));
+      const pCount = regPaceUnit === 'bog'
+        ? Math.max(0.5, Number(regPaceCount) || 1)
+        : Math.max(1, Number(regPaceCount) || 7);
+      const estimatedVerses = regPaceUnit === 'bog' ? Math.max(1, Math.round(pCount * 15)) : Math.max(1, Math.round(pCount / 2));
       const tVerse = Math.min(regSurah.verses, fVerse + estimatedVerses - 1);
 
       const payload = {
@@ -344,7 +356,7 @@ const QuranManagement = () => {
         toVerse: tVerse,
         paceUnit: regPaceUnit,
         paceCount: pCount,
-        pageRange: regPaceUnit === 'bog' ? `${pCount} Bog` : '',
+        pageRange: regPaceUnit === 'bog' ? getBogPaceText(pCount) : '',
         lineRange: regPaceUnit === 'sadar' ? `${pCount} Sadar` : '',
         dailyPace: estimatedVerses
       };
@@ -366,7 +378,7 @@ const QuranManagement = () => {
       showAlert({
         type: 'success',
         title: 'Guul!',
-        message: `Qorshaha ardayga "${regStudent.fullName}" si guul leh ayaa loo diiwaangeliyey (${regStudentType === 'HOREED' ? 'Horeed (Xifdiye)' : 'Laqdiin'}, Bisinka: ${regSurah.nameSo}, Qiyaasta: ${pCount} ${regPaceUnit === 'bog' ? 'Bog' : 'Sadar'}).`
+        message: `Qorshaha ardayga "${regStudent.fullName}" si guul leh ayaa loo diiwaangeliyey (${regStudentType === 'HOREED' ? 'Horeed (Xifdiye)' : 'Laqdiin'}, Bisinka: ${regSurah.nameSo}, Qiyaasta: ${regPaceUnit === 'bog' ? getBogPaceText(pCount) : `${pCount} Sadar`}).`
       });
 
       resetRegForm();
@@ -1360,45 +1372,106 @@ const QuranManagement = () => {
 
                     {/* Bog Mode Chips & Input */}
                     {regPaceUnit === 'bog' && (
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            step="0.5"
-                            min="0.5"
-                            max="20"
-                            value={regPaceCount}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === '') {
-                                setRegPaceCount('');
-                              } else {
-                                const n = parseFloat(val);
-                                setRegPaceCount(isNaN(n) ? '' : Math.max(0.5, n));
-                              }
-                            }}
-                            onBlur={() => {
-                              if (!regPaceCount || Number(regPaceCount) < 0.5) setRegPaceCount(1);
-                            }}
-                            className="w-24 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-black text-center text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
-                          />
-                          <span className="text-xs font-bold text-slate-500">Bog</span>
+                      <div className="space-y-2.5 pt-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              step="0.5"
+                              min="0.5"
+                              max="30"
+                              value={regPaceCount}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '') {
+                                  setRegPaceCount('');
+                                } else {
+                                  const n = parseFloat(val);
+                                  setRegPaceCount(isNaN(n) ? '' : Math.max(0.5, n));
+                                }
+                              }}
+                              onBlur={() => {
+                                if (!regPaceCount || Number(regPaceCount) < 0.5) setRegPaceCount(1);
+                              }}
+                              className="w-24 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-black text-center text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500"
+                            />
+                            <span className="text-xs font-bold text-slate-500">Bog</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {[
+                              { val: 0.5, label: '½ Bog' },
+                              { val: 1, label: '1 Bog' },
+                              { val: 2, label: '2 Bog' },
+                              { val: 2.5, label: '2.5 Bog (1 Maqro)' },
+                              { val: 3, label: '3 Bog' },
+                              { val: 5, label: '5 Bog (½ Xisib)' },
+                              { val: 10, label: '10 Bog (1 Xisib)' },
+                            ].map((chip) => (
+                              <button
+                                key={chip.val}
+                                type="button"
+                                onClick={() => setRegPaceCount(chip.val)}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                                  Number(regPaceCount) === chip.val
+                                    ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/30'
+                                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
+                                }`}
+                              >
+                                {chip.label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {[0.5, 1, 2, 3].map((bCount) => (
-                            <button
-                              key={bCount}
-                              type="button"
-                              onClick={() => setRegPaceCount(bCount)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
-                                regPaceCount === bCount
-                                  ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-500/30'
-                                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700'
-                              }`}
-                            >
-                              {bCount === 0.5 ? '½ Bog' : `${bCount} Bog`}
-                            </button>
-                          ))}
+
+                        {/* Maqro & Xisib Dugsi Shortcuts */}
+                        <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/60 text-xs">
+                          <span className="font-bold text-emerald-800 dark:text-emerald-300 text-[11px] mr-1">
+                            Qiyaasta Maqrada & Xisbiga:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setRegPaceCount(1.25)}
+                            className={`px-2 py-1 rounded-lg font-black text-[11px] transition-all ${
+                              Number(regPaceCount) === 1.25
+                                ? 'bg-emerald-600 text-white shadow-sm'
+                                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-emerald-100'
+                            }`}
+                          >
+                            ½ Maqro (1.25 Bog)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRegPaceCount(2.5)}
+                            className={`px-2.5 py-1 rounded-lg font-black text-[11px] transition-all ${
+                              Number(regPaceCount) === 2.5
+                                ? 'bg-emerald-600 text-white shadow-sm'
+                                : 'bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100'
+                            }`}
+                          >
+                            1 Maqro (2.5 Bog)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRegPaceCount(5)}
+                            className={`px-2.5 py-1 rounded-lg font-black text-[11px] transition-all ${
+                              Number(regPaceCount) === 5
+                                ? 'bg-emerald-600 text-white shadow-sm'
+                                : 'bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100'
+                            }`}
+                          >
+                            Nisfi / ½ Xisib (5 Bog)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRegPaceCount(10)}
+                            className={`px-2.5 py-1 rounded-lg font-black text-[11px] transition-all ${
+                              Number(regPaceCount) === 10
+                                ? 'bg-emerald-600 text-white shadow-sm'
+                                : 'bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100'
+                            }`}
+                          >
+                            1 Xisib (10 Bog)
+                          </button>
                         </div>
                       </div>
                     )}
@@ -1415,7 +1488,9 @@ const QuranManagement = () => {
                   </div>
                   <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-black text-emerald-800 dark:text-emerald-300">
                     <span>Aayadda {Number(regFromVerse) || 1} ilaa {Math.min(regSurah?.verses || 286, (Number(regFromVerse) || 1) + (regPaceUnit === 'bog' ? Math.max(1, Math.round((Number(regPaceCount) || 1) * 15)) : Math.max(1, Math.round((Number(regPaceCount) || 7) / 2))) - 1)}</span>
-                    <span className="text-[10px] opacity-75 font-bold">({regPaceCount || (regPaceUnit === 'bog' ? 1 : 7)} {regPaceUnit === 'bog' ? 'Bog' : 'Sadar'})</span>
+                    <span className="text-[10px] opacity-75 font-bold">
+                      ({regPaceUnit === 'bog' ? getBogPaceText(regPaceCount) : `${regPaceCount || 7} Sadar`})
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1575,7 +1650,7 @@ const QuranManagement = () => {
                           </td>
                           <td className="py-4 px-5">
                             <span className="font-black text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
-                              {paceCount} {paceUnit === 'bog' ? 'Bog' : 'Sadar'}
+                              {exp.pageRange || (paceUnit === 'bog' ? getBogPaceText(paceCount) : `${paceCount} Sadar`)}
                             </span>
                           </td>
                           <td className="py-4 px-5">

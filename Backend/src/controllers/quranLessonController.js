@@ -991,7 +991,9 @@ const assignStudentQuranPlan = async (req, res) => {
         const tVerse = Math.min(surah.verses, Math.max(fVerse, Number(toVerse) || (fVerse + 4)));
         const pace = Math.max(1, Number(dailyPace) || (tVerse - fVerse + 1));
         const pUnit = (paceUnit === 'bog' || paceUnit === 'ayah') ? paceUnit : 'sadar';
-        const pCount = Math.max(1, Number(paceCount) || Number(dailyPace) || (pUnit === 'bog' ? 1 : 7));
+        const pCount = pUnit === 'bog' 
+            ? Math.max(0.5, Number(paceCount) || 1) 
+            : Math.max(1, Number(paceCount) || Number(dailyPace) || 7);
 
         student.studentType = studentType === 'HOREED' ? 'HOREED' : 'LAQDIIN';
 
